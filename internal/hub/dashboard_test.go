@@ -164,3 +164,41 @@ func TestDashboardSessionSurvivesRestart(t *testing.T) {
 		t.Fatal("expired session accepted")
 	}
 }
+
+func TestRulesTableFilterSort(t *testing.T) {
+	now := time.Now()
+	rules := []HubRule{
+		{ID: "r1", Scope: "all", Rule: policy.Rule{Argv: []string{"apt-get", "upgrade"}, Comment: "weekly"}, CreatedAt: now.Add(-3 * time.Hour)},
+		{ID: "r2", Scope: "server:web", Rule: policy.Rule{Argv: []string{"systemctl", "restart", "nginx"}}, CreatedAt: now.Add(-1 * time.Hour)},
+		{ID: "r3", Scope: "tag:Desktop", Rule: policy.Rule{Argv: []string{"docker", "compose", "pull"}, Comment: "images"}, CreatedAt: now.Add(-2 * time.Hour)},
+	}
+	ids := func(v []ruleView) string {
+		var s []string
+		for _, x := range v {
+			s = append(s, x.ID)
+		}
+		return strings.Join(s, ",")
+	}
+	cases := []struct{ query, want string }{
+		{"", "r1,r3,r2"},                    // default: oldest first
+		{"sort=added&dir=desc", "r2,r3,r1"}, // newest first
+		{"sort=rule", "r1,r3,r2"},           // apt, docker, systemctl
+		{"sort=rule&dir=desc", "r2,r3,r1"},
+		{"q=NGINX", "r2"},   // case-insensitive search
+		{"q=desktop", "r3"}, // matches the scope label
+		{"q=weekly", "r1"},  // matches the note
+		{"scope=all", "r1"},
+		{"scope=server:web&q=apt", ""},
+	}
+	for _, c := range cases {
+		q, _ := url.ParseQuery(c.query)
+		got, total := filterSortRules(rules, q)
+		if ids(got) != c.want || total != 3 {
+			t.Errorf("%q: got %q (total %d), want %q", c.query, ids(got), total, c.want)
+		}
+	}
+	links := sortLinks(url.Values{"q": {"apt"}, "sort": {"rule"}})
+	if !strings.Contains(links["rule"], "dir=desc") || !strings.Contains(links["rule"], "q=apt") || strings.Contains(links["scope"], "dir=desc") {
+		t.Errorf("sort links: %v", links)
+	}
+}
