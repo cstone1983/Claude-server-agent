@@ -42,6 +42,10 @@ type Approval struct {
 	RuleID     string          `json:"rule_id,omitempty"`
 	Result     *proto.Result   `json:"result,omitempty"`
 	URL        string          `json:"url"`
+	// Kind is "action" (run something on a server) or "rule" (Claude asks to
+	// add an allow rule; approving adds it for RuleScope).
+	Kind      string `json:"kind"`
+	RuleScope string `json:"rule_scope,omitempty"`
 
 	decided chan struct{}
 }
@@ -105,7 +109,7 @@ func (h *Hub) newApproval(agent *AgentRec, call *proto.Call, na *proto.NeedsAppr
 		ID: id, AgentID: agent.ID, Server: agent.Name, ServerTags: agent.Tags, Tool: call.Tool, Args: call.Args,
 		Caller: call.Caller, Hash: na.ActionHash, Summary: na.Summary, Why: na.Why, Reason: reason.Reason,
 		Suggested: na.SuggestedRule, Status: StatusPending, CreatedAt: time.Now().UTC(),
-		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}),
+		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}), Kind: "action",
 	}
 	h.appr.mu.Lock()
 	h.appr.m[id] = ap
@@ -130,6 +134,9 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 		return nil, fmt.Errorf("approval is already %s", st)
 	}
 	ap.DecidedAt = time.Now().UTC()
+	if ap.Kind == "rule" {
+		return h.decideRule(ap, approve, via)
+	}
 	if approve {
 		ap.Status = StatusApproved
 	} else {
@@ -157,18 +164,100 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 		default:
 			return &snap, fmt.Errorf("invalid scope %q", scope)
 		}
-		rule := &HubRule{ID: randomID("rule_"), Scope: s, Rule: snap.Suggested, ApprovalID: id, CreatedAt: time.Now().UTC()}
-		rule.Rule.Comment = "from approval of: " + truncate(snap.Summary, 120)
-		if err := h.store.Update(func(d *stateData) error { d.Rules = append(d.Rules, rule); return nil }); err != nil {
+		r := snap.Suggested
+		r.Comment = "from approval of: " + truncate(snap.Summary, 120)
+		ruleID, err := h.addRule(s, r, id)
+		if err != nil {
 			return &snap, err
 		}
 		h.appr.mu.Lock()
-		ap.RuleID = rule.ID
+		ap.RuleID = ruleID
 		h.appr.mu.Unlock()
-		h.audit.Write(audit.Entry{Event: "rule_added", Summary: rule.Rule.String(), Detail: map[string]string{"id": rule.ID, "scope": s}})
-		go h.pushRulesAll()
 	}
 	return &snap, nil
+}
+
+// proposeRule records Claude's request to always allow something. Nothing is
+// allowed until the user approves it.
+func (h *Hub) proposeRule(caller Caller, r policy.Rule, scope, reason string) *Approval {
+	id := randomToken("apr_", 12)
+	ap := &Approval{
+		ID: id, Server: scopeLabel(scope), Tool: "request_rule", Caller: caller.Name, Kind: "rule", RuleScope: scope,
+		Summary: r.String() + "\non " + scopeLabel(scope), Why: "Claude asked to allow this without approval from now on",
+		Reason: reason, Suggested: r, Status: StatusPending, CreatedAt: time.Now().UTC(),
+		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}),
+	}
+	h.appr.mu.Lock()
+	h.appr.m[id] = ap
+	h.appr.mu.Unlock()
+	h.audit.Write(audit.Entry{Event: "rule_requested", Caller: caller.Name, Summary: ap.Summary, ApprovalID: id})
+	go h.notify(*ap)
+	return ap
+}
+
+// decideRule finishes a rule request. Called with h.appr.mu held.
+func (h *Hub) decideRule(ap *Approval, approve bool, via string) (*Approval, error) {
+	defer close(ap.decided)
+	if !approve {
+		ap.Status = StatusDenied
+		snap := *ap
+		h.appr.mu.Unlock()
+		h.audit.Write(audit.Entry{Event: "rule_request_denied", Summary: snap.Summary, ApprovalID: snap.ID, Detail: map[string]string{"via": via}})
+		return &snap, nil
+	}
+	r, scope := ap.Suggested, ap.RuleScope
+	if r.Comment == "" {
+		r.Comment = "requested by " + ap.Caller
+	}
+	h.appr.mu.Unlock()
+	ruleID, err := h.addRule(scope, r, ap.ID)
+	h.appr.mu.Lock()
+	if err != nil {
+		ap.Status = StatusDenied
+		snap := *ap
+		h.appr.mu.Unlock()
+		return &snap, err
+	}
+	ap.Status, ap.RuleID = StatusExecuted, ruleID
+	ap.Result = &proto.Result{OK: true, Text: "Rule added: " + r.String() + " on " + scopeLabel(scope) + ". It runs without approval from now on."}
+	snap := *ap
+	h.appr.mu.Unlock()
+	return &snap, nil
+}
+
+// addRule stores a hub rule and pushes it to agents. An identical rule with
+// the same scope is not added twice (e.g. when bulk-approving one command on
+// several servers with scope "all"); its ID is returned instead.
+func (h *Hub) addRule(scope string, r policy.Rule, approvalID string) (string, error) {
+	var id string
+	added := false
+	err := h.store.Update(func(d *stateData) error {
+		for _, x := range d.Rules {
+			if x.Scope == scope && sameRule(x.Rule, r) {
+				id = x.ID
+				return nil
+			}
+		}
+		hr := &HubRule{ID: randomID("rule_"), Scope: scope, Rule: r, ApprovalID: approvalID, CreatedAt: time.Now().UTC()}
+		d.Rules = append(d.Rules, hr)
+		id, added = hr.ID, true
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if added {
+		h.audit.Write(audit.Entry{Event: "rule_added", Summary: r.String(), Detail: map[string]string{"id": id, "scope": scope}})
+		go h.pushRulesAll()
+	}
+	return id, nil
+}
+
+func sameRule(a, b policy.Rule) bool {
+	a.ID, b.ID, a.Comment, b.Comment = "", "", "", ""
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	return string(ja) == string(jb)
 }
 
 // waitDecision waits up to d for the user to decide.

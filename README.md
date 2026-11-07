@@ -130,10 +130,26 @@ Tools Claude gets:
 | `logs` | journalctl for the system or one unit, or tail a log file |
 | `start_job` / `job_status` / `cancel_job` | Long-running commands in the background |
 | `check_approval` | Finish an action once you've approved it |
+| `request_rule` | Propose an allow rule; it applies only after you approve it on the dashboard |
 | `update_server` | Check for, or (when you say so) install, a newer release |
 | `policy_view` / `audit_log` | See a server's rules and history |
 
 Every tool takes `server`: a name, `tag:<tag>` or `all`.
+
+## Approvals dashboard and allow rules
+
+Open `https://<your-hub>/approvals` and log in with the admin password and an
+authenticator code. You stay logged in for 12 hours.
+
+- **Approvals:** every pending action on one page, grouped by command across
+  servers, with checkboxes. The buttons are **Approve + always allow** (on all
+  servers, or only where each was requested), **Approve once** and **Deny**.
+- **Allow rules** (`/rules`): type a command such as `systemctl restart nginx`,
+  optionally allow extra arguments, pick servers and click Add. It also lists
+  every rule with a Remove button.
+- **Claude can propose rules** with `request_rule`, e.g. "whitelist
+  `docker compose pull` on all servers". The proposal appears on the
+  approvals page and does nothing until you approve it.
 
 ## Policy (`/etc/csa/policy.yaml` on each server)
 

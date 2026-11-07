@@ -57,6 +57,8 @@ func (h *Hub) Invoke(ctx context.Context, caller Caller, tool string, args json.
 	switch tool {
 	case "list_servers":
 		return h.listServers(caller)
+	case "request_rule":
+		return h.requestRule(caller, args)
 	case "check_approval":
 		var a struct {
 			ApprovalID string `json:"approval_id"`
@@ -131,7 +133,7 @@ func (h *Hub) invokeOne(ctx context.Context, caller Caller, agent *AgentRec, too
 		return sr
 	}
 	sr.Pending = true
-	sr.Text = fmt.Sprintf("NEEDS APPROVAL — not run yet.\nAction: %s\nWhy: %s\n\nAsk the user to approve it here: %s\nThen call check_approval with approval_id=%q.\n(Approving with \"always allow\" lets this exact action run without asking next time.)", snap.Summary, snap.Why, snap.URL, snap.ID)
+	sr.Text = fmt.Sprintf("NEEDS APPROVAL — not run yet.\nAction: %s\nWhy: %s\n\nAsk the user to approve it here: %s\nThen call check_approval with approval_id=%q.\n(Approving with \"always allow\" lets this exact action run without asking next time. All pending approvals can be reviewed together at %s/approvals)", snap.Summary, snap.Why, snap.URL, snap.ID, h.cfg.PublicURL)
 	return sr
 }
 
@@ -271,4 +273,41 @@ func (h *Hub) checkApproval(ctx context.Context, caller Caller, id string) Outco
 	}
 	sr.Text = prefix + sr.Text
 	return combine([]ServerResult{sr}, false)
+}
+
+func (h *Hub) requestRule(caller Caller, args json.RawMessage) Outcome {
+	if caller.ReadOnly {
+		return Outcome{Text: "this connection is read-only", IsError: true}
+	}
+	var a struct {
+		Kind    string `json:"kind"`
+		Value   string `json:"value"`
+		AnyArgs bool   `json:"any_args"`
+		Servers string `json:"servers"`
+		As      string `json:"as"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return Outcome{Text: "invalid arguments: " + err.Error(), IsError: true}
+	}
+	if a.Kind == "" {
+		a.Kind = "command"
+	}
+	scope := strings.TrimSpace(a.Servers)
+	switch {
+	case scope == "" || scope == "all":
+		scope = "all"
+	case strings.HasPrefix(scope, "tag:"):
+	default:
+		if _, err := h.resolveTargets(scope, caller.Servers); err != nil {
+			return Outcome{Text: err.Error(), IsError: true}
+		}
+		scope = "server:" + scope
+	}
+	rule, err := ruleFromForm(a.Kind, a.Value, a.AnyArgs, a.As)
+	if err != nil {
+		return Outcome{Text: err.Error(), IsError: true}
+	}
+	ap := h.proposeRule(caller, rule, scope, a.Reason)
+	return Outcome{Text: fmt.Sprintf("Rule requested (not active yet): %s on %s.\nAsk the user to approve it at %s/approvals (or %s), then call check_approval with approval_id=%q.", rule.String(), scopeLabel(scope), h.cfg.PublicURL, ap.URL, ap.ID)}
 }

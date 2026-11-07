@@ -263,7 +263,19 @@ sudo csa-hub approve <id> [--always --scope server|tag:web|all]
 sudo csa-hub deny <id>
 ```
 
-### 5.2 Let common actions run without approval
+### 5.2 Approvals dashboard
+
+Open `https://agents.yourdomain.com/approvals` and log in once with the
+password and an authenticator code. You stay logged in for 12 hours.
+- Approve or deny everything pending in one go: identical commands on
+  several servers are grouped.
+- Choose **Approve + always allow** to whitelist the command on all
+  servers.
+- Manage whitelisted commands at `/rules`.
+- Claude can also propose rules (`request_rule`). They appear on the same
+  page for you to approve.
+
+### 5.3 Let common actions run without approval
 
 On a server, edit `/etc/csa/policy.yaml`, for example:
 ```yaml
@@ -281,7 +293,7 @@ sudo csa-agent check -- systemctl restart nginx  # → tier: allowed
 Or click **"Always allow"** when approving. That adds the rule from the hub,
 and `sudo csa-hub rules` lists those rules.
 
-### 5.3 n8n / automations
+### 5.4 n8n / automations
 
 On the hub:
 ```bash
