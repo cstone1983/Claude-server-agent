@@ -1,0 +1,401 @@
+#!/usr/bin/env bash
+# Claude Server Agent installer.
+#
+#   Hub (once, on the machine that runs the Cloudflare Tunnel; also installs an agent for itself):
+#     curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh \
+#       | sudo bash -s -- hub --public-url https://agents.example.com --cloudflare-token <tunnel-token>
+#
+#   Each other server:
+#     curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh \
+#       | sudo bash -s -- agent --hub https://agents.example.com --join <token> [--name web01] [--tags web,prod]
+#
+#   Upgrade: re-run the same command (a join token is only needed the first time).
+#   Remove:  sudo bash install.sh uninstall [--purge]
+set -euo pipefail
+
+REPO="cstone1983/Claude-server-agent"
+BIN_DIR="/usr/local/bin"
+GO_VERSION="1.26.0"
+
+say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  sed -n '2,15p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+  cat <<'EOF'
+Options:
+  hub    --public-url URL [--cloudflare-token TOKEN] [--name NAME] [--tags a,b] [--no-local-agent]
+  agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b]
+  common [--version vX.Y.Z] [--from-source] [--ref BRANCH]
+  uninstall [--purge]
+EOF
+}
+
+MODE="${1:-}"; shift || true
+PUBLIC_URL="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
+    --cloudflare-token) CF_TOKEN="${2:?}"; shift 2 ;;
+    --hub) HUB_URL="${2:?}"; shift 2 ;;
+    --join) JOIN="${2:?}"; shift 2 ;;
+    --name) NAME="${2:?}"; shift 2 ;;
+    --tags) TAGS="${2:?}"; shift 2 ;;
+    --version) VERSION="${2:?}"; shift 2 ;;
+    --from-source) FROM_SOURCE=1; shift ;;
+    --ref) REF="${2:?}"; shift 2 ;;
+    --no-local-agent) LOCAL_AGENT=0; shift ;;
+    --purge) PURGE=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown option: $1 (see --help)" ;;
+  esac
+done
+
+need_root() { [ "$(id -u)" -eq 0 ] || die "run as root (sudo)"; }
+
+check_os() {
+  [ "$(uname -s)" = "Linux" ] || die "Linux only"
+  if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    case "${ID:-}${ID_LIKE:-}" in
+      *ubuntu*|*debian*) ;;
+      *) warn "untested distribution ${PRETTY_NAME:-unknown}; continuing" ;;
+    esac
+  fi
+  command -v systemctl >/dev/null || die "systemd is required"
+  command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl ca-certificates; }
+}
+
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    *) die "unsupported CPU architecture $(uname -m)" ;;
+  esac
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+download_release() {
+  local base
+  if [ "$VERSION" = "latest" ]; then
+    base="https://github.com/$REPO/releases/latest/download"
+  else
+    base="https://github.com/$REPO/releases/download/$VERSION"
+  fi
+  local tarball="csa_linux_${ARCH}.tar.gz"
+  say "Downloading $tarball ($VERSION)"
+  curl -fsSL -o "$TMP/$tarball" "$base/$tarball" || return 1
+  curl -fsSL -o "$TMP/checksums.txt" "$base/checksums.txt" || return 1
+  (cd "$TMP" && grep " $tarball\$" checksums.txt | sha256sum -c --quiet -) || die "checksum mismatch for $tarball"
+  tar -xzf "$TMP/$tarball" -C "$TMP"
+}
+
+build_from_source() {
+  say "Building from source ($REF)"
+  command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git; }
+  local gobin
+  if command -v go >/dev/null && go version | grep -Eq 'go1\.(2[6-9]|[3-9][0-9])'; then
+    gobin="$(command -v go)"
+  else
+    say "Fetching Go $GO_VERSION toolchain (temporary)"
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -xz -C "$TMP"
+    gobin="$TMP/go/bin/go"
+  fi
+  git clone -q --depth 1 --branch "$REF" "https://github.com/$REPO.git" "$TMP/src" \
+    || die "could not download the source (branch '$REF') from github.com/$REPO; pass --ref <branch> if main does not exist yet"
+  local ver; ver="$(cd "$TMP/src" && git describe --tags --always 2>/dev/null || echo source)"
+  (cd "$TMP/src" && GOFLAGS=-trimpath CGO_ENABLED=0 GOCACHE="$TMP/gocache" GOPATH="$TMP/gopath" "$gobin" build \
+     -ldflags "-s -w -X github.com/cstone1983/Claude-server-agent/internal/version.Version=$ver" -o "$TMP" ./cmd/csa-hub ./cmd/csa-agent)
+}
+
+fetch_binaries() {
+  detect_arch
+  if [ "$FROM_SOURCE" -eq 1 ]; then
+    build_from_source
+  elif ! download_release; then
+    warn "no release download available; building from source instead"
+    build_from_source
+  fi
+  [ -x "$TMP/csa-agent" ] || die "csa-agent binary missing"
+}
+
+install_bin() {
+  install -m 0755 "$TMP/$1" "$BIN_DIR/$1.new" && mv -f "$BIN_DIR/$1.new" "$BIN_DIR/$1"
+  say "Installed $BIN_DIR/$1 ($("$BIN_DIR/$1" version))"
+}
+
+write_default_policy() {
+  [ -f /etc/csa/policy.yaml ] && return 0
+  mkdir -p /etc/csa && chmod 0755 /etc/csa
+  cat > /etc/csa/policy.yaml <<'EOF'
+# Claude Server Agent — local policy for this server.
+#
+# Tiers:
+#   read      built-in read-only commands (df, ps, systemctl status, journalctl, ...) run freely
+#   allowed   anything matching an "allow" rule below runs freely
+#   elevated  everything else needs your approval (link + authenticator code)
+#   denied    "deny" rules can never run, even with approval
+#
+# Rules match the command's argv element by element:
+#   "restart|reload"  any of the alternatives      "*"   any single argument (glob)
+#   "=lit*ral"        exact literal                "**"  (last element) any remaining arguments
+# "as" is the user the command runs as ("" = root, "*" = any).
+#
+# Check a command:  csa-agent check -- systemctl restart nginx
+# After editing:    systemctl reload csa-agent
+#
+# "Approve + always allow" rules from the hub are kept separately in
+# /var/lib/csa/hub-rules.yaml. Set accept_hub_rules: false to ignore them.
+
+allow: []
+#  - id: restart-web
+#    argv: ["systemctl", "restart|reload", "nginx|php8.3-fpm"]
+#  - id: apt-refresh
+#    argv: ["apt-get", "update"]
+#  - id: app-compose
+#    argv: ["docker", "compose", "-f", "/srv/app/compose.yml", "**"]
+#  - id: app-config
+#    write_paths: ["/srv/app/config/**"]
+#  - id: nightly-script
+#    shell: "/usr/local/bin/backup.sh && echo done"
+
+deny: []
+#  - id: no-reboot
+#    argv: ["reboot", "**"]
+#  - id: no-db-files
+#    write_paths: ["/var/lib/postgresql/**"]
+
+# Extra paths whose reads need approval (keys, .env, /etc/shadow, ... are built in).
+sensitive_paths: []
+
+# accept_hub_rules: true
+EOF
+  chmod 0644 /etc/csa/policy.yaml
+}
+
+write_agent_unit() {
+  cat > /etc/systemd/system/csa-agent.service <<'EOF'
+[Unit]
+Description=Claude Server Agent (connects this server to the csa hub)
+Documentation=https://github.com/cstone1983/Claude-server-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/csa-agent run
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+# Background jobs (e.g. upgrades) keep running if the agent itself restarts.
+KillMode=process
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  mkdir -p /var/lib/csa /var/log/csa
+  chmod 0700 /var/lib/csa
+  chmod 0750 /var/log/csa
+}
+
+write_hub_unit() {
+  id csa-hub >/dev/null 2>&1 || useradd --system --home-dir /var/lib/csa-hub --shell /usr/sbin/nologin csa-hub
+  cat > /etc/systemd/system/csa-hub.service <<'EOF'
+[Unit]
+Description=Claude Server Agent hub (MCP connector endpoint)
+Documentation=https://github.com/cstone1983/Claude-server-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=csa-hub
+Group=csa-hub
+ExecStart=/usr/local/bin/csa-hub serve
+Restart=always
+RestartSec=5
+RuntimeDirectory=csa-hub
+RuntimeDirectoryMode=0700
+StateDirectory=csa-hub
+StateDirectoryMode=0700
+LogsDirectory=csa-hub
+LogsDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+wait_for_hub() {
+  for _ in $(seq 1 30); do
+    curl -fsS -o /dev/null http://127.0.0.1:7420/healthz 2>/dev/null && return 0
+    sleep 1
+  done
+  journalctl -u csa-hub -n 30 --no-pager >&2 || true
+  die "hub did not start"
+}
+
+install_cloudflared() {
+  if ! command -v cloudflared >/dev/null; then
+    say "Installing cloudflared"
+    curl -fsSL -o "$TMP/cloudflared.deb" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}.deb"
+    dpkg -i "$TMP/cloudflared.deb" >/dev/null
+  fi
+  if systemctl list-unit-files cloudflared.service >/dev/null 2>&1 && systemctl is-enabled cloudflared >/dev/null 2>&1; then
+    say "cloudflared service already installed; leaving it as is"
+  else
+    say "Registering the Cloudflare Tunnel"
+    cloudflared service install "$CF_TOKEN"
+  fi
+}
+
+enroll_agent() {
+  local hub="$1"
+  local args=(--hub "$hub" --join "$JOIN" --name "${NAME:-$(hostname -s)}")
+  [ -n "$TAGS" ] && args+=(--tags "$TAGS")
+  "$BIN_DIR/csa-agent" enroll "${args[@]}"
+}
+
+agent_enrolled() { [ -f /etc/csa/agent.yaml ] && grep -q '^agent_id: .\+' /etc/csa/agent.yaml; }
+
+start_agent() {
+  systemctl daemon-reload
+  systemctl enable --quiet csa-agent
+  systemctl restart csa-agent
+  sleep 2
+  if systemctl is-active --quiet csa-agent; then
+    say "csa-agent is running"
+  else
+    journalctl -u csa-agent -n 30 --no-pager >&2 || true
+    die "csa-agent failed to start"
+  fi
+}
+
+do_hub() {
+  [ -n "$PUBLIC_URL" ] || [ -f /etc/csa-hub/hub.yaml ] || die "--public-url is required (e.g. https://agents.example.com)"
+  fetch_binaries
+  [ -x "$TMP/csa-hub" ] || die "csa-hub binary missing"
+  install_bin csa-hub
+  install_bin csa-agent
+  write_hub_unit
+
+  local first=0
+  if [ ! -f /etc/csa-hub/hub.yaml ]; then
+    first=1
+    mkdir -p /etc/csa-hub
+    echo
+    "$BIN_DIR/csa-hub" init --public-url "$PUBLIC_URL"
+    echo
+  fi
+  chown -R csa-hub:csa-hub /etc/csa-hub
+  chmod 0700 /etc/csa-hub
+  chmod 0600 /etc/csa-hub/hub.yaml
+  PUBLIC_URL="$(sed -n 's/^public_url: *//p' /etc/csa-hub/hub.yaml | tr -d '"')"
+
+  systemctl daemon-reload
+  systemctl enable --quiet csa-hub
+  systemctl restart csa-hub
+  wait_for_hub
+  say "csa-hub is running on 127.0.0.1:7420"
+
+  if [ -n "$CF_TOKEN" ]; then
+    install_cloudflared
+  fi
+
+  if [ "$LOCAL_AGENT" -eq 1 ]; then
+    write_default_policy
+    write_agent_unit
+    if ! agent_enrolled; then
+      say "Enrolling this machine as a server on its own hub"
+      JOIN="$("$BIN_DIR/csa-hub" join-token --quiet --ttl 5 --tags hub)"
+      enroll_agent "http://127.0.0.1:7420"
+    fi
+    start_agent
+  fi
+
+  cat <<EOF
+
+$(say "Hub ready")
+  Connector URL:  ${PUBLIC_URL}/mcp
+
+  1. Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostname:
+       $(echo "$PUBLIC_URL" | sed 's#https\?://##')  →  http://localhost:7420
+$( [ -z "$CF_TOKEN" ] && echo "     (no --cloudflare-token given: install the tunnel with 'cloudflared service install <token>')" )
+  2. Claude → Settings → Connectors → Add custom connector → paste the connector URL.
+     Log in with the admin password and an authenticator code$( [ $first -eq 1 ] && echo " shown above" ).
+  3. Add servers: run 'sudo csa-hub join-token' here and paste the command it prints on each server.
+
+  Approvals: 'sudo csa-hub approvals' — or open the link Claude shows you.
+  Optional push notifications: set notify.ntfy_url or notify.webhook_url in /etc/csa-hub/hub.yaml,
+  then 'systemctl restart csa-hub'.
+EOF
+}
+
+do_agent() {
+  if ! agent_enrolled; then
+    [ -n "$HUB_URL" ] && [ -n "$JOIN" ] || die "--hub and --join are required for a new server (get a token with 'csa-hub join-token' on the hub)"
+  fi
+  fetch_binaries
+  install_bin csa-agent
+  write_default_policy
+  write_agent_unit
+  if [ -n "$JOIN" ]; then
+    [ -n "$HUB_URL" ] || HUB_URL="$(sed -n 's/^hub_url: *//p' /etc/csa/agent.yaml)"
+    say "Enrolling with $HUB_URL"
+    enroll_agent "$HUB_URL"
+  fi
+  start_agent
+  cat <<EOF
+
+$(say "Server connected")
+  It now appears in Claude via list_servers. Local policy: /etc/csa/policy.yaml
+  Test a command's tier:  sudo csa-agent check -- systemctl restart nginx
+  Audit log:              sudo csa-agent audit
+EOF
+}
+
+do_uninstall() {
+  for svc in csa-agent csa-hub; do
+    if systemctl list-unit-files "$svc.service" >/dev/null 2>&1; then
+      systemctl disable --now "$svc" 2>/dev/null || true
+      rm -f "/etc/systemd/system/$svc.service"
+    fi
+  done
+  systemctl daemon-reload
+  rm -f "$BIN_DIR/csa-agent" "$BIN_DIR/csa-hub"
+  if [ "$PURGE" -eq 1 ]; then
+    rm -rf /etc/csa /var/lib/csa /var/log/csa /etc/csa-hub /var/lib/csa-hub /var/log/csa-hub
+    id csa-hub >/dev/null 2>&1 && userdel csa-hub || true
+    say "Removed Claude Server Agent and all its data"
+  else
+    say "Removed services and binaries (config and logs kept; use --purge to delete them)"
+  fi
+  say "cloudflared was left installed; remove it with: cloudflared service uninstall && apt-get remove cloudflared"
+}
+
+main() {
+  case "$MODE" in
+    hub) need_root; check_os; do_hub ;;
+    agent) need_root; check_os; do_agent ;;
+    uninstall) need_root; do_uninstall ;;
+    -h|--help|help|"") usage ;;
+    *) die "unknown mode '$MODE' (hub, agent or uninstall)" ;;
+  esac
+}
+
+main
