@@ -25,7 +25,8 @@ usage() {
   sed -n '2,15p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
   cat <<'EOF'
 Options:
-  hub    --public-url URL [--cloudflare-token TOKEN] [--name NAME] [--tags a,b] [--no-local-agent]
+  hub    --public-url URL [--cloudflare-token TOKEN] [--listen ADDR:PORT] [--name NAME] [--tags a,b] [--no-local-agent]
+         --listen 0.0.0.0:7420 when cloudflared runs on a different machine (default 127.0.0.1:7420)
   agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b]
   common [--version vX.Y.Z] [--from-source] [--ref BRANCH]
   uninstall [--purge]
@@ -33,11 +34,12 @@ EOF
 }
 
 MODE="${1:-}"; shift || true
-PUBLIC_URL="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0
+PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
     --cloudflare-token) CF_TOKEN="${2:?}"; shift 2 ;;
+    --listen) LISTEN="${2:?}"; shift 2 ;;
     --hub) HUB_URL="${2:?}"; shift 2 ;;
     --join) JOIN="${2:?}"; shift 2 ;;
     --name) NAME="${2:?}"; shift 2 ;;
@@ -287,6 +289,10 @@ start_agent() {
 }
 
 do_hub() {
+  case "${LISTEN:-}" in
+    ""|127.0.0.1:7420|0.0.0.0:7420) ;;
+    *) die "--listen must be 127.0.0.1:7420 (cloudflared on this machine) or 0.0.0.0:7420 (cloudflared elsewhere)" ;;
+  esac
   [ -n "$PUBLIC_URL" ] || [ -f /etc/csa-hub/hub.yaml ] || die "--public-url is required (e.g. https://agents.example.com)"
   fetch_binaries
   [ -x "$TMP/csa-hub" ] || die "csa-hub binary missing"
@@ -299,8 +305,10 @@ do_hub() {
     first=1
     mkdir -p /etc/csa-hub
     echo
-    "$BIN_DIR/csa-hub" init --public-url "$PUBLIC_URL"
+    "$BIN_DIR/csa-hub" init --public-url "$PUBLIC_URL" --listen "${LISTEN:-127.0.0.1:7420}"
     echo
+  elif [ -n "$LISTEN" ]; then
+    sed -i "s/^listen: .*/listen: $LISTEN/" /etc/csa-hub/hub.yaml
   fi
   chown -R csa-hub:csa-hub /etc/csa-hub
   chmod 0700 /etc/csa-hub
@@ -315,6 +323,10 @@ do_hub() {
 
   if [ -n "$CF_TOKEN" ]; then
     install_cloudflared
+  fi
+  if grep -q '^listen: 0\.0\.0\.0' /etc/csa-hub/hub.yaml; then
+    warn "the hub accepts connections on all interfaces (port 7420). Allow only your cloudflared machine, e.g.:"
+    warn "  sudo ufw allow from <CLOUDFLARED-IP> to any port 7420 proto tcp && sudo ufw deny 7420/tcp"
   fi
 
   if [ "$LOCAL_AGENT" -eq 1 ]; then

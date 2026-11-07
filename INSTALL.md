@@ -65,6 +65,23 @@ The tunnel gives the hub a public HTTPS address without opening any ports.
 > get past an Access login page, and the hub has its own login (password plus
 > authenticator code).
 
+### Already have a tunnel? Just add a route
+
+If you already run cloudflared (for example for n8n), you don't need a new tunnel.
+
+1. Go to **Networks → Tunnels → your tunnel → Routes → Add route → Published application**.
+2. Set the hostname to e.g. `agents.yourdomain.com`.
+3. Set the service type to **HTTP**. Set the URL by where cloudflared runs:
+   - **On the hub machine:** `localhost:7420`
+   - **On another machine:** `<hub-LAN-IP>:7420`, e.g. `10.10.1.50:7420`
+4. When you install the hub in Part 2, leave out `--cloudflare-token`. If
+   cloudflared runs on another machine, add `--listen 0.0.0.0:7420`, then
+   firewall port 7420 so only the cloudflared machine can reach it:
+   ```bash
+   sudo ufw allow from <CLOUDFLARED-IP> to any port 7420 proto tcp
+   sudo ufw deny 7420/tcp
+   ```
+
 ---
 
 ## Part 2 — Install the hub
@@ -97,6 +114,7 @@ Optional flags:
 |------|---------|
 | `--name NAME` | Name of the hub machine as a server (default: its hostname) |
 | `--tags a,b` | Extra tags for the hub machine (it always gets `hub`) |
+| `--listen 0.0.0.0:7420` | Accept connections from the LAN (cloudflared on another machine) |
 | `--no-local-agent` | Don't manage the hub machine itself |
 | `--version v0.1.0` | Install a specific release instead of the latest |
 | `--from-source` | Always build from source |
