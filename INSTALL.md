@@ -296,14 +296,45 @@ In n8n, add an **HTTP Request** node:
 
 ## Part 6 — Upgrade, uninstall, troubleshooting
 
-### Upgrade
+### Updates (automatic)
 
-Re-run the same installer on each machine. A join token isn't needed again.
+Every change merged into `main` on GitHub is tested and published as a new
+release (`v0.1.N`). Every machine checks GitHub Releases every 6 hours with a
+random delay, so machines don't all update at once. When a newer release
+exists, the machine:
+1. downloads it and verifies its checksum;
+2. replaces the binaries;
+3. restarts its services.
+
+Your config, enrollment, policy and rules are kept.
+
+```bash
+sudo csa-update --check                  # is an update available?
+sudo csa-update                          # update now
+systemctl list-timers csa-update.timer   # when the next check runs
+journalctl -u csa-update -n 30           # what the last check did
+```
+
+To turn auto-update off or on for one machine, re-run its installer with
+`--no-auto-update` or `--auto-update`. The setting is kept through updates.
+
+To update manually instead, re-run the installer. You don't need a join
+token again:
 ```bash
 curl -fsSL -o install.sh https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh
 sudo ./install.sh hub      # on the hub (keeps the config)
 sudo ./install.sh agent    # on servers (keeps enrollment and policy)
 ```
+
+### Friendly server names
+
+The name Claude uses for a server defaults to its hostname. To rename it,
+run this on the hub:
+```bash
+sudo csa-hub servers                 # current names
+sudo csa-hub rename Ubuntu n8n       # takes effect immediately; no reinstall
+```
+"Always allow" rules that were scoped to the old name move to the new one.
 
 ### Move a server to another hub, or re-enroll it
 

@@ -96,8 +96,10 @@ curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main
 ```
 The server appears in Claude right away (`list_servers`).
 
-**Upgrade** by re-running the same install command; you don't need a join
-token again. **Remove** with `sudo bash install.sh uninstall [--purge]`.
+**Updates are automatic.** Every merge to `main` publishes a release, and
+each machine installs it within about 6 hours (`sudo csa-update` updates
+immediately; `--no-auto-update` turns it off for a machine). **Remove** with
+`sudo bash install.sh uninstall [--purge]`.
 
 > The installer downloads release binaries from GitHub Releases. If no
 > release exists yet, it builds from source automatically: it fetches a
@@ -193,7 +195,7 @@ notify:
 ## Hub admin CLI (run as root on the hub)
 
 ```
-csa-hub servers | tag <server> <tags> | remove-server <server>
+csa-hub servers | rename <server> <new-name> | tag <server> <tags> | remove-server <server>
 csa-hub join-token [--ttl 60] [--uses 1] [--tags a,b]
 csa-hub approvals | approve <id> [--always --scope server|tag:x|all] | deny <id>
 csa-hub rules | rule-delete <id>

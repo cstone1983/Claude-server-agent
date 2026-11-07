@@ -10,6 +10,8 @@
 #       | sudo bash -s -- agent --hub https://agents.example.com --join <token> [--name web01] [--tags web,prod]
 #
 #   Upgrade: re-run the same command (a join token is only needed the first time).
+#   Auto-update: every machine checks GitHub Releases every 6 hours (csa-update.timer).
+#                Update now: sudo csa-update   ·   Turn off: re-run with --no-auto-update
 #   Remove:  sudo bash install.sh uninstall [--purge]
 set -euo pipefail
 
@@ -22,19 +24,20 @@ warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,15p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+  sed -n '2,/^[^#]/p' "$0" 2>/dev/null | grep '^#' | sed 's/^# \{0,1\}//' || true
   cat <<'EOF'
 Options:
   hub    --public-url URL [--cloudflare-token TOKEN] [--listen ADDR:PORT] [--name NAME] [--tags a,b] [--no-local-agent]
          --listen 0.0.0.0:7420 when cloudflared runs on a different machine (default 127.0.0.1:7420)
   agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b]
-  common [--version vX.Y.Z] [--from-source] [--ref BRANCH]
+  common [--version vX.Y.Z] [--from-source] [--ref BRANCH] [--no-auto-update | --auto-update]
+  update [--check] [--force]      install the latest GitHub release if it is newer (what csa-update runs)
   uninstall [--purge]
 EOF
 }
 
 MODE="${1:-}"; shift || true
-PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0
+PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 AUTO_UPDATE="" CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
@@ -49,6 +52,10 @@ while [ $# -gt 0 ]; do
     --ref) REF="${2:?}"; shift 2 ;;
     --no-local-agent) LOCAL_AGENT=0; shift ;;
     --purge) PURGE=1; shift ;;
+    --auto-update) AUTO_UPDATE=1; shift ;;
+    --no-auto-update) AUTO_UPDATE=0; shift ;;
+    --check) CHECK_ONLY=1; shift ;;
+    --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1 (see --help)" ;;
   esac
@@ -118,6 +125,7 @@ fetch_binaries() {
   if [ "$FROM_SOURCE" -eq 1 ]; then
     build_from_source
   elif ! download_release; then
+    [ "$NO_SOURCE_FALLBACK" -eq 0 ] || die "could not download release $VERSION"
     warn "no release download available; building from source instead"
     build_from_source
   fi
@@ -339,7 +347,9 @@ do_hub() {
     fi
     start_agent
   fi
+  write_update_units
 
+  [ "$QUIET" -eq 1 ] && return 0
   cat <<EOF
 
 $(say "Hub ready")
@@ -347,7 +357,7 @@ $(say "Hub ready")
 
   1. Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostname:
        $(echo "$PUBLIC_URL" | sed 's#https\?://##')  →  http://localhost:7420
-$( [ -z "$CF_TOKEN" ] && echo "     (no --cloudflare-token given: install the tunnel with 'cloudflared service install <token>')" )
+$( [ -z "$CF_TOKEN" ] && ! systemctl is-active --quiet cloudflared && echo "     (cloudflared is not running here: install it with 'cloudflared service install <token>', or point a route on your existing tunnel at this machine)" )
   2. Claude → Settings → Connectors → Add custom connector → paste the connector URL.
      Log in with the admin password and an authenticator code$( [ $first -eq 1 ] && echo " shown above" ).
   3. Add servers: run 'sudo csa-hub join-token' here and paste the command it prints on each server.
@@ -372,6 +382,9 @@ do_agent() {
     enroll_agent "$HUB_URL"
   fi
   start_agent
+  write_update_units
+
+  [ "$QUIET" -eq 1 ] && return 0
   cat <<EOF
 
 $(say "Server connected")
@@ -381,7 +394,101 @@ $(say "Server connected")
 EOF
 }
 
+UPDATE_DISABLED_FLAG=/etc/csa-auto-update.disabled
+
+write_update_units() {
+  cat > /usr/local/sbin/csa-update <<EOF
+#!/bin/sh
+# Claude Server Agent auto-update: fetch the installer from the latest GitHub
+# release and run it in update mode. Usage: sudo csa-update [--check] [--force]
+set -eu
+tmp="\$(mktemp)"
+trap 'rm -f "\$tmp"' EXIT
+if ! curl -fsSL -o "\$tmp" "https://github.com/$REPO/releases/latest/download/install.sh"; then
+  echo "csa-update: no release published yet (or GitHub unreachable); nothing to do"
+  exit 0
+fi
+bash "\$tmp" update "\$@"
+EOF
+  chmod 0755 /usr/local/sbin/csa-update
+  cat > /etc/systemd/system/csa-update.service <<'EOF'
+[Unit]
+Description=Claude Server Agent auto-update (checks GitHub Releases)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/csa-update
+EOF
+  cat > /etc/systemd/system/csa-update.timer <<'EOF'
+[Unit]
+Description=Check GitHub for Claude Server Agent updates every 6 hours
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=6h
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl daemon-reload
+  case "$AUTO_UPDATE" in
+    0) touch "$UPDATE_DISABLED_FLAG" ;;
+    1) rm -f "$UPDATE_DISABLED_FLAG" ;;
+  esac
+  if [ -f "$UPDATE_DISABLED_FLAG" ]; then
+    systemctl disable --now --quiet csa-update.timer 2>/dev/null || true
+    say "Auto-update is off (turn on with --auto-update)"
+  else
+    systemctl enable --now --quiet csa-update.timer
+    say "Auto-update is on: checks GitHub every 6 hours (sudo csa-update to update now)"
+  fi
+}
+
+installed_version() {
+  local bin
+  for bin in "$BIN_DIR/csa-agent" "$BIN_DIR/csa-hub"; do
+    if [ -x "$bin" ]; then "$bin" version | awk '{print $2}'; return; fi
+  done
+}
+
+latest_release() {
+  # The /releases/latest page redirects to /releases/tag/<tag>; this avoids API rate limits.
+  curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null | sed -n 's#.*/releases/tag/##p'
+}
+
+do_update() {
+  [ -x "$BIN_DIR/csa-agent" ] || [ -x "$BIN_DIR/csa-hub" ] || die "Claude Server Agent is not installed here"
+  local current latest
+  current="$(installed_version)"
+  latest="$(latest_release)"
+  [ -n "$latest" ] || { say "No release published on GitHub yet; nothing to do"; return 0; }
+  if [ "$current" = "$latest" ] && [ "$FORCE" -eq 0 ]; then
+    say "Up to date ($current)"
+    return 0
+  fi
+  if [ "$CHECK_ONLY" -eq 1 ]; then
+    say "Update available: $current -> $latest (run: sudo csa-update)"
+    return 0
+  fi
+  say "Updating $current -> $latest"
+  VERSION="$latest" NO_SOURCE_FALLBACK=1 QUIET=1
+  if [ -f /etc/csa-hub/hub.yaml ]; then
+    agent_enrolled && LOCAL_AGENT=1 || LOCAL_AGENT=0
+    do_hub
+  else
+    agent_enrolled || die "agent is not enrolled; re-run the installer with --hub and --join"
+    do_agent
+  fi
+  say "Updated to $latest"
+}
+
 do_uninstall() {
+  systemctl disable --now csa-update.timer 2>/dev/null || true
+  rm -f /etc/systemd/system/csa-update.timer /etc/systemd/system/csa-update.service /usr/local/sbin/csa-update "$UPDATE_DISABLED_FLAG"
   for svc in csa-agent csa-hub; do
     if systemctl list-unit-files "$svc.service" >/dev/null 2>&1; then
       systemctl disable --now "$svc" 2>/dev/null || true
@@ -404,9 +511,10 @@ main() {
   case "$MODE" in
     hub) need_root; check_os; do_hub ;;
     agent) need_root; check_os; do_agent ;;
+    update) need_root; check_os; do_update ;;
     uninstall) need_root; do_uninstall ;;
     -h|--help|help|"") usage ;;
-    *) die "unknown mode '$MODE' (hub, agent or uninstall)" ;;
+    *) die "unknown mode '$MODE' (hub, agent, update or uninstall)" ;;
   esac
 }
 
