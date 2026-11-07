@@ -278,7 +278,8 @@ sudo csa-hub deny <id>
 ### 5.2 Approvals dashboard
 
 Open `https://agents.yourdomain.com/approvals` and log in once with the
-password and an authenticator code. You stay logged in for 12 hours.
+password and an authenticator code. You stay logged in for 24 hours, even across
+hub restarts and updates.
 - Approve or deny everything pending in one go: identical commands on
   several servers are grouped.
 - Choose **Approve + always allow** to whitelist the command on all

@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cstone1983/Claude-server-agent/internal/audit"
@@ -17,27 +16,27 @@ import (
 // Browser dashboard: log in once (password + authenticator code), then review
 // and bulk-approve pending actions and manage "always allow" rules.
 
-const (
-	sessionCookie = "csa_session"
-	sessionTTL    = 12 * time.Hour
-)
+const sessionCookie = "csa_session"
 
+// sessions are dashboard logins. They are stored (hashed) in the hub state so
+// they survive hub restarts and updates.
 type sessions struct {
-	mu sync.Mutex
-	m  map[string]time.Time // hashed token -> expiry
+	store *Store
+	ttl   time.Duration
 }
 
 func (s *sessions) create() string {
 	tok := randomToken("", 32)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	for k, exp := range s.m {
-		if now.After(exp) {
-			delete(s.m, k)
+	s.store.Update(func(d *stateData) error {
+		now := time.Now()
+		for k, exp := range d.Sessions {
+			if now.After(exp) {
+				delete(d.Sessions, k)
+			}
 		}
-	}
-	s.m[hashSecret(tok)] = now.Add(sessionTTL)
+		d.Sessions[hashSecret(tok)] = now.Add(s.ttl)
+		return nil
+	})
 	return tok
 }
 
@@ -45,16 +44,16 @@ func (s *sessions) valid(tok string) bool {
 	if tok == "" {
 		return false
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	exp, ok := s.m[hashSecret(tok)]
-	return ok && time.Now().Before(exp)
+	ok := false
+	s.store.View(func(d *stateData) {
+		exp, found := d.Sessions[hashSecret(tok)]
+		ok = found && time.Now().Before(exp)
+	})
+	return ok
 }
 
 func (s *sessions) remove(tok string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.m, hashSecret(tok))
+	s.store.Update(func(d *stateData) error { delete(d.Sessions, hashSecret(tok)); return nil })
 }
 
 func (h *Hub) loggedIn(r *http.Request) bool {
@@ -109,7 +108,7 @@ func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		tok := h.sess.create()
 		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()),
+			Name: sessionCookie, Value: tok, Path: "/", MaxAge: int(h.sess.ttl.Seconds()),
 			HttpOnly: true, Secure: strings.HasPrefix(h.cfg.PublicURL, "https://"), SameSite: http.SameSiteStrictMode,
 		})
 		h.audit.Write(audit.Entry{Event: "dashboard_login", Detail: map[string]string{"ip": clientIP(r)}})

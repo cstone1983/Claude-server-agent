@@ -99,6 +99,8 @@ type stateData struct {
 	Clients    map[string]*OAuthClient `json:"oauth_clients"`
 	Tokens     map[string]*Token       `json:"tokens"`
 	Rules      []*HubRule              `json:"rules"`
+	// Sessions are dashboard logins: hashed token -> expiry.
+	Sessions map[string]time.Time `json:"dashboard_sessions"`
 }
 
 // Store is the hub's persistent state, saved as JSON. Secrets are stored
@@ -133,6 +135,9 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	if s.d.Tokens == nil {
 		s.d.Tokens = map[string]*Token{}
+	}
+	if s.d.Sessions == nil {
+		s.d.Sessions = map[string]time.Time{}
 	}
 	return s, nil
 }

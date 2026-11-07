@@ -38,6 +38,8 @@ type Config struct {
 
 	AccessTokenTTLMin   int `yaml:"access_token_ttl_min"`
 	RefreshTokenTTLDays int `yaml:"refresh_token_ttl_days"`
+	// DashboardSessionHours is how long a login to the approvals dashboard lasts.
+	DashboardSessionHours int `yaml:"dashboard_session_hours"`
 	// AllowedRedirectHosts limits which OAuth clients may register.
 	AllowedRedirectHosts []string `yaml:"allowed_redirect_hosts"`
 
@@ -72,6 +74,7 @@ func (c *Config) applyDefaults() {
 	defi(&c.CallTimeoutSec, 3700)
 	defi(&c.AccessTokenTTLMin, 60)
 	defi(&c.RefreshTokenTTLDays, 30)
+	defi(&c.DashboardSessionHours, 24)
 	if len(c.AllowedRedirectHosts) == 0 {
 		c.AllowedRedirectHosts = []string{"claude.ai", "claude.com", "localhost", "127.0.0.1"}
 	}

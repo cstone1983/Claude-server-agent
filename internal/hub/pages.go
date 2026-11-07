@@ -93,7 +93,7 @@ var dashLoginTmpl = template.Must(template.Must(template.New("dlogin").Parse(bas
 {{define "title"}}Claude Server Agent — log in{{end}}
 {{define "body"}}
 <h1>Log in</h1>
-<p>Review approvals and manage allow rules for all servers. You stay logged in for 12 hours.</p>
+<p>Review approvals and manage allow rules for all servers. You stay logged in for 24 hours on this browser.</p>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" autocomplete="off">
 <input type="hidden" name="next" value="{{.Next}}">

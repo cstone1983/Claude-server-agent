@@ -133,3 +133,34 @@ func TestDashboardBulkApproveAndRules(t *testing.T) {
 		}
 	})
 }
+
+func TestDashboardSessionSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{StateDir: filepath.Join(dir, "s"), AuditLog: filepath.Join(dir, "a.jsonl"), PublicURL: "http://localhost"}
+	cfg.applyDefaults()
+	if cfg.DashboardSessionHours != 24 {
+		t.Fatalf("default session hours = %d", cfg.DashboardSessionHours)
+	}
+	h1, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok := h1.sess.create()
+	// A new hub process reading the same state still accepts the login.
+	h2, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !h2.sess.valid(tok) {
+		t.Fatal("session lost after restart")
+	}
+	h2.sess.remove(tok)
+	if h2.sess.valid(tok) || h2.sess.valid("") {
+		t.Fatal("removed/empty session still valid")
+	}
+	// Expired sessions are rejected.
+	h2.store.Update(func(d *stateData) error { d.Sessions[hashSecret("old")] = time.Now().Add(-time.Minute); return nil })
+	if h2.sess.valid("old") {
+		t.Fatal("expired session accepted")
+	}
+}
