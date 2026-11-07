@@ -1,0 +1,41 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Approvals</h1><p>Actions waiting for your OK. Identical requests across servers are grouped.</p></div></div>
+{{if .D.Groups}}
+<form method="post">
+<label class="check"><input type="checkbox" data-check-all checked> Select all</label>
+{{range .D.Groups}}
+<div class="card appr-group">
+  <div class="chips">{{if eq .Tool "request_rule"}}<span class="chip brand">rule request</span>{{else}}<span class="chip">{{.Tool}}</span>{{end}}
+    <span class="chip">{{len .Approvals}} server{{if gt (len .Approvals) 1}}s{{end}}</span></div>
+  <div class="cmd">{{.Summary}}</div>
+  {{if .Reason}}<div class="secondary-text small">Reason: {{.Reason}}</div>{{end}}
+  {{if ne .Tool "request_rule"}}<div class="muted small">{{.Why}}</div>{{end}}
+  <div class="servers">{{range .Approvals}}<label class="check"><input type="checkbox" name="id" value="{{.ID}}" checked> {{.Server}} <span class="muted small">· <time datetime="{{iso .CreatedAt}}" data-fmt="rel">{{iso .CreatedAt}}</time></span></label>{{end}}</div>
+</div>
+{{end}}
+<div class="card sticky-actions">
+  <div class="btn-row" style="margin-top:0">
+    <button class="btn primary" name="action" value="approve">Approve once</button>
+    <button class="btn danger" name="action" value="deny">Deny</button>
+  </div>
+  <details class="add" style="margin-top:.8rem"><summary class="secondary-text small">▸ Approve and always allow…</summary>
+    <div class="form-row" style="margin-top:.4rem">
+      <div><label for="scope">Allow from now on, on</label>
+      <select id="scope" name="scope"><option value="server">only the server(s) each request came from</option><option value="all">all servers</option></select></div>
+      <div><button class="btn" name="action" value="always">Approve + always allow</button></div>
+    </div>
+    <p class="muted small">Rule requests from Claude are added for the servers they name, with either approve button. Manage or undo rules on the <a href="/rules">Rules</a> page.</p>
+  </details>
+</div>
+</form>
+{{else}}<div class="card empty">Nothing is waiting for approval. ✓</div>{{end}}
+
+{{if .D.Recent}}
+<h2 style="margin-top:1.6rem">Recent decisions</h2>
+<div class="card table-wrap"><table>
+<thead><tr><th>When</th><th>Server</th><th>Action</th><th>Decision</th></tr></thead><tbody>
+{{range .D.Recent}}<tr><td class="nowrap muted"><time datetime="{{iso .CreatedAt}}">{{iso .CreatedAt}}</time></td><td>{{.Server}}</td><td><code>{{.Summary}}</code></td>
+<td>{{if eq .Status "denied"}}<span class="chip crit">denied</span>{{else if eq .Status "expired"}}<span class="chip">expired</span>{{else}}<span class="chip good">{{.Status}}</span>{{end}}{{if .RuleID}} <span class="chip brand">always allowed</span>{{end}}</td></tr>{{end}}
+</tbody></table></div>
+{{end}}
+{{end}}

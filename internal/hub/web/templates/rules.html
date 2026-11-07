@@ -1,0 +1,71 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Rules</h1><p>Actions that run without asking. Disable or remove a rule and that action needs approval again.</p></div></div>
+
+<details class="card add"{{if .D.FormOpen}} open{{end}}>
+<summary><span class="btn primary sm">+ Add rule</span></summary>
+<form method="post" autocomplete="off" style="margin-top:.6rem">
+<input type="hidden" name="op" value="add">
+<div class="form-row">
+  <div><label for="kind">Allow</label><select id="kind" name="kind">
+    <option value="command">a command</option><option value="script">an exact shell script</option>
+    <option value="write">writing files under a path</option><option value="read">reading a sensitive path</option></select></div>
+  <div><label for="scope">On</label><select id="scope" name="scope">
+    <option value="all">all servers</option>
+    {{range .D.Servers}}<option value="server:{{.}}">{{.}}</option>{{end}}
+    {{range .D.Tags}}<option value="tag:{{.}}">tag: {{.}}</option>{{end}}</select></div>
+  <div><label for="as">Run as (optional)</label><input id="as" name="as" type="text" placeholder="root"></div>
+</div>
+<label for="value">Command, script or path</label>
+<input id="value" name="value" type="text" placeholder="systemctl restart nginx    ·    /srv/app/config/**" required>
+<label class="check"><input type="checkbox" name="any_args" value="1"> also allow any extra arguments after the command</label>
+<label for="comment">Note (optional)</label><input id="comment" name="comment" type="text">
+<div class="btn-row"><button class="btn primary">Add rule</button></div>
+</form>
+</details>
+
+<div class="card" style="margin-top:1rem">
+<form method="get" class="toolbar">
+  <input type="search" name="q" value="{{.D.Q}}" placeholder="Search rules…" data-filter="rules-table">
+  <select name="scope">
+    <option value="">All targets</option><option value="all" {{if eq .D.Scope "all"}}selected{{end}}>all servers</option>
+    {{range .D.Servers}}<option value="server:{{.}}" {{if eq $.D.Scope (printf "server:%s" .)}}selected{{end}}>{{.}}</option>{{end}}
+    {{range .D.Tags}}<option value="tag:{{.}}" {{if eq $.D.Scope (printf "tag:%s" .)}}selected{{end}}>tag: {{.}}</option>{{end}}
+  </select>
+  <input type="hidden" name="sort" value="{{.D.Sort}}"><input type="hidden" name="dir" value="{{.D.Dir}}">
+  <button class="btn sm">Filter</button>{{if or .D.Q .D.Scope}}<a class="small" href="/rules">Clear</a>{{end}}
+  <span class="muted small" style="margin-left:auto">{{len .D.Rules}} of {{.D.Total}}</span>
+</form>
+{{if .D.Rules}}
+<div class="table-wrap"><table id="rules-table">
+<thead><tr>
+  <th><a href="{{index .D.SortLinks "rule"}}">Rule{{sortmark .D "rule"}}</a></th>
+  <th><a href="{{index .D.SortLinks "scope"}}">Applies to{{sortmark .D "scope"}}</a></th>
+  <th><a href="{{index .D.SortLinks "added"}}">Added{{sortmark .D "added"}}</a></th>
+  <th><a href="{{index .D.SortLinks "note"}}">Note{{sortmark .D "note"}}</a></th>
+  <th>Status</th><th></th></tr></thead>
+<tbody>
+{{range .D.Rules}}<tr class="{{if .Disabled}}disabled{{end}}">
+  <td><code>{{.Text}}</code></td>
+  <td>{{.ScopeText}}</td>
+  <td class="nowrap muted"><time datetime="{{iso .CreatedAt}}" data-fmt="date">{{iso .CreatedAt}}</time></td>
+  <td class="muted small">{{.Rule.Comment}}</td>
+  <td>{{if .Disabled}}<span class="chip">disabled</span>{{else}}<span class="chip good">active</span>{{end}}</td>
+  <td class="actions">
+    <a class="btn sm" href="/rules/edit?id={{.ID}}">Edit</a>
+    <form method="post"><input type="hidden" name="op" value="toggle"><input type="hidden" name="rule_id" value="{{.ID}}"><button class="btn sm">{{if .Disabled}}Enable{{else}}Disable{{end}}</button></form>
+    <form method="post" data-confirm="Remove this rule? That action will need approval again."><input type="hidden" name="op" value="delete"><input type="hidden" name="rule_id" value="{{.ID}}"><button class="btn sm danger">Remove</button></form>
+  </td>
+</tr>{{end}}
+</tbody></table></div>
+{{else}}<div class="empty">{{if .D.Total}}No rules match.{{else}}No rules yet.{{end}}</div>{{end}}
+</div>
+
+<h2 style="margin-top:1.6rem">Built in on every server</h2>
+<div class="grid">
+  <div class="card"><div class="chips" style="margin-bottom:.5rem"><span class="chip good">always allowed</span></div>
+    {{range .D.BuiltinAllow}}<p class="secondary-text small">{{.}}</p>{{end}}</div>
+  <div class="card"><div class="chips" style="margin-bottom:.5rem"><span class="chip brand">read-only</span></div>
+    <p class="secondary-text small">{{range $i, $c := .D.BuiltinRead}}{{if $i}}, {{end}}{{$c}}{{end}}</p>
+    <p class="muted small">State-changing flags of these commands still need approval. Each server's /etc/csa/policy.yaml can add rules; its deny rules always win.</p></div>
+</div>
+{{end}}

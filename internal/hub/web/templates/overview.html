@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Overview</h1><p>{{len .D.Servers}} servers · updates every minute</p></div>
+<a class="btn" href="/servers">Manage servers</a></div>
+<div class="kpis">
+  <div class="card kpi"><div class="label">Online</div><div class="value">{{.D.Online}}<span class="muted small"> / {{len .D.Servers}}</span></div></div>
+  <div class="card kpi"><div class="label">Pending approvals</div><div class="value">{{.Pending}}</div></div>
+  <div class="card kpi"><div class="label">Need attention</div><div class="value">{{.D.Attention}}</div></div>
+  <div class="card kpi"><div class="label">Agent updates</div><div class="value">{{.D.Updates}}</div></div>
+</div>
+<div class="grid">
+{{range .D.Servers}}
+<div class="card server-card">
+  <div class="top"><div><h3><span class="dot {{if .Online}}on{{else}}off{{end}}"></span>{{.Name}}</h3>
+    <div class="sub">{{.OS}}{{if .Uptime}} · up {{.Uptime}}{{end}}</div></div>
+    <div class="chips">{{range .Tags}}<span class="chip">{{.}}</span>{{end}}</div></div>
+  <div class="chips" style="margin-top:.6rem">
+    {{if not .Online}}<span class="chip">offline · last seen <time datetime="{{.LastSeen}}" data-fmt="rel">{{.LastSeen}}</time></span>{{end}}
+    {{if .UpdateAvailable}}<span class="chip warn">agent update {{.Latest}}</span>{{end}}
+    {{if .RebootRequired}}<span class="chip warn">reboot required</span>{{end}}
+    {{range .FailedUnits}}<span class="chip crit">failed: {{.}}</span>{{end}}
+    {{if .PkgUpdates}}<span class="chip">{{.PkgUpdates}}</span>{{end}}
+    <span class="chip brand">agent {{.Version}}</span>
+  </div>
+  {{if .HasMetrics}}
+  <div class="meter"><div class="row"><span>CPU load</span><span class="tabular">{{.Load}} · {{.CPUs}} cores</span></div>
+    <div class="bar {{.LoadClass}}"><span style="width:{{.LoadPct}}%"></span></div>{{.LoadSpark}}</div>
+  <div class="meter"><div class="row"><span>Memory</span><span class="tabular">{{.MemPct}}% of {{.MemTotal}}</span></div>
+    <div class="bar {{.MemClass}}"><span style="width:{{.MemPct}}%"></span></div>{{.MemSpark}}</div>
+  {{range .Disks}}<div class="meter"><div class="row"><span>Disk {{.Mount}}</span><span class="tabular">{{.UsedPct}}% of {{.Size}}</span></div>
+    <div class="bar {{.Class}}"><span style="width:{{.UsedPct}}%"></span></div></div>{{end}}
+  {{else}}<p class="muted small">{{if .Online}}Collecting metrics…{{else}}No recent metrics.{{end}}</p>{{end}}
+</div>
+{{else}}<div class="card empty">No servers yet. <a href="/servers">Add one</a>.</div>{{end}}
+</div>
+{{end}}

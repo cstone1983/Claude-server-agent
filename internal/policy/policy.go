@@ -44,6 +44,43 @@ type Rule struct {
 	ReadPaths  []string `yaml:"read_paths,omitempty" json:"read_paths,omitempty"`
 }
 
+// Describe is a plain-language form of the rule for people, e.g.
+// "systemctl restart … (any arguments)".
+func (r Rule) Describe() string {
+	who := ""
+	if r.As != "" && r.As != "root" {
+		who = " (as " + r.As + ")"
+	}
+	switch {
+	case len(r.Argv) > 0:
+		var parts []string
+		anyArgs := false
+		for i, a := range r.Argv {
+			if a == "**" && i == len(r.Argv)-1 {
+				anyArgs = true
+				continue
+			}
+			a = strings.TrimPrefix(a, "=")
+			if strings.ContainsAny(a, " \t") {
+				a = "'" + a + "'"
+			}
+			parts = append(parts, a)
+		}
+		s := strings.Join(parts, " ")
+		if anyArgs {
+			s += " … (any arguments)"
+		}
+		return s + who
+	case r.Shell != "":
+		return "script: " + r.Shell + who
+	case len(r.WritePaths) > 0:
+		return "write files: " + strings.Join(r.WritePaths, ", ")
+	case len(r.ReadPaths) > 0:
+		return "read: " + strings.Join(r.ReadPaths, ", ")
+	}
+	return r.String()
+}
+
 func (r Rule) String() string {
 	switch {
 	case len(r.Argv) > 0:

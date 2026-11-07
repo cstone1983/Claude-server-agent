@@ -185,7 +185,7 @@ func (h *Hub) proposeRule(caller Caller, r policy.Rule, scope, reason string) *A
 	id := randomToken("apr_", 12)
 	ap := &Approval{
 		ID: id, Server: scopeLabel(scope), Tool: "request_rule", Caller: caller.Name, Kind: "rule", RuleScope: scope,
-		Summary: r.String() + "\non " + scopeLabel(scope), Why: "Claude asked to allow this without approval from now on",
+		Summary: r.Describe() + "\non " + scopeLabel(scope), Why: "Claude asked to allow this without approval from now on",
 		Reason: reason, Suggested: r, Status: StatusPending, CreatedAt: time.Now().UTC(),
 		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}),
 	}

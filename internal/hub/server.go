@@ -32,6 +32,7 @@ type Hub struct {
 	limiter  *limiter
 	releases *releaseWatcher
 	sess     *sessions
+	metrics  *metricsStore
 	// testSend replaces sending to an agent in tests.
 	testSend func(*agentConn, proto.Envelope) error
 }
@@ -52,6 +53,7 @@ func New(cfg *Config) (*Hub, error) {
 		codes:    &codeStore{m: map[string]*authCode{}},
 		limiter:  newLimiter(10, 15*time.Minute),
 		releases: newReleaseWatcher(),
+		metrics:  &metricsStore{m: map[string]*serverMetrics{}},
 		sess:     &sessions{store: st, ttl: time.Duration(cfg.DashboardSessionHours) * time.Hour},
 	}, nil
 }
@@ -141,6 +143,10 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("/logout", h.handleLogout)
 	mux.HandleFunc("/approvals", h.handleApprovals)
 	mux.HandleFunc("/rules", h.handleRules)
+	mux.HandleFunc("/rules/edit", h.handleRuleEdit)
+	mux.HandleFunc("/servers", h.handleServers)
+	mux.HandleFunc("/activity", h.handleActivity)
+	mux.HandleFunc("/static/", h.handleStatic)
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/servers", func(w http.ResponseWriter, r *http.Request) {
@@ -177,13 +183,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.Handle("/api/", bearer(api))
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok\n") })
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		renderPage(w, http.StatusOK, "Claude Server Agent hub", "Add "+h.cfg.PublicURL+"/mcp as a custom connector in Claude (Settings → Connectors).", nil)
-	})
+	mux.HandleFunc("/", h.handleOverview)
 	return h.hostGuard(securityHeaders(mux))
 }
 
@@ -251,6 +251,7 @@ func (h *Hub) Serve(ctx context.Context) error {
 	admin := &http.Server{Handler: h.adminHandler(), ReadHeaderTimeout: 10 * time.Second}
 
 	go h.releases.run(ctx)
+	go h.collectMetrics(ctx)
 	go func() {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()

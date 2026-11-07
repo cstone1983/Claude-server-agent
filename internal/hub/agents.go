@@ -258,6 +258,9 @@ func (h *Hub) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 		switch env.Type {
 		case proto.TypeHello:
 			h.touch(id, env.Hello)
+			if h.metrics != nil {
+				go h.sampleOne(context.Background(), id)
+			}
 		case proto.TypeResult:
 			c.mu.Lock()
 			ch := c.pending[env.ID]
@@ -332,7 +335,7 @@ func (h *Hub) rulesFor(a *AgentRec) []policy.Rule {
 	var out []policy.Rule
 	h.store.View(func(d *stateData) {
 		for _, r := range d.Rules {
-			if r.appliesTo(a) {
+			if !r.Disabled && r.appliesTo(a) {
 				rule := r.Rule
 				rule.ID = r.ID
 				out = append(out, rule)

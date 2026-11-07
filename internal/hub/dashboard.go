@@ -95,7 +95,7 @@ func safeNext(next string) string {
 
 func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.FormValue("next"))
-	data := map[string]any{"Next": next}
+	data := map[string]any{"Next": next, "Hours": h.cfg.DashboardSessionHours}
 	if r.Method == http.MethodPost {
 		if !h.sameOrigin(r) {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
@@ -209,7 +209,7 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data["Recent"] = recent
-	renderTemplate(w, http.StatusOK, dashApprovalsTmpl, data)
+	h.renderPanel(w, http.StatusOK, dashApprovalsTmpl, data, 30)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
@@ -222,6 +222,28 @@ func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		switch r.PostFormValue("op") {
+		case "toggle":
+			id := r.PostFormValue("rule_id")
+			var now bool
+			found := false
+			h.store.Update(func(d *stateData) error {
+				for _, x := range d.Rules {
+					if x.ID == id {
+						x.Disabled = !x.Disabled
+						now, found = x.Disabled, true
+					}
+				}
+				return nil
+			})
+			if found {
+				h.audit.Write(audit.Entry{Event: "rule_toggled", Detail: map[string]any{"id": id, "disabled": now, "via": "dashboard"}})
+				go h.pushRulesAll()
+				if now {
+					data["Done"] = "Rule disabled: that action needs approval again."
+				} else {
+					data["Done"] = "Rule enabled."
+				}
+			}
 		case "delete":
 			id := r.PostFormValue("rule_id")
 			found := false
@@ -249,6 +271,7 @@ func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				data["Error"] = err.Error()
 				data["Form"] = r.PostForm
+				data["FormOpen"] = true
 				break
 			}
 			rule.Comment = strings.TrimSpace(r.PostFormValue("comment"))
@@ -279,13 +302,16 @@ func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 		tagList = append(tagList, t)
 	}
 	sort.Strings(tagList)
+	if r.URL.Query().Get("saved") == "1" && data["Done"] == nil {
+		data["Done"] = "Rule saved."
+	}
 	views, total := filterSortRules(rules, r.URL.Query())
 	q := r.URL.Query()
 	data["Rules"], data["Total"], data["Servers"], data["Tags"] = views, total, servers, tagList
 	data["Q"], data["Scope"], data["Sort"], data["Dir"] = q.Get("q"), q.Get("scope"), q.Get("sort"), q.Get("dir")
 	data["SortLinks"] = sortLinks(q)
 	data["BuiltinRead"], data["BuiltinAllow"] = policy.BuiltinSummary()
-	renderTemplate(w, http.StatusOK, dashRulesTmpl, data)
+	h.renderPanel(w, http.StatusOK, dashRulesTmpl, data, 0)
 }
 
 func validScope(s string) bool {
@@ -402,7 +428,7 @@ func filterSortRules(rules []HubRule, q url.Values) ([]ruleView, int) {
 	scope := q.Get("scope")
 	var out []ruleView
 	for _, x := range rules {
-		v := ruleView{x, x.Rule.String(), scopeLabel(x.Scope)}
+		v := ruleView{x, x.Rule.Describe(), scopeLabel(x.Scope)}
 		if scope != "" && x.Scope != scope {
 			continue
 		}
