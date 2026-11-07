@@ -174,14 +174,16 @@ func combine(results []ServerResult, multi bool) Outcome {
 
 func (h *Hub) listServers(caller Caller) Outcome {
 	type srv struct {
-		Name         string    `json:"name"`
-		Online       bool      `json:"online"`
-		Tags         []string  `json:"tags"`
-		Hostname     string    `json:"hostname"`
-		OS           string    `json:"os"`
-		Arch         string    `json:"arch"`
-		AgentVersion string    `json:"agent_version"`
-		LastSeen     time.Time `json:"last_seen"`
+		Name            string    `json:"name"`
+		Online          bool      `json:"online"`
+		Tags            []string  `json:"tags"`
+		Hostname        string    `json:"hostname"`
+		OS              string    `json:"os"`
+		Arch            string    `json:"arch"`
+		AgentVersion    string    `json:"agent_version"`
+		LastSeen        time.Time `json:"last_seen"`
+		LatestVersion   string    `json:"latest_version,omitempty"`
+		UpdateAvailable bool      `json:"update_available"`
 	}
 	var list []srv
 	h.store.View(func(d *stateData) {
@@ -189,11 +191,13 @@ func (h *Hub) listServers(caller Caller) Outcome {
 			if !serverAllowed(a, caller.Servers) {
 				continue
 			}
-			list = append(list, srv{a.Name, h.reg.online(a.ID), a.Tags, a.Hostname, a.OS, a.Arch, a.AgentVersion, a.LastSeen})
+			latest, upd := h.updateAvailable(a.AgentVersion)
+			list = append(list, srv{a.Name, h.reg.online(a.ID), a.Tags, a.Hostname, a.OS, a.Arch, a.AgentVersion, a.LastSeen, latest, upd})
 		}
 	})
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	var sb strings.Builder
+	updates := 0
 	if len(list) == 0 {
 		sb.WriteString("No servers have joined yet. On a server, run the install script with a join token from `csa-hub join-token`.")
 	}
@@ -206,10 +210,20 @@ func (h *Hub) listServers(caller Caller) Outcome {
 		if len(s.Tags) > 0 {
 			fmt.Fprintf(&sb, " — tags: %s", strings.Join(s.Tags, ","))
 		}
+		if s.AgentVersion != "" {
+			fmt.Fprintf(&sb, " — agent %s", versionOf(s.AgentVersion))
+		}
+		if s.UpdateAvailable {
+			fmt.Fprintf(&sb, " — UPDATE AVAILABLE: %s", s.LatestVersion)
+			updates++
+		}
 		if !s.Online && !s.LastSeen.IsZero() {
 			fmt.Fprintf(&sb, " — last seen %s", s.LastSeen.Format(time.RFC3339))
 		}
 		sb.WriteString("\n")
+	}
+	if updates > 0 {
+		fmt.Fprintf(&sb, "\n%d server(s) can be updated to %s. Tell the user, and run update_server only if they say to.\n", updates, h.releases.Latest())
 	}
 	if caller.ReadOnly {
 		sb.WriteString("\n(This connection is read-only.)\n")

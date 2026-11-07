@@ -296,30 +296,31 @@ In n8n, add an **HTTP Request** node:
 
 ## Part 6 — Upgrade, uninstall, troubleshooting
 
-### Updates (automatic)
+### Updates (only when you say so)
 
 Every change merged into `main` on GitHub is tested and published as a new
-release (`v0.1.N`). Every machine checks GitHub Releases every 6 hours with a
-random delay, so machines don't all update at once. When a newer release
-exists, the machine:
-1. downloads it and verifies its checksum;
-2. replaces the binaries;
-3. restarts its services.
+release (`v0.1.N`). **Nothing updates automatically.** The hub checks GitHub
+once an hour. When a server runs an older version, `list_servers` shows
+**UPDATE AVAILABLE**, and Claude will mention it to you.
 
-Your config, enrollment, policy and rules are kept.
+To update, use either of these:
+- **Ask Claude**, e.g. *"update web01"* or *"update all servers"*. Claude
+  runs `update_server`. It installs only official releases and is told to do
+  so only after you say to. The update runs in the background, and the agent
+  reconnects within about a minute. Updating the hub machine briefly
+  disconnects the connector.
+- **On the machine itself:**
+  ```bash
+  sudo csa-update --check      # is an update available?
+  sudo csa-update              # update now (verifies checksums, keeps config, restarts services)
+  ```
 
-```bash
-sudo csa-update --check                  # is an update available?
-sudo csa-update                          # update now
-systemctl list-timers csa-update.timer   # when the next check runs
-journalctl -u csa-update -n 30           # what the last check did
-```
+To stop Claude from triggering updates on a server, add
+`disable_remote_update: true` to that server's `/etc/csa/policy.yaml`.
+Claude can still check for updates there.
 
-To turn auto-update off or on for one machine, re-run its installer with
-`--no-auto-update` or `--auto-update`. The setting is kept through updates.
-
-To update manually instead, re-run the installer. You don't need a join
-token again:
+Servers installed before update support existed need the installer re-run
+once to get `csa-update`:
 ```bash
 curl -fsSL -o install.sh https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh
 sudo ./install.sh hub      # on the hub (keeps the config)

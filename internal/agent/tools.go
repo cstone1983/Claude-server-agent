@@ -227,6 +227,13 @@ func (e *Executor) Handle(ctx context.Context, call *proto.Call) *proto.Result {
 		e.audit.Write(audit.Entry{Event: "job_cancelled", Caller: call.Caller, Tool: call.Tool, Summary: a.JobID})
 		return &proto.Result{OK: true, Text: "cancelled " + a.JobID}
 
+	case "update_server":
+		var a tools.UpdateServerArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		return e.updateServer(ctx, call, a)
+
 	case "policy_view":
 		s := e.policy.Snapshot()
 		b, _ := json.MarshalIndent(s, "", "  ")

@@ -1,5 +1,6 @@
 # Publishes a release for every change merged to main (v0.1.<run>), or for a
-# manually pushed v* tag. Servers' csa-update timers install the latest release.
+# manually pushed v* tag. The hub then flags servers as "update available";
+# nothing updates until you run csa-update or tell Claude to run update_server.
 name: release
 on:
   push:

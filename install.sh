@@ -10,8 +10,7 @@
 #       | sudo bash -s -- agent --hub https://agents.example.com --join <token> [--name web01] [--tags web,prod]
 #
 #   Upgrade: re-run the same command (a join token is only needed the first time).
-#   Auto-update: every machine checks GitHub Releases every 6 hours (csa-update.timer).
-#                Update now: sudo csa-update   ·   Turn off: re-run with --no-auto-update
+#   Update:  sudo csa-update [--check]   (or ask Claude: it sees "update available" in list_servers)
 #   Remove:  sudo bash install.sh uninstall [--purge]
 set -euo pipefail
 
@@ -30,14 +29,15 @@ Options:
   hub    --public-url URL [--cloudflare-token TOKEN] [--listen ADDR:PORT] [--name NAME] [--tags a,b] [--no-local-agent]
          --listen 0.0.0.0:7420 when cloudflared runs on a different machine (default 127.0.0.1:7420)
   agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b]
-  common [--version vX.Y.Z] [--from-source] [--ref BRANCH] [--no-auto-update | --auto-update]
+  common [--version vX.Y.Z] [--from-source] [--ref BRANCH]
   update [--check] [--force]      install the latest GitHub release if it is newer (what csa-update runs)
+  Updates never run on their own: run sudo csa-update, or let Claude run update_server when you approve.
   uninstall [--purge]
 EOF
 }
 
 MODE="${1:-}"; shift || true
-PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 AUTO_UPDATE="" CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
+PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
@@ -52,8 +52,6 @@ while [ $# -gt 0 ]; do
     --ref) REF="${2:?}"; shift 2 ;;
     --no-local-agent) LOCAL_AGENT=0; shift ;;
     --purge) PURGE=1; shift ;;
-    --auto-update) AUTO_UPDATE=1; shift ;;
-    --no-auto-update) AUTO_UPDATE=0; shift ;;
     --check) CHECK_ONLY=1; shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -394,13 +392,13 @@ $(say "Server connected")
 EOF
 }
 
-UPDATE_DISABLED_FLAG=/etc/csa-auto-update.disabled
-
 write_update_units() {
+  # csa-update: fetch the installer from the latest GitHub release and run it in
+  # update mode. Run by hand or by the agent's update_server tool; nothing runs it
+  # automatically.
   cat > /usr/local/sbin/csa-update <<EOF
 #!/bin/sh
-# Claude Server Agent auto-update: fetch the installer from the latest GitHub
-# release and run it in update mode. Usage: sudo csa-update [--check] [--force]
+# Claude Server Agent updater. Usage: sudo csa-update [--check] [--force]
 set -eu
 tmp="\$(mktemp)"
 trap 'rm -f "\$tmp"' EXIT
@@ -411,41 +409,6 @@ fi
 bash "\$tmp" update "\$@"
 EOF
   chmod 0755 /usr/local/sbin/csa-update
-  cat > /etc/systemd/system/csa-update.service <<'EOF'
-[Unit]
-Description=Claude Server Agent auto-update (checks GitHub Releases)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/csa-update
-EOF
-  cat > /etc/systemd/system/csa-update.timer <<'EOF'
-[Unit]
-Description=Check GitHub for Claude Server Agent updates every 6 hours
-
-[Timer]
-OnBootSec=15min
-OnUnitActiveSec=6h
-RandomizedDelaySec=30min
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-  systemctl daemon-reload
-  case "$AUTO_UPDATE" in
-    0) touch "$UPDATE_DISABLED_FLAG" ;;
-    1) rm -f "$UPDATE_DISABLED_FLAG" ;;
-  esac
-  if [ -f "$UPDATE_DISABLED_FLAG" ]; then
-    systemctl disable --now --quiet csa-update.timer 2>/dev/null || true
-    say "Auto-update is off (turn on with --auto-update)"
-  else
-    systemctl enable --now --quiet csa-update.timer
-    say "Auto-update is on: checks GitHub every 6 hours (sudo csa-update to update now)"
-  fi
 }
 
 installed_version() {
@@ -487,8 +450,7 @@ do_update() {
 }
 
 do_uninstall() {
-  systemctl disable --now csa-update.timer 2>/dev/null || true
-  rm -f /etc/systemd/system/csa-update.timer /etc/systemd/system/csa-update.service /usr/local/sbin/csa-update "$UPDATE_DISABLED_FLAG"
+  rm -f /usr/local/sbin/csa-update
   for svc in csa-agent csa-hub; do
     if systemctl list-unit-files "$svc.service" >/dev/null 2>&1; then
       systemctl disable --now "$svc" 2>/dev/null || true
