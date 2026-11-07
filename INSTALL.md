@@ -128,16 +128,23 @@ curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main
 
 ### 2.3 Save your credentials (important)
 
-On the first run, the installer prints two things. **They're shown only
-once.**
+On the first run, the installer asks you to **choose an admin password**
+(at least 10 characters; type it twice). Press Enter instead to have one
+generated and printed. Then it shows:
 
-1. **Admin password.** Save it in your password manager.
+1. **Admin password.** The one you chose, or the generated one, shown only
+   once. Save it in your password manager.
 2. **QR code.** Scan it with your authenticator app; the manual secret is
    printed below the code. The app then shows a 6-digit code, which you need
    to log in and to approve actions.
 
-Lost them? On the hub, run `sudo csa-hub set-password` or
-`sudo csa-hub reset-totp`, then `sudo systemctl restart csa-hub`.
+**Lost them, or want your own password?** On the hub:
+```bash
+sudo csa-hub set-password   # asks for a new password twice and restarts the hub
+sudo csa-hub reset-totp     # new authenticator QR code (re-scan it in your app)
+```
+Changing the password doesn't disconnect Claude; it's only needed for new
+logins and the approvals dashboard.
 
 ### 2.4 What the installer did
 
