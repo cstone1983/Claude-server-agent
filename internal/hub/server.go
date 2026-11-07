@@ -49,7 +49,7 @@ func New(cfg *Config) (*Hub, error) {
 		codes:    &codeStore{m: map[string]*authCode{}},
 		limiter:  newLimiter(10, 15*time.Minute),
 		releases: newReleaseWatcher(),
-		sess:     &sessions{m: map[string]time.Time{}},
+		sess:     &sessions{store: st, ttl: time.Duration(cfg.DashboardSessionHours) * time.Hour},
 	}, nil
 }
 

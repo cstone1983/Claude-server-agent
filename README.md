@@ -140,7 +140,8 @@ Every tool takes `server`: a name, `tag:<tag>` or `all`.
 ## Approvals dashboard and allow rules
 
 Open `https://<your-hub>/approvals` and log in with the admin password and an
-authenticator code. You stay logged in for 12 hours.
+authenticator code. You stay logged in for 24 hours, even across hub restarts
+(change with `dashboard_session_hours` in `hub.yaml`).
 
 - **Approvals:** every pending action on one page, grouped by command across
   servers, with checkboxes. The buttons are **Approve + always allow** (on all

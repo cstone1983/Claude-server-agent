@@ -20,7 +20,16 @@ button{flex:1;padding:12px;font-size:1rem;border:0;border-radius:8px;cursor:poin
 .ok{background:#dcfce7;color:#166534;padding:10px;border-radius:8px}
 .meta{color:#57534e;font-size:.9rem}
 .card{border:1px solid #e7e5e4;border-radius:10px;padding:12px;margin:12px 0}
-main{max-width:720px}
+main{max-width:960px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid #e7e5e4;vertical-align:top}
+th{color:#57534e;font-weight:600}
+td code{word-break:break-all}
+.nowrap{white-space:nowrap}
+button.small{flex:none;padding:6px 10px;font-size:.85rem}
+.filter input[type=text]{flex:2}.filter select{flex:1;width:auto}
+th a{color:inherit;text-decoration:none}
 .check{display:flex;gap:8px;align-items:center;margin-top:14px;font-weight:400}
 `
 
@@ -93,7 +102,7 @@ var dashLoginTmpl = template.Must(template.Must(template.New("dlogin").Parse(bas
 {{define "title"}}Claude Server Agent — log in{{end}}
 {{define "body"}}
 <h1>Log in</h1>
-<p>Review approvals and manage allow rules for all servers. You stay logged in for 12 hours.</p>
+<p>Review approvals and manage allow rules for all servers. You stay logged in for 24 hours on this browser.</p>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" autocomplete="off">
 <input type="hidden" name="next" value="{{.Next}}">
@@ -178,12 +187,34 @@ var dashRulesTmpl = template.Must(template.Must(template.New("drules").Parse(bas
 <div class="card"><p><b>Read-only commands</b> (run freely; state-changing flags excluded):</p><p class="meta">{{range $i, $c := .BuiltinRead}}{{if $i}}, {{end}}{{$c}}{{end}}</p></div>
 <p class="meta">Each server's own /etc/csa/policy.yaml can add more rules, and its deny rules always win.</p>
 <h1 style="margin-top:28px">Current rules</h1>
-{{if .Rules}}{{range .Rules}}
-<form method="post" class="card">
-<input type="hidden" name="op" value="delete"><input type="hidden" name="rule_id" value="{{.ID}}">
-<pre>{{.Text}}</pre>
-<p class="meta">on {{.ScopeText}} · added {{.CreatedAt.Format "2006-01-02 15:04"}}{{if .Rule.Comment}} · {{.Rule.Comment}}{{end}}</p>
-<div class="row"><button class="danger">Remove</button></div>
+<form method="get" class="row filter">
+<input type="text" name="q" value="{{.Q}}" placeholder="Search rules…">
+<select name="scope">
+<option value="">All targets</option>
+<option value="all" {{if eq .Scope "all"}}selected{{end}}>all servers</option>
+{{range .Servers}}<option value="server:{{.}}" {{if eq $.Scope (printf "server:%s" .)}}selected{{end}}>{{.}}</option>{{end}}
+{{range .Tags}}<option value="tag:{{.}}" {{if eq $.Scope (printf "tag:%s" .)}}selected{{end}}>tag {{.}}</option>{{end}}
+</select>
+<input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+<button class="secondary small">Filter</button>{{if or .Q .Scope}} <a class="meta" href="/rules">clear</a>{{end}}
 </form>
-{{end}}{{else}}<p>No rules yet.</p>{{end}}
+{{if .Rules}}
+<div class="tablewrap"><table>
+<thead><tr>
+<th><a href="{{index .SortLinks "rule"}}">Rule{{if eq .Sort "rule"}}{{if eq .Dir "desc"}} ▼{{else}} ▲{{end}}{{end}}</a></th>
+<th><a href="{{index .SortLinks "scope"}}">Applies to{{if eq .Sort "scope"}}{{if eq .Dir "desc"}} ▼{{else}} ▲{{end}}{{end}}</a></th>
+<th><a href="{{index .SortLinks "added"}}">Added{{if or (eq .Sort "added") (eq .Sort "")}}{{if eq .Dir "desc"}} ▼{{else}} ▲{{end}}{{end}}</a></th>
+<th><a href="{{index .SortLinks "note"}}">Note{{if eq .Sort "note"}}{{if eq .Dir "desc"}} ▼{{else}} ▲{{end}}{{end}}</a></th>
+<th></th></tr></thead>
+<tbody>
+{{range .Rules}}<tr>
+<td><code>{{.Text}}</code></td>
+<td>{{.ScopeText}}</td>
+<td class="nowrap">{{.CreatedAt.Format "2006-01-02"}}</td>
+<td class="meta">{{.Rule.Comment}}</td>
+<td><form method="post"><input type="hidden" name="op" value="delete"><input type="hidden" name="rule_id" value="{{.ID}}"><button class="danger small" title="Remove this rule">Remove</button></form></td>
+</tr>{{end}}
+</tbody></table></div>
+<p class="meta">Showing {{len .Rules}} of {{.Total}} rule(s)</p>
+{{else}}<p>{{if .Total}}No rules match.{{else}}No rules yet.{{end}}</p>{{end}}
 {{end}}`))

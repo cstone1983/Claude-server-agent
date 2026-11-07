@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cstone1983/Claude-server-agent/internal/audit"
@@ -17,27 +16,27 @@ import (
 // Browser dashboard: log in once (password + authenticator code), then review
 // and bulk-approve pending actions and manage "always allow" rules.
 
-const (
-	sessionCookie = "csa_session"
-	sessionTTL    = 12 * time.Hour
-)
+const sessionCookie = "csa_session"
 
+// sessions are dashboard logins. They are stored (hashed) in the hub state so
+// they survive hub restarts and updates.
 type sessions struct {
-	mu sync.Mutex
-	m  map[string]time.Time // hashed token -> expiry
+	store *Store
+	ttl   time.Duration
 }
 
 func (s *sessions) create() string {
 	tok := randomToken("", 32)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	for k, exp := range s.m {
-		if now.After(exp) {
-			delete(s.m, k)
+	s.store.Update(func(d *stateData) error {
+		now := time.Now()
+		for k, exp := range d.Sessions {
+			if now.After(exp) {
+				delete(d.Sessions, k)
+			}
 		}
-	}
-	s.m[hashSecret(tok)] = now.Add(sessionTTL)
+		d.Sessions[hashSecret(tok)] = now.Add(s.ttl)
+		return nil
+	})
 	return tok
 }
 
@@ -45,16 +44,16 @@ func (s *sessions) valid(tok string) bool {
 	if tok == "" {
 		return false
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	exp, ok := s.m[hashSecret(tok)]
-	return ok && time.Now().Before(exp)
+	ok := false
+	s.store.View(func(d *stateData) {
+		exp, found := d.Sessions[hashSecret(tok)]
+		ok = found && time.Now().Before(exp)
+	})
+	return ok
 }
 
 func (s *sessions) remove(tok string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.m, hashSecret(tok))
+	s.store.Update(func(d *stateData) error { delete(d.Sessions, hashSecret(tok)); return nil })
 }
 
 func (h *Hub) loggedIn(r *http.Request) bool {
@@ -109,7 +108,7 @@ func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		tok := h.sess.create()
 		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()),
+			Name: sessionCookie, Value: tok, Path: "/", MaxAge: int(h.sess.ttl.Seconds()),
 			HttpOnly: true, Secure: strings.HasPrefix(h.cfg.PublicURL, "https://"), SameSite: http.SameSiteStrictMode,
 		})
 		h.audit.Write(audit.Entry{Event: "dashboard_login", Detail: map[string]string{"ip": clientIP(r)}})
@@ -280,15 +279,11 @@ func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 		tagList = append(tagList, t)
 	}
 	sort.Strings(tagList)
-	type ruleView struct {
-		HubRule
-		Text, ScopeText string
-	}
-	var views []ruleView
-	for _, x := range rules {
-		views = append(views, ruleView{x, x.Rule.String(), scopeLabel(x.Scope)})
-	}
-	data["Rules"], data["Servers"], data["Tags"] = views, servers, tagList
+	views, total := filterSortRules(rules, r.URL.Query())
+	q := r.URL.Query()
+	data["Rules"], data["Total"], data["Servers"], data["Tags"] = views, total, servers, tagList
+	data["Q"], data["Scope"], data["Sort"], data["Dir"] = q.Get("q"), q.Get("scope"), q.Get("sort"), q.Get("dir")
+	data["SortLinks"] = sortLinks(q)
 	data["BuiltinRead"], data["BuiltinAllow"] = policy.BuiltinSummary()
 	renderTemplate(w, http.StatusOK, dashRulesTmpl, data)
 }
@@ -393,4 +388,73 @@ func splitCommand(s string) ([]string, error) {
 		return nil, errors.New("enter a command")
 	}
 	return out, nil
+}
+
+type ruleView struct {
+	HubRule
+	Text, ScopeText string
+}
+
+// filterSortRules applies the rules page's search (?q=), scope filter
+// (?scope=) and sort (?sort=rule|scope|added|note&dir=asc|desc).
+func filterSortRules(rules []HubRule, q url.Values) ([]ruleView, int) {
+	needle := strings.ToLower(strings.TrimSpace(q.Get("q")))
+	scope := q.Get("scope")
+	var out []ruleView
+	for _, x := range rules {
+		v := ruleView{x, x.Rule.String(), scopeLabel(x.Scope)}
+		if scope != "" && x.Scope != scope {
+			continue
+		}
+		if needle != "" && !strings.Contains(strings.ToLower(v.Text+" "+v.ScopeText+" "+x.Rule.Comment+" "+x.ID), needle) {
+			continue
+		}
+		out = append(out, v)
+	}
+	desc := q.Get("dir") == "desc"
+	key := q.Get("sort")
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if desc {
+			a, b = b, a
+		}
+		var less bool
+		switch key {
+		case "rule":
+			less = strings.ToLower(a.Text) < strings.ToLower(b.Text)
+		case "scope":
+			less = strings.ToLower(a.ScopeText) < strings.ToLower(b.ScopeText)
+		case "note":
+			less = strings.ToLower(a.Rule.Comment) < strings.ToLower(b.Rule.Comment)
+		default: // added
+			less = a.CreatedAt.Before(b.CreatedAt)
+		}
+		return less
+	})
+	return out, len(rules)
+}
+
+// sortLinks builds header links that sort by a column, toggling direction
+// when it is already the active sort, and keep the current search/filter.
+func sortLinks(q url.Values) map[string]string {
+	links := map[string]string{}
+	cur, dir := q.Get("sort"), q.Get("dir")
+	if cur == "" {
+		cur = "added"
+	}
+	for _, col := range []string{"rule", "scope", "added", "note"} {
+		v := url.Values{}
+		if s := q.Get("q"); s != "" {
+			v.Set("q", s)
+		}
+		if s := q.Get("scope"); s != "" {
+			v.Set("scope", s)
+		}
+		v.Set("sort", col)
+		if col == cur && dir != "desc" {
+			v.Set("dir", "desc")
+		}
+		links[col] = "/rules?" + v.Encode()
+	}
+	return links
 }
