@@ -289,6 +289,7 @@ func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 		views = append(views, ruleView{x, x.Rule.String(), scopeLabel(x.Scope)})
 	}
 	data["Rules"], data["Servers"], data["Tags"] = views, servers, tagList
+	data["BuiltinRead"], data["BuiltinAllow"] = policy.BuiltinSummary()
 	renderTemplate(w, http.StatusOK, dashRulesTmpl, data)
 }
 

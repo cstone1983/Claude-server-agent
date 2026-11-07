@@ -90,6 +90,19 @@ const aptMaintenanceID = "builtin-allow:apt-update-upgrade"
 const aptMaintenanceDesc = "apt / apt-get update or upgrade, with any flags (-y, -q, --with-new-pkgs, -o Dpkg::Options::=..., ...), " +
 	"but no package names and no options that can run programs or change apt's paths (*Invoke*, Pre-Install-Pkgs, Dir::, ::Path, Binary::, -c/--config-file, --allow-*)"
 
+// BuiltinSummary describes the built-in tiers for display (e.g. the hub's
+// rules page).
+func BuiltinSummary() (read []string, allow []string) {
+	seen := map[string]bool{}
+	for _, r := range builtinRead {
+		if len(r.Argv) > 0 && !seen[r.Argv[0]] {
+			seen[r.Argv[0]] = true
+			read = append(read, r.Argv[0])
+		}
+	}
+	return read, []string{aptMaintenanceDesc}
+}
+
 // aptMaintenance reports whether argv is a routine package-list refresh or
 // upgrade of installed packages: "apt[-get] [flags] update|upgrade [flags]".
 // Flags are allowed freely except those that can execute arbitrary programs

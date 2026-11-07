@@ -84,6 +84,32 @@ type (
 		JobID string `json:"job_id"`
 	}
 
+	SessionStartArgs struct {
+		Argv       []string `json:"argv,omitempty"`
+		Script     string   `json:"script,omitempty"`
+		As         string   `json:"as,omitempty"`
+		Cwd        string   `json:"cwd,omitempty"`
+		Cols       int      `json:"cols,omitempty"`
+		Rows       int      `json:"rows,omitempty"`
+		WaitSec    int      `json:"wait_sec,omitempty"`
+		TimeoutSec int      `json:"timeout_sec,omitempty"`
+		Reason     string   `json:"reason,omitempty"`
+	}
+
+	SessionSendArgs struct {
+		SessionID string   `json:"session_id"`
+		Input     string   `json:"input,omitempty"`
+		Enter     *bool    `json:"enter,omitempty"`
+		Keys      []string `json:"keys,omitempty"`
+		Secret    bool     `json:"secret,omitempty"`
+		WaitSec   int      `json:"wait_sec,omitempty"`
+		Screen    bool     `json:"screen,omitempty"`
+	}
+
+	SessionCloseArgs struct {
+		SessionID string `json:"session_id"`
+	}
+
 	UpdateServerArgs struct {
 		CheckOnly bool `json:"check_only,omitempty"`
 		Force     bool `json:"force,omitempty"`
@@ -279,6 +305,41 @@ var All = []Def{
 			"timeout_sec": {Type: "integer", Desc: "Kill after this many seconds (default 3600)."},
 			"reason":      reason,
 		},
+	},
+	{
+		Name: "session_start", Title: "Start interactive session", Destructive: true,
+		Description: "Start a command or script in a real terminal for interactive use: installers that ask questions, menus (whiptail/dialog), REPLs, or a shell for a multi-step task. Returns a session_id and the first output once it settles. Continue with session_send; finish with session_close. Starting follows the same rules as run_command/run_shell (an interactive shell or script needs the user's approval once; that approval covers the whole session). Sessions close after 30 minutes idle." + approvalNote,
+		Props: map[string]Prop{
+			"argv":        {Type: "array", Items: "string", Desc: `Program and arguments, e.g. ["bash"] or ["./install.sh"] (use this or script).`},
+			"script":      {Type: "string", Desc: "Bash script to run in the terminal (use this or argv)."},
+			"as":          as,
+			"cwd":         {Type: "string", Desc: "Working directory."},
+			"cols":        {Type: "integer", Desc: "Terminal width (default 120)."},
+			"rows":        {Type: "integer", Desc: "Terminal height (default 40)."},
+			"wait_sec":    {Type: "integer", Desc: "Max seconds to wait for the first output to settle (default 10, max 120)."},
+			"timeout_sec": {Type: "integer", Desc: "Kill the session after this many seconds (default 7200)."},
+			"reason":      reason,
+		},
+	},
+	{
+		Name: "session_send", Title: "Type into session", Destructive: true,
+		Description: "Type into an interactive session and return the new output once it settles. Sends `input` followed by Enter (unless enter=false), then any `keys` (enter, tab, esc, space, backspace, up, down, left, right, home, end, pageup, pagedown, delete, ctrl-c, ctrl-d, ctrl-z). With no input/keys it just waits for and returns new output. Use screen=true to get the rendered terminal screen, best for full-screen menus. Set secret=true when typing a password so it is not written to the audit log. If a prompt needs a decision only the user can make, ask the user before answering.",
+		Props: map[string]Prop{
+			"session_id": {Type: "string", Desc: "From session_start."},
+			"input":      {Type: "string", Desc: "Text to type."},
+			"enter":      {Type: "boolean", Desc: "Press Enter after input (default true when input is given)."},
+			"keys":       {Type: "array", Items: "string", Desc: `Special keys to press after the input, e.g. ["down","down","enter"].`},
+			"secret":     {Type: "boolean", Desc: "Input is a password/secret: don't record it in the audit log."},
+			"wait_sec":   {Type: "integer", Desc: "Max seconds to wait for output to settle (default 10, max 300). Use more for slow steps."},
+			"screen":     {Type: "boolean", Desc: "Also return the current rendered screen."},
+		},
+		Required: []string{"session_id"},
+	},
+	{
+		Name: "session_close", Title: "Close session",
+		Description: "End an interactive session (kills its program if still running).",
+		Props:       map[string]Prop{"session_id": {Type: "string", Desc: "From session_start."}},
+		Required:    []string{"session_id"},
 	},
 	{
 		Name: "job_status", Title: "Job status", ReadOnly: true,

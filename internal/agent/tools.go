@@ -30,10 +30,11 @@ type Executor struct {
 	policy *policy.Policy
 	audit  *audit.Log
 	jobs   *jobManager
+	sess   *sessionManager
 }
 
 func NewExecutor(cfg *Config, p *policy.Policy, a *audit.Log) *Executor {
-	return &Executor{cfg: cfg, policy: p, audit: a, jobs: newJobManager()}
+	return &Executor{cfg: cfg, policy: p, audit: a, jobs: newJobManager(), sess: newSessionManager()}
 }
 
 // gate decides whether an action may run now. It returns a non-nil Result
@@ -226,6 +227,32 @@ func (e *Executor) Handle(ctx context.Context, call *proto.Call) *proto.Result {
 		}
 		e.audit.Write(audit.Entry{Event: "job_cancelled", Caller: call.Caller, Tool: call.Tool, Summary: a.JobID})
 		return &proto.Result{OK: true, Text: "cancelled " + a.JobID}
+
+	case "session_start":
+		var a tools.SessionStartArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		return e.sessionStart(call, a, actionHash(call.Tool, a))
+
+	case "session_send":
+		var a tools.SessionSendArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		return e.sessionSend(call, a)
+
+	case "session_close":
+		var a tools.SessionCloseArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		if e.sess.get(a.SessionID) == nil {
+			return errResult("no such session %s", a.SessionID)
+		}
+		e.sess.remove(a.SessionID)
+		e.audit.Write(audit.Entry{Event: "session_closed", Caller: call.Caller, Tool: call.Tool, Summary: a.SessionID})
+		return &proto.Result{OK: true, Text: "closed " + a.SessionID}
 
 	case "update_server":
 		var a tools.UpdateServerArgs
