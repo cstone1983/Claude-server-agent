@@ -23,7 +23,7 @@ import (
 
 const usage = `csa-agent — Claude Server Agent (runs on each server)
 
-  csa-agent enroll --hub https://agents.example.com --join <token> [--name web01] [--tags web,prod]
+  csa-agent enroll --hub https://agents.example.com --join <token> [--name web01] [--tags web,prod] [--replace]
   csa-agent run                            connect to the hub (normally via systemd)
   csa-agent check -- <command> [args...]   show which tier a command falls into
   csa-agent check --shell '<script>'
@@ -65,6 +65,7 @@ func main() {
 		join := fs.String("join", "", "join token from `csa-hub join-token`")
 		name := fs.String("name", "", "server name shown to Claude (default: hostname)")
 		tags := fs.String("tags", "", "comma-separated tags, e.g. web,prod")
+		replace := fs.Bool("replace", false, "replace an existing server with the same name")
 		cli.Parse(fs, args)
 		if *hubURL == "" || *join == "" {
 			cli.Fatal("--hub and --join are required")
@@ -73,7 +74,7 @@ func main() {
 			h, _ := os.Hostname()
 			*name = strings.Split(h, ".")[0]
 		}
-		cfg, err := agent.Enroll(configPath, *hubURL, *join, *name, cli.SplitList(*tags))
+		cfg, err := agent.Enroll(configPath, *hubURL, *join, *name, cli.SplitList(*tags), *replace)
 		if err != nil {
 			cli.Fatal("%v", err)
 		}

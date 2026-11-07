@@ -83,6 +83,9 @@ func (h *Hub) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		Tags      []string `json:"tags"`
 		PublicKey string   `json:"public_key"`
 		Hostname  string   `json:"hostname"`
+		// Replace takes over an existing server with the same name (used when
+		// re-enrolling a machine, or explicitly with --replace).
+		Replace bool `json:"replace"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -115,19 +118,28 @@ func (h *Hub) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		if jt == nil || time.Now().After(jt.ExpiresAt) || jt.UsesLeft <= 0 {
 			return errors.New("invalid or expired join token")
 		}
-		jt.UsesLeft--
-		tags = append(tags, jt.Tags...)
 		for id, a := range d.Agents {
 			if a.Name == req.Name {
-				// Re-enrolling a server under the same name replaces it.
+				if !req.Replace {
+					// Checked before the token is consumed, so the user can retry with another name.
+					return errNameTaken
+				}
 				replaced = id
-				delete(d.Agents, id)
 			}
 		}
+		if replaced != "" {
+			delete(d.Agents, replaced)
+		}
+		jt.UsesLeft--
+		tags = append(tags, jt.Tags...)
 		rec = &AgentRec{ID: randomID("agt_"), Name: req.Name, Tags: dedupe(tags), PublicKey: req.PublicKey, Hostname: req.Hostname, EnrolledAt: time.Now().UTC()}
 		d.Agents[rec.ID] = rec
 		return nil
 	})
+	if errors.Is(err, errNameTaken) {
+		http.Error(w, fmt.Sprintf("a server named %q already exists; choose another name (or use --replace to replace that server)", req.Name), http.StatusConflict)
+		return
+	}
 	if err != nil {
 		h.limiter.fail("enroll:" + ip)
 		h.audit.Write(audit.Entry{Event: "enroll_failed", Server: req.Name, Error: err.Error(), Detail: map[string]string{"ip": ip}})
@@ -271,6 +283,8 @@ func (h *Hub) touch(id string, hello *proto.Hello) {
 		return nil
 	})
 }
+
+var errNameTaken = errors.New("name taken")
 
 var errOffline = errors.New("server is offline (its agent is not connected to the hub)")
 

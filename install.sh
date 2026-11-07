@@ -28,7 +28,8 @@ usage() {
 Options:
   hub    --public-url URL [--cloudflare-token TOKEN] [--listen ADDR:PORT] [--name NAME] [--tags a,b] [--no-local-agent]
          --listen 0.0.0.0:7420 when cloudflared runs on a different machine (default 127.0.0.1:7420)
-  agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b]
+  agent  --hub URL [--join TOKEN] [--name NAME] [--tags a,b] [--replace]
+         Without --name, the installer asks for a friendly name and tags.
   common [--version vX.Y.Z] [--from-source] [--ref BRANCH]
   update [--check] [--force]      install the latest GitHub release if it is newer (what csa-update runs)
   Updates never run on their own: run sudo csa-update, or let Claude run update_server when you approve.
@@ -37,7 +38,7 @@ EOF
 }
 
 MODE="${1:-}"; shift || true
-PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
+PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 REPLACE=0 CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
@@ -52,6 +53,7 @@ while [ $# -gt 0 ]; do
     --ref) REF="${2:?}"; shift 2 ;;
     --no-local-agent) LOCAL_AGENT=0; shift ;;
     --purge) PURGE=1; shift ;;
+    --replace) REPLACE=1; shift ;;
     --check) CHECK_ONLY=1; shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -272,11 +274,57 @@ install_cloudflared() {
   fi
 }
 
+# can_ask: true when a person is at a terminal (also works with curl | sudo bash,
+# where stdin is the script, by reading from /dev/tty).
+can_ask() { { : </dev/tty >/dev/tty; } 2>/dev/null; }
+
+# ask "question" "default" -> prints the answer (or the default).
+ask() {
+  local q="$1" def="$2" ans=""
+  if can_ask; then
+    if [ -n "$def" ]; then printf '%s [%s]: ' "$q" "$def" >/dev/tty; else printf '%s: ' "$q" >/dev/tty; fi
+    IFS= read -r ans </dev/tty || ans=""
+  fi
+  printf '%s' "${ans:-$def}"
+}
+
+valid_name() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'; }
+
+current_agent_name() { { sed -n 's/^name: *//p' /etc/csa/agent.yaml 2>/dev/null || true; } | tr -d '"'; }
+
 enroll_agent() {
-  local hub="$1"
-  local args=(--hub "$hub" --join "$JOIN" --name "${NAME:-$(hostname -s)}")
-  [ -n "$TAGS" ] && args+=(--tags "$TAGS")
-  "$BIN_DIR/csa-agent" enroll "${args[@]}"
+  local hub="$1" name="$NAME" tags="$TAGS" out
+  if [ -z "$name" ]; then
+    local def; def="$(current_agent_name)"; [ -n "$def" ] || def="$(hostname -s)"
+    echo
+    name="$(ask "Friendly name for this server (how you and Claude refer to it)" "$def")"
+    if [ -z "$TAGS" ]; then
+      tags="$(ask "Tags, comma-separated (optional, e.g. web,prod; Enter to skip)" "")"
+    fi
+  fi
+  while :; do
+    until valid_name "$name"; do
+      can_ask || die "invalid server name '$name' (letters, digits, . _ -; max 63)"
+      warn "'$name' is not a valid name (letters, digits, . _ -; max 63)"
+      name="$(ask "Friendly name for this server" "")"
+    done
+    local args=(--hub "$hub" --join "$JOIN" --name "$name")
+    [ -n "$tags" ] && args+=(--tags "$tags")
+    # Re-enrolling this same machine under its current name replaces its old entry.
+    if [ "$REPLACE" -eq 1 ] || { agent_enrolled && [ "$(current_agent_name)" = "$name" ]; }; then
+      args+=(--replace)
+    fi
+    if out="$("$BIN_DIR/csa-agent" enroll "${args[@]}" 2>&1)"; then
+      echo "$out"
+      return 0
+    fi
+    if printf '%s' "$out" | grep -q "already exists" && can_ask; then
+      warn "a server named '$name' is already on the hub"
+      name="$(ask "Pick a different name (or re-run with --replace to replace it)" "")"
+      continue
+    fi
+    die "$out"
+  done
 }
 
 agent_enrolled() { [ -f /etc/csa/agent.yaml ] && grep -q '^agent_id: .\+' /etc/csa/agent.yaml; }
