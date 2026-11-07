@@ -85,7 +85,10 @@ var builtinDeny = []Rule{
 	{ID: "builtin-deny:rm-root", Argv: []string{"rm", "**"}, AnyArg: []string{"=/", "=/*"}},
 	{ID: "builtin-deny:stop-agent", Argv: []string{"systemctl", "stop|disable|mask|kill", "csa-agent|csa-agent.service|csa-hub|csa-hub.service|cloudflared|cloudflared.service"}},
 	{ID: "builtin-deny:stop-agent-now", Argv: []string{"systemctl", "disable|mask", "--now", "csa-agent|csa-agent.service|csa-hub|csa-hub.service|cloudflared|cloudflared.service"}},
-	{ID: "builtin-deny:policy-write", WritePaths: []string{"/etc/csa/**"}},
+	{ID: "builtin-deny:policy-write", WritePaths: []string{"/etc/csa/**", "/var/lib/csa/**", "/etc/csa-hub/**", "/var/lib/csa-hub/**"}},
+	// The hub's config holds the admin password hash and authenticator secret;
+	// reading it would let a caller approve its own requests.
+	{ID: "builtin-deny:hub-secrets", ReadPaths: []string{"/etc/csa-hub/**", "/var/lib/csa-hub/**", "/etc/csa/agent.key"}},
 	{ID: "builtin-deny:shell-no-preserve-root", Shell: "--no-preserve-root"},
 }
 

@@ -127,3 +127,15 @@ func TestSuggestRuleRoundTrip(t *testing.T) {
 		t.Errorf("escaped rule too broad: %v", d)
 	}
 }
+
+func TestHubSecretsDenied(t *testing.T) {
+	p := New(File{Allow: []Rule{{ReadPaths: []string{"/etc/**"}}}}, nil)
+	for _, path := range []string{"/etc/csa-hub/hub.yaml", "/var/lib/csa-hub/state.json", "/etc/csa/agent.key"} {
+		if d := p.Classify(Action{Kind: "read_file", Path: path}); d.Tier != TierDenied {
+			t.Errorf("%s: %v", path, d)
+		}
+	}
+	if d := p.Classify(Action{Kind: "write_file", Path: "/var/lib/csa/hub-rules.yaml"}); d.Tier != TierDenied {
+		t.Errorf("hub rules write: %v", d)
+	}
+}

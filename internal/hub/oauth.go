@@ -26,11 +26,11 @@ import (
 // authorization code + PKCE S256, and rotating refresh tokens.
 
 type authCode struct {
-	clientID      string
-	redirectURI   string
-	challenge     string
-	scope         string
-	expires       time.Time
+	clientID    string
+	redirectURI string
+	challenge   string
+	scope       string
+	expires     time.Time
 }
 
 type codeStore struct {

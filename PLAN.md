@@ -46,27 +46,31 @@ Go is the most reliable choice for "one install script, many servers":
 - It has an official MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`)
   that supports the Streamable HTTP transport.
 
-Binary name: **`csa`** (claude-server-agent). One binary does three jobs:
-- the hub (`csa hub`)
-- the per-server agent (`csa agent`)
-- the admin CLI (`csa approve`, `csa allow`, `csa audit`, `csa join-token`, …)
+Two binaries, both built from one Go module:
+- **`csa-hub`** is the hub plus its admin CLI (`csa-hub approve`,
+  `csa-hub join-token`, …).
+- **`csa-agent`** is the per-server agent plus its local CLI
+  (`csa-agent check`, `csa-agent audit`, …).
+
+The hub installer installs both, and the hub machine enrolls itself as a
+server.
 
 ---
 
 ## 3. Architecture: one hub, many agents
 
 ```
-                         ┌──────────────── HUB (csa hub) ─────────────────┐
+                         ┌──────────────── HUB (csa-hub) ─────────────────┐
  claude.ai / mobile ─────┤ https://agents.yourdomain/mcp   (one connector) │
    (one connector)       │ https://agents.yourdomain/api   (n8n REST)      │
  n8n ────────────────────┤ /oauth/*  /approve  server registry            │
  you (approve) ──────────┤                                                 │
                          └───────▲──────────────▲──────────────▲───────────┘
                                  │ outbound     │ outbound     │ outbound
-                                 │ WSS (mTLS)   │ WSS (mTLS)   │ WSS (mTLS)
+                                 │ WSS (Ed25519)│ WSS (Ed25519)│ WSS (Ed25519)
                          ┌───────┴──┐    ┌──────┴───┐    ┌─────┴────┐
                          │ web01    │    │ db01     │    │ nas      │
-                         │csa agent │    │csa agent │    │csa agent │
+                         │csa-agent │    │csa-agent │    │csa-agent │
                          │ policy + │    │ policy + │    │ policy + │
                          │ exec +   │    │ exec +   │    │ exec +   │
                          │ audit    │    │ audit    │    │ audit    │
@@ -94,21 +98,26 @@ Tools can also target `server="all"` or a tag such as `server="tag:web"`, for
 example to run `system_info` across the whole fleet.
 
 ### Agents: outbound only
-- `csa agent` opens a persistent **WebSocket over TLS** to the hub. It
+- `csa-agent` opens a persistent **WebSocket over TLS** to the hub. It
   reconnects automatically with backoff and sends heartbeats.
 - Servers need no inbound ports, port forwarding, tunnel or public IP. They
   only need outbound HTTPS to the hub, so this also works behind NAT or CGNAT.
-- **Enrollment:** run `csa join-token create` on the hub, then pass the token
+- **Enrollment:** run `csa-hub join-token` on the hub, then pass the token
   to the install script on the server. The agent creates its own key pair and
-  gets a client certificate from the hub. From then on it authenticates with
-  mTLS. You can revoke a server with `csa server remove db01`.
+  registers the public key with the hub. From then on it authenticates every
+  connection by signing a timestamp.
+  - This uses Ed25519 rather than mTLS, because Cloudflare terminates TLS, so
+    client certificates wouldn't reach the hub.
+  - You can revoke a server with `csa-hub remove-server db01`.
 
 ### Where the policy lives
 **Each agent enforces its own policy and keeps its own audit log.** The hub
 only routes requests and relays approvals, and it can't override a server's
-deny list. Approvals for elevated actions carry the TOTP code you entered, and
-the **agent checks that code itself**. So a compromised hub can't forge an
-approval. It could only run what each server's allowlist already permits.
+deny list, sensitive-path list or built-in denials. The hub *can* grant
+approvals, so the hub is the trust anchor and must be protected:
+- its config, which holds the password hash and TOTP secret, is
+  unreadable through the agent's file tools, even with approval;
+- it runs as a sandboxed, unprivileged user.
 
 ### Where the hub runs: exactly one public endpoint
 Pick one of these. The installer supports all three:
@@ -128,9 +137,9 @@ instead of one per server.
   - Endpoints: metadata discovery, dynamic client registration, PKCE, and
     authorize/token/refresh.
   - The login and consent page uses an admin password plus TOTP.
-- **n8n:** scoped API tokens on the hub (`csa token create --name n8n
+- **n8n:** scoped API tokens on the hub (`csa-hub token create n8n
   --scope read --servers tag:web`).
-- **Agent ↔ hub:** mTLS client certificates issued at enrollment.
+- **Agent ↔ hub:** an Ed25519 key per agent, registered at enrollment with a single-use join token.
 
 ---
 
@@ -191,10 +200,10 @@ When an action is elevated:
      *this server*, *a tag* or *all servers*. The hub pushes rules to the
      agents, and each agent stores them in its local `policy.yaml`.
    - **Deny**
-4. The tool call that asked waits about 60 s for your answer. If none comes,
+4. The tool call that asked waits about 45 s for your answer. If none comes,
    it returns `pending: <id>`, and Claude can call `check_approval` later.
-5. Locally, `csa approve <id>` / `csa deny <id>` works over SSH on the
-   server itself.
+5. Locally, `csa-hub approve <id>` / `csa-hub deny <id>` works over SSH on the
+   hub.
 
 The approval is **out-of-band** on purpose. Claude never approves its own
 requests, and a stolen connector token alone cannot run root commands.
@@ -210,7 +219,7 @@ rule or approval grants it.
   tier, rule matched or approval ID, exit code, duration, and an output hash
   plus a truncated output.
 - Also mirrored to journald.
-- `csa audit tail` and an MCP tool `audit_log` let Claude review what it has
+- `csa-agent audit` and an MCP tool `audit_log` let Claude review what it has
   done.
 
 ---
@@ -285,8 +294,8 @@ This step:
 Join tokens are single-use or time-limited. The hub's admin page can show a
 ready-to-paste install command with a fresh token.
 
-The installer is idempotent, so re-running it upgrades. `csa update` updates
-from Releases (the hub can trigger it fleet-wide), and `csa uninstall`
+The installer is idempotent, so re-running it upgrades (a self-update command that
+the hub can trigger fleet-wide is planned), and `install.sh uninstall`
 removes everything.
 
 ---
@@ -296,7 +305,7 @@ removes everything.
 ```
 cmd/csa/              main: hub, agent + admin subcommands
 internal/hub/         agent registry, routing, fan-out, rule distribution
-internal/tunnel/      agent<->hub WebSocket protocol, mTLS, enrollment, reconnect
+internal/proto/       agent<->hub WebSocket messages and handshake
 internal/mcp/         MCP server + tool registrations (hub side)
 internal/api/         REST handlers for n8n (hub side)
 internal/oauth/       OAuth 2.1 AS (DCR, PKCE, tokens)
@@ -314,9 +323,20 @@ packaging/            systemd unit, default policy.yaml
 
 ## 8. Milestones
 
+> **Status:** M1–M4 and most of M5–M6 are built. That covers:
+> - the hub, agent, policy engine and approvals;
+> - OAuth, MCP and REST;
+> - `install.sh` and the CI/release workflows.
+>
+> Still to do:
+> - testing against claude.ai with a real tunnel;
+> - publishing the first tagged release;
+> - docker-specific tools;
+> - an example n8n workflow.
+
 1. **M1 – Hub ↔ agent core (LAN):**
-   - `csa hub` and `csa agent` with the outbound WebSocket link, join tokens
-     and mTLS;
+   - `csa-hub` and `csa-agent` with the outbound WebSocket link, join
+     tokens and Ed25519 auth;
    - the MCP endpoint on the hub with a static bearer token;
    - the tools `list_servers`, `system_info`, `run_command`, `read_file` and
      `list_dir`, at the read tier only;
@@ -340,7 +360,7 @@ packaging/            systemd unit, default policy.yaml
    file write/edit, fan-out to `tag:`/`all`, the REST API, scoped tokens, and
    an example n8n workflow.
 6. **M6 – Release and install:** goreleaser, signed releases, `install.sh
-   hub|agent`, fleet-wide `csa update`, and docs.
+   hub|agent`, fleet-wide self-update, and docs.
 
 ---
 

@@ -178,6 +178,9 @@ func (p *Policy) SetHubRules(rules []Rule) error {
 	if err != nil {
 		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
 	hdr := []byte("# Managed by the csa hub (\"approve and always allow\"). Do not edit;\n# put your own rules in policy.yaml instead.\n")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, append(hdr, b...), 0o600); err != nil {
@@ -191,10 +194,10 @@ func (p *Policy) Snapshot() map[string]any {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return map[string]any{
-		"local":           p.local,
-		"hub_rules":       p.hubRules,
-		"builtin_read":    builtinRead,
-		"builtin_deny":    builtinDeny,
+		"local":             p.local,
+		"hub_rules":         p.hubRules,
+		"builtin_read":      builtinRead,
+		"builtin_deny":      builtinDeny,
 		"builtin_sensitive": builtinSensitive,
 	}
 }

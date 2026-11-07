@@ -30,12 +30,12 @@ func SigningPayload(agentID, ts string) []byte {
 
 // Envelope is the single wire format; Type selects which fields are set.
 type Envelope struct {
-	Type  string `json:"type"`
-	ID    string `json:"id,omitempty"`
-	Hello *Hello `json:"hello,omitempty"`
-	Call  *Call  `json:"call,omitempty"`
-	Result *Result `json:"result,omitempty"`
-	Rules []policy.Rule `json:"rules,omitempty"`
+	Type   string        `json:"type"`
+	ID     string        `json:"id,omitempty"`
+	Hello  *Hello        `json:"hello,omitempty"`
+	Call   *Call         `json:"call,omitempty"`
+	Result *Result       `json:"result,omitempty"`
+	Rules  []policy.Rule `json:"rules,omitempty"`
 }
 
 type Hello struct {

@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type EnrollRequest struct {
@@ -32,11 +34,13 @@ func Enroll(configPath, hubURL, joinToken, name string, tags []string) (*Config,
 	hubURL = strings.TrimRight(hubURL, "/")
 	cfg := &Config{HubURL: hubURL, Name: name, Tags: tags}
 	if old, err := os.ReadFile(configPath); err == nil && len(old) > 0 {
-		// Keep any local tuning from a previous config.
-		if prev, err := LoadConfig(configPath); err == nil {
-			*cfg = *prev
-			cfg.HubURL, cfg.Name, cfg.Tags, cfg.AgentID = hubURL, name, tags, ""
+		// Keep any local settings (paths, limits) from an existing config.
+		var prev Config
+		if err := yaml.Unmarshal(old, &prev); err != nil {
+			return nil, fmt.Errorf("%s: %w", configPath, err)
 		}
+		*cfg = prev
+		cfg.HubURL, cfg.Name, cfg.Tags, cfg.AgentID = hubURL, name, tags, ""
 	}
 	cfg.applyDefaults()
 	key, err := GenerateKey()

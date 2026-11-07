@@ -270,6 +270,9 @@ func (h *Hub) Serve(ctx context.Context) error {
 }
 
 func listenUnix(path string) (net.Listener, error) {
+	if len(path) > 100 {
+		return nil, errors.New("admin_socket path is too long for a unix socket (max ~100 characters): " + path)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}

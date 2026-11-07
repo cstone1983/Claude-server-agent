@@ -1,0 +1,36 @@
+# Push a tag like v0.1.0 to publish binaries that install.sh downloads.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            out="build/$arch"
+            mkdir -p "$out"
+            for cmd in csa-hub csa-agent; do
+              CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+                -ldflags "-s -w -X github.com/cstone1983/Claude-server-agent/internal/version.Version=${GITHUB_REF_NAME} -X github.com/cstone1983/Claude-server-agent/internal/version.Commit=${GITHUB_SHA::7}" \
+                -o "$out/$cmd" ./cmd/$cmd
+            done
+            tar -czf "dist/csa_linux_${arch}.tar.gz" -C "$out" csa-hub csa-agent
+          done
+          (cd dist && sha256sum csa_linux_*.tar.gz > checksums.txt)
+          cp install.sh dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

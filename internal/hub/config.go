@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gopkg.in/yaml.v3"
 )
@@ -111,6 +112,13 @@ func SaveConfig(path string, c *Config) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, append([]byte(hdr), b...), 0o600); err != nil {
 		return err
+	}
+	// Keep the file readable by the service user: match the directory's owner
+	// (the installer makes /etc/csa-hub owned by csa-hub).
+	if st, err := os.Stat(filepath.Dir(path)); err == nil {
+		if s, ok := st.Sys().(*syscall.Stat_t); ok {
+			os.Chown(tmp, int(s.Uid), int(s.Gid))
+		}
 	}
 	return os.Rename(tmp, path)
 }
