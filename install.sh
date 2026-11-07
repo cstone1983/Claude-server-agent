@@ -279,9 +279,16 @@ install_cloudflared() {
 can_ask() { { : </dev/tty >/dev/tty; } 2>/dev/null; }
 
 # ask "question" "default" -> prints the answer (or the default).
+# drain_tty discards anything already typed or pasted (e.g. the extra line
+# break from pasting a multi-line command), so it can't answer a prompt.
+drain_tty() {
+  while IFS= read -r -t 0.3 -n 4096 _ </dev/tty 2>/dev/null; do :; done
+}
+
 ask() {
   local q="$1" def="$2" ans=""
   if can_ask; then
+    drain_tty
     if [ -n "$def" ]; then printf '%s [%s]: ' "$q" "$def" >/dev/tty; else printf '%s: ' "$q" >/dev/tty; fi
     IFS= read -r ans </dev/tty || ans=""
   fi
@@ -301,11 +308,15 @@ enroll_agent() {
   fi
   if [ -z "$name" ]; then
     local def; def="$(current_agent_name)"; [ -n "$def" ] || def="$(hostname -s)"
-    echo
-    name="$(ask "Friendly name for this server (how you and Claude refer to it)" "$def")"
+    if can_ask; then
+      printf '\n\033[1;32m===== Last step: name this server =====\033[0m\n' >/dev/tty
+      printf 'This is how you and Claude will refer to it. Press Enter to use "%s".\n' "$def" >/dev/tty
+    fi
+    name="$(ask "Friendly name" "$def")"
     if [ -z "$TAGS" ]; then
       tags="$(ask "Tags, comma-separated (optional, e.g. web,prod; Enter to skip)" "")"
     fi
+    say "Server name: $name${tags:+ (tags: $tags)}"
   fi
   while :; do
     until valid_name "$name"; do
@@ -440,13 +451,14 @@ do_agent() {
   install_bin csa-agent
   write_default_policy
   write_agent_unit
+  write_update_units
+  # Questions come last, after all downloads and setup.
   if [ -n "$JOIN" ]; then
     [ -n "$HUB_URL" ] || HUB_URL="$(sed -n 's/^hub_url: *//p' /etc/csa/agent.yaml)"
-    say "Enrolling with $HUB_URL"
     enroll_agent "$HUB_URL"
+    say "Enrolled with $HUB_URL"
   fi
   start_agent
-  write_update_units
 
   [ "$QUIET" -eq 1 ] && return 0
   cat <<EOF
