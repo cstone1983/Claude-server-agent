@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -84,5 +85,42 @@ func (h *Hub) updateAvailable(agentVersion string) (string, bool) {
 	if latest == "" || agentVersion == "" {
 		return latest, false
 	}
-	return latest, versionOf(agentVersion) != latest
+	return latest, newerVersion(latest, versionOf(agentVersion))
+}
+
+// newerVersion reports whether release tag a is newer than installed version
+// b. Tags look like v0.1.12. A non-release build (e.g. a commit hash from a
+// source install) counts as older than any release.
+func newerVersion(a, b string) bool {
+	pa, okA := parseVersion(a)
+	pb, okB := parseVersion(b)
+	if !okA {
+		return false
+	}
+	if !okB {
+		return true
+	}
+	for i := range pa {
+		if pa[i] != pb[i] {
+			return pa[i] > pb[i]
+		}
+	}
+	return false
+}
+
+func parseVersion(s string) ([3]int, bool) {
+	var v [3]int
+	s = strings.TrimPrefix(s, "v")
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return v, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return v, false
+		}
+		v[i] = n
+	}
+	return v, true
 }
