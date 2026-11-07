@@ -64,10 +64,47 @@
     });
   });
 
-  // Gentle auto-refresh on pages that ask for it (overview, approvals) unless the user is typing.
-  var r = document.body.getAttribute("data-refresh");
-  if (r) setInterval(function () {
-    var a = document.activeElement;
-    if (!a || (a.tagName !== "INPUT" && a.tagName !== "TEXTAREA" && a.tagName !== "SELECT")) location.reload();
-  }, parseInt(r, 10) * 1000);
+  // Auto-refresh on pages that ask for it (overview every 60 s, approvals
+  // every 10 s). Pages with a [data-live] list (approvals) are checked in the
+  // background and only reloaded when the list of pending requests changed;
+  // if you have already ticked boxes or opened a menu, a banner appears
+  // instead so your selection is not thrown away. Reloads are plain GETs, so a
+  // page shown after submitting a form is never re-submitted.
+  var r = parseInt(document.body.getAttribute("data-refresh") || "0", 10);
+  if (r > 0) {
+    var touched = false, bannerShown = false;
+    document.addEventListener("change", function () { touched = true; }, true);
+    document.addEventListener("toggle", function () { touched = true; }, true);
+    var typing = function () {
+      var a = document.activeElement;
+      return a && ((a.tagName === "INPUT" && a.type !== "checkbox") || a.tagName === "TEXTAREA" || a.tagName === "SELECT");
+    };
+    var reload = function () { location.replace(location.pathname + location.search); };
+    var ids = function (root) {
+      return Array.prototype.map.call(root.querySelectorAll("[data-live] input[name=id]"), function (i) { return i.value; }).sort().join(",");
+    };
+    var live = document.querySelector("[data-live]");
+    var current = ids(document);
+    setInterval(function () {
+      if (document.hidden || bannerShown) return;
+      if (!live) { if (!typing()) reload(); return; }
+      fetch(location.pathname + location.search, { credentials: "same-origin" })
+        .then(function (res) { return res.ok ? res.text() : null; })
+        .then(function (html) {
+          if (!html) return;
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          if (!doc.querySelector("[data-live]")) return; // e.g. the login page after the session ended
+          if (ids(doc) === current) return;
+          if (!touched && !typing()) { reload(); return; }
+          bannerShown = true;
+          var b = document.createElement("a");
+          b.href = location.pathname + location.search;
+          b.className = "notice ok";
+          b.style.display = "block";
+          b.textContent = "The list of requests changed. Click to refresh (your current selection will be reset).";
+          live.parentNode.insertBefore(b, live);
+        })
+        .catch(function () {});
+    }, r * 1000);
+  }
 })();

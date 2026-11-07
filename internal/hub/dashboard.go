@@ -209,7 +209,7 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data["Recent"] = recent
-	h.renderPanel(w, http.StatusOK, dashApprovalsTmpl, data, 30)
+	h.renderPanel(w, http.StatusOK, dashApprovalsTmpl, data, 10)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
