@@ -62,17 +62,16 @@ func (h *Hub) loggedIn(r *http.Request) bool {
 	return err == nil && h.sess.valid(c.Value)
 }
 
-// sameOrigin rejects cross-site form posts (CSRF). Browsers send Origin on POST.
+// csrf is Go's standard cross-site request protection: it trusts the
+// browser's Sec-Fetch-Site header and falls back to comparing Origin with
+// Host. (A plain Origin comparison breaks with privacy settings that make
+// browsers send "Origin: null" on same-site form posts.)
+var csrf = http.NewCrossOriginProtection()
+
+// sameOrigin rejects cross-site form posts (CSRF). The session cookie is also
+// SameSite=Strict.
 func (h *Hub) sameOrigin(r *http.Request) bool {
-	o := r.Header.Get("Origin")
-	if o == "" {
-		return true // non-browser clients; the session cookie is SameSite=Strict anyway
-	}
-	u, err := url.Parse(h.cfg.PublicURL)
-	if err != nil {
-		return false
-	}
-	return o == u.Scheme+"://"+u.Host || strings.HasPrefix(o, "http://localhost") || strings.HasPrefix(o, "http://127.0.0.1")
+	return csrf.Check(r) == nil
 }
 
 // requireLogin redirects to /login when there is no session.
