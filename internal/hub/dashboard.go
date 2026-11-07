@@ -90,12 +90,12 @@ func safeNext(next string) string {
 	if strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") {
 		return next
 	}
-	return "/approvals"
+	return "/"
 }
 
 func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.FormValue("next"))
-	data := map[string]any{"Next": next, "Hours": h.cfg.DashboardSessionHours}
+	data := map[string]any{"Next": next, "Hours": h.cfg.DashboardSessionHours, "MCP": h.cfg.PublicURL + "/mcp"}
 	if r.Method == http.MethodPost {
 		if !h.sameOrigin(r) {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
