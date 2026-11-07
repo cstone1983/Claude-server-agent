@@ -25,7 +25,7 @@ main{max-width:720px}
 `
 
 var base = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>{{block "title" .}}Claude Server Agent{{end}}</title><style>` + pageCSS + `</style></head><body><main>{{block "body" .}}{{end}}</main></body></html>`
+<meta name="referrer" content="same-origin"><title>{{block "title" .}}Claude Server Agent{{end}}</title><style>` + pageCSS + `</style></head><body><main>{{block "body" .}}{{end}}</main></body></html>`
 
 var loginTmpl = template.Must(template.Must(template.New("login").Parse(base)).Parse(`
 {{define "title"}}Connect to Claude Server Agent{{end}}

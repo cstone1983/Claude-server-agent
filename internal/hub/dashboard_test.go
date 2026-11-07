@@ -52,7 +52,13 @@ func TestDashboardBulkApproveAndRules(t *testing.T) {
 		t.Fatalf("expected login redirect, got %s", resp.Request.URL)
 	}
 	code, _ := totp.Code(cfg.TOTPSecret, time.Now())
-	resp, _ = c.PostForm(srv.URL+"/login", url.Values{"password": {"pw-123456789"}, "code": {code}, "next": {"/approvals"}})
+	// Log in the way a real browser with a strict referrer policy does:
+	// Origin "null" plus Sec-Fetch-Site same-origin.
+	lreq, _ := http.NewRequest("POST", srv.URL+"/login", strings.NewReader(url.Values{"password": {"pw-123456789"}, "code": {code}, "next": {"/approvals"}}.Encode()))
+	lreq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	lreq.Header.Set("Origin", "null")
+	lreq.Header.Set("Sec-Fetch-Site", "same-origin")
+	resp, _ = c.Do(lreq)
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "apt-get update") || strings.Count(string(body), `name="id"`) != 2 {
 		t.Fatalf("approvals page:\n%s", body)
@@ -63,6 +69,15 @@ func TestDashboardBulkApproveAndRules(t *testing.T) {
 	req.Header.Set("Origin", "https://evil.example.com")
 	if resp, _ := c.Do(req); resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("cross-site post: %d", resp.StatusCode)
+	}
+	req, _ = http.NewRequest("POST", srv.URL+"/approvals", strings.NewReader("id="+ap1.ID+"&action=approve"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	if resp, _ := c.Do(req); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-site post (Sec-Fetch-Site): %d", resp.StatusCode)
+	}
+	if s, _ := h.appr.snapshot(ap1.ID); s.Status != StatusPending {
+		t.Fatal("cross-site post changed an approval")
 	}
 	// Bulk approve + always allow on all servers: both approved, one rule.
 	resp, _ = c.PostForm(srv.URL+"/approvals", url.Values{"id": {ap1.ID, ap2.ID}, "action": {"always"}, "scope": {"all"}})
