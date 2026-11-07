@@ -58,12 +58,27 @@ func TestEndToEnd(t *testing.T) {
 	acfgPath := filepath.Join(dir, "agent", "agent.yaml")
 	os.MkdirAll(filepath.Dir(acfgPath), 0o700)
 	os.WriteFile(acfgPath, []byte("key_file: "+filepath.Join(dir, "agent", "agent.key")+"\npolicy_file: "+filepath.Join(dir, "agent", "policy.yaml")+"\nhub_rules_file: "+filepath.Join(dir, "agent", "hub-rules.yaml")+"\naudit_log: "+filepath.Join(dir, "agent", "audit.jsonl")+"\nhub_url: x\nagent_id: x\n"), 0o600)
-	acfg, err := agent.Enroll(acfgPath, srv.URL, joinTok, "web01", []string{"web"})
+	acfg, err := agent.Enroll(acfgPath, srv.URL, joinTok, "web01", []string{"web"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := agent.Enroll(acfgPath, srv.URL, joinTok, "web02", nil); err == nil {
+	other := filepath.Join(dir, "other", "agent.yaml")
+	os.MkdirAll(filepath.Dir(other), 0o700)
+	os.WriteFile(other, []byte("key_file: "+filepath.Join(dir, "other", "agent.key")+"\n"), 0o600)
+	if _, err := agent.Enroll(other, srv.URL, joinTok, "web02", nil, false); err == nil {
 		t.Fatal("join token should be single-use")
+	}
+	// A taken name is refused without consuming the token; --replace is required.
+	tok2 := randomToken("csa_join_", 24)
+	h.store.Update(func(d *stateData) error {
+		d.JoinTokens[hashSecret(tok2)] = &JoinToken{ExpiresAt: time.Now().Add(time.Hour), UsesLeft: 1}
+		return nil
+	})
+	if _, err := agent.Enroll(other, srv.URL, tok2, "web01", nil, false); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("duplicate name: %v", err)
+	}
+	if _, err := agent.Enroll(other, srv.URL, tok2, "web02", nil, false); err != nil {
+		t.Fatalf("token should still be usable after a name conflict: %v", err)
 	}
 	ag, err := agent.New(acfg)
 	if err != nil {
@@ -149,7 +164,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	text, _ := call("list_servers", nil)
-	if !strings.Contains(text, "web01 — online") {
+	if !strings.Contains(text, "web01 — online") || !strings.Contains(text, "web02 — offline") {
 		t.Fatalf("list_servers: %s", text)
 	}
 	text, isErr := call("run_command", map[string]any{"server": "web01", "argv": []string{"uname", "-s"}})

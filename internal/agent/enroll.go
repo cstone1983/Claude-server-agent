@@ -21,6 +21,7 @@ type EnrollRequest struct {
 	Tags      []string `json:"tags"`
 	PublicKey string   `json:"public_key"`
 	Hostname  string   `json:"hostname"`
+	Replace   bool     `json:"replace,omitempty"`
 }
 
 type EnrollResponse struct {
@@ -30,7 +31,7 @@ type EnrollResponse struct {
 
 // Enroll generates a key pair, registers it with the hub using a join token
 // and writes the agent config.
-func Enroll(configPath, hubURL, joinToken, name string, tags []string) (*Config, error) {
+func Enroll(configPath, hubURL, joinToken, name string, tags []string, replace bool) (*Config, error) {
 	hubURL = strings.TrimRight(hubURL, "/")
 	cfg := &Config{HubURL: hubURL, Name: name, Tags: tags}
 	if old, err := os.ReadFile(configPath); err == nil && len(old) > 0 {
@@ -57,6 +58,7 @@ func Enroll(configPath, hubURL, joinToken, name string, tags []string) (*Config,
 		Tags:      tags,
 		PublicKey: base64.StdEncoding.EncodeToString([]byte(key.Public().(ed25519.PublicKey))),
 		Hostname:  host,
+		Replace:   replace,
 	})
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Post(hubURL+"/agent/enroll", "application/json", bytes.NewReader(body))

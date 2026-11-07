@@ -305,7 +305,8 @@ func joinToken(args []string) {
 	}
 	fmt.Printf("Join token (valid until %s, %d use(s)):\n  %s\n\n", out.Exp.Local().Format(time.RFC1123), *uses, out.Token)
 	fmt.Println("On each server, run:")
-	fmt.Printf("  curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh \\\n    | sudo bash -s -- agent --hub %s --join %s --name $(hostname -s)\n", out.HubURL, out.Token)
+	fmt.Printf("  curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh \\\n    | sudo bash -s -- agent --hub %s --join %s\n", out.HubURL, out.Token)
+	fmt.Println("\nThe installer asks for a friendly name and tags (or add --name NAME --tags a,b).")
 }
 
 func tokenCmd(args []string) {

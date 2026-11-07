@@ -206,9 +206,12 @@ sudo ./install.sh agent \
   --tags web,prod
 ```
 
-- `--name` is how Claude refers to the server. It defaults to the short
-  hostname.
-- `--tags` lets you target groups of servers, e.g. `server: "tag:web"`.
+- Without `--name`, the installer **asks** for a friendly name (default: the
+  hostname) and optional tags just before it connects to the hub. If the name
+  is already used by another server, it asks again. To take over that name
+  deliberately, add `--replace`.
+- `--name` / `--tags` on the command line skip the questions. Tags let you
+  target groups of servers, e.g. `server: "tag:web"`.
 
 One-liner alternative:
 ```bash
