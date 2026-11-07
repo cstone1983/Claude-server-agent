@@ -51,3 +51,20 @@ func TestRenameServer(t *testing.T) {
 		t.Fatalf("resolve new name: %v %v", targets, err)
 	}
 }
+
+func TestAllScopeRulesSkipProxmox(t *testing.T) {
+	all := &HubRule{Scope: "all"}
+	byName := &HubRule{Scope: "server:proxmox"}
+	byTag := &HubRule{Scope: "tag:proxmox"}
+	pve := &AgentRec{Name: "proxmox", Tags: []string{"proxmox"}}
+	web := &AgentRec{Name: "web", Tags: []string{"web"}}
+	if all.appliesTo(pve) {
+		t.Error("an all-servers rule must not apply to a proxmox-tagged server")
+	}
+	if !all.appliesTo(web) {
+		t.Error("an all-servers rule must apply to other servers")
+	}
+	if !byName.appliesTo(pve) || !byTag.appliesTo(pve) {
+		t.Error("rules scoped to the proxmox server or tag must apply to it")
+	}
+}

@@ -63,7 +63,9 @@ Start with list_servers to learn server names; every other tool takes a "server"
 Prefer run_command (argv, no shell) over run_shell. Use start_job for anything that may take more than a minute.
 Read-only actions run immediately. Other actions run immediately only if the server's allowlist permits them; otherwise the result says NEEDS APPROVAL with a link: show the link to the user, wait for them to approve, then call check_approval.
 Always pass a short "reason" for actions that change things. Never try to work around a denial.
-If list_servers shows UPDATE AVAILABLE, tell the user; run update_server only after the user explicitly says to update.`
+If list_servers shows UPDATE AVAILABLE, tell the user; run update_server only after the user explicitly says to update.
+Verify, don't assume: before any command that changes something, use read-only commands to confirm every fact it depends on (the target exists and is the one the user means, current state, free space, versions, what else depends on it), and double-check the exact command and arguments. If something can't be verified or looks different than expected, stop and ask the user.
+Servers tagged "proxmox" are hypervisor hosts: everything on the network runs on them, so be extra careful. Confirm VM IDs against VM names (qm list / qm config) right before using them, never from memory; say exactly what will change, which VMs it touches, any downtime and how to undo it before running it; make one change at a time and verify the result afterwards.`
 
 func (h *Hub) mcpServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "claude-server-agent", Title: "Claude Server Agent", Version: version.Version}, &mcp.ServerOptions{Instructions: instructions})

@@ -94,6 +94,37 @@ usage in [README.md](README.md).
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
 
+## Proxmox host: careful mode (the user's rule: "verify, don't assume")
+
+**What the user means:** anything that can be verified before running a
+command must be verified and double-checked. This holds on every server,
+strictest on Proxmox. The same rule is in the connector's built-in
+instructions (`internal/hub/server.go`), so every Claude chat gets it.
+
+**The installer detects Proxmox and writes a local policy:**
+- read-only commands run freely;
+- backup work runs freely (`vzdump`, `pvesh create|set /cluster/backup…`);
+- every other change asks, and "always allow" for this server whitelists it;
+- `apt upgrade` is not automatic;
+- nothing is hard-blocked.
+
+**The hub never applies "all servers" rules to servers tagged `proxmox`.**
+Only rules scoped to them by name or tag apply.
+
+**Routine for any change on Proxmox:**
+1. **Look first.** Read the current state with `qm list` / `qm config <id>`,
+   `pvesh get …` and `pvesm status`. Confirm the VMID matches the VM *name*
+   the user means; never act on a VMID from memory.
+2. **Say exactly what will happen:** the exact command, which VMs and storage
+   it touches, the expected downtime and how to undo it. Flag anything
+   irreversible.
+3. **Make it reversible where possible.** Take a snapshot or backup before
+   risky VM changes; have a fresh backup before deleting old ones.
+4. **One change at a time,** then verify with the same read commands and
+   report the result.
+5. **Stop and ask** if anything looks different from what was expected.
+   Never improvise a workaround.
+
 ## How things work (gotchas learned)
 
 - **Tool-call timeout:** MCP tool calls time out after about 60 s.
@@ -159,8 +190,12 @@ usage in [README.md](README.md).
         newest backup of each VM and keeps the last 2 per VM on Drive.
       - Expect 60–90 GB per full set; the first upload will be slow.
       - Have Claude check that uploads succeed and warn when one fails.
-- [ ] **The join command always adds `sudo`,** which fails on Proxmox and
-      other machines without it. Use `sudo` only when it's present.
+- [x] **The join command always added `sudo`.** Fixed: it now uses
+      `sudo` only when present.
+- [x] **Installer variable clash.** Sourcing `/etc/os-release` overwrote
+      `NAME` and `VERSION`. That was the real reason servers enrolled as
+      "Ubuntu", and why release downloads silently fell back to building
+      from source. Fixed by reading it in a subshell.
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
 - [ ] **Ubuntu 26.04 for the other servers,** one at a time, with a snapshot
