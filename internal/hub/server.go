@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cstone1983/Claude-server-agent/internal/audit"
+	"github.com/cstone1983/Claude-server-agent/internal/proto"
 	"github.com/cstone1983/Claude-server-agent/internal/tools"
 	"github.com/cstone1983/Claude-server-agent/internal/version"
 )
@@ -31,6 +32,8 @@ type Hub struct {
 	limiter  *limiter
 	releases *releaseWatcher
 	sess     *sessions
+	// testSend replaces sending to an agent in tests.
+	testSend func(*agentConn, proto.Envelope) error
 }
 
 func New(cfg *Config) (*Hub, error) {
