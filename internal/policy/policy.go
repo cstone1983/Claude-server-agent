@@ -202,7 +202,7 @@ func (p *Policy) Snapshot() map[string]any {
 		"local":             p.local,
 		"hub_rules":         p.hubRules,
 		"builtin_read":      builtinRead,
-		"builtin_allow":     builtinAllow,
+		"builtin_allow":     []string{aptMaintenanceDesc},
 		"builtin_deny":      builtinDeny,
 		"builtin_sensitive": builtinSensitive,
 	}
@@ -257,6 +257,9 @@ func (p *Policy) Classify(a Action) Decision {
 			if r.matchesExec(argv, a.As, false) {
 				return Decision{Tier: TierAllowed, RuleID: r.ID, Why: "matches allow rule: " + r.String()}
 			}
+		}
+		if !p.local.DisableBuiltinAllow && userOK("", a.As) && aptMaintenance(argv) {
+			return Decision{Tier: TierAllowed, RuleID: aptMaintenanceID, Why: "built-in: apt update/upgrade"}
 		}
 		return Decision{Tier: TierElevated, Why: "not read-only and no allow rule matches"}
 
