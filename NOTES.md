@@ -40,8 +40,8 @@ usage in [README.md](README.md).
 |---|---|---|---|
 | n8n | hub, tag `hub`; runs n8n + cloudflared | Ubuntu 24.04.5 | 97 GB, 43% used (extended today); an unused 500 GB `sdb` is to be removed in Proxmox |
 | vm-fiance | personal-finance-dashboard + starhaul (11 containers, 2 Postgres) | **Ubuntu 26.04.1** (upgraded today) | 97 GB, 41% (extended today) |
-| solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156 | Ubuntu 24.04.5 | 48 GB, 32%; ~49 GB unused in its LVM (can be extended) |
-| AI-recipes | | Ubuntu 24.04.5 | 48 GB, 20%; ~49 GB unused in its LVM (can be extended) |
+| solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156 | Ubuntu 24.04.5 | 97 GB, 16% (extended today) |
+| AI-recipes | | Ubuntu 24.04.5 | 97 GB, 10% (extended today) |
 | jessy-desktop | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 22% (no LVM) |
 | Ubuntu-Anthony | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 28% (no LVM) |
 
@@ -123,8 +123,6 @@ usage in [README.md](README.md).
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
       `timedatectl status|show` is allowed, with no extra arguments.
 - [ ] **Remove the unused 500 GB disk** from the n8n VM in Proxmox (user).
-- [ ] **Optional disk extends:** AI-recipes and solar_perdiction, using
-      `lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv`, live.
 - [ ] **Optional agent on the Proxmox host** (`--name proxmox --tags proxmox`,
       no sudo), plus read-only rules for `qm list`, `qm config`, `pct list`,
       `pvesm status` and `pvesh get`.
