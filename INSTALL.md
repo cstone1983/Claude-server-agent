@@ -28,6 +28,11 @@ It also writes the systemd services and a default policy.
 
 - Ubuntu 22.04 or 24.04 (Debian works too), x86-64 or ARM64, with systemd.
 - `sudo` access on every machine.
+- `curl` to download the installer. Ubuntu **Desktop** doesn't include it, so
+  install it first with `sudo apt-get install -y curl`. Alternatively, use
+  `wget -qO install.sh <url>` (wget is preinstalled) in place of
+  `curl -fsSL -o install.sh <url>`. The command printed by
+  `csa-hub join-token` installs curl for you.
 - Outbound HTTPS from every machine to `github.com` and
   `objects.githubusercontent.com`. Source builds also need `go.dev` and
   `dl.google.com`.
@@ -220,10 +225,10 @@ sudo ./install.sh agent \
 - `--name` / `--tags` on the command line skip the questions. Tags let you
   target groups of servers, e.g. `server: "tag:web"`.
 
-One-liner alternative:
+One-liner alternative. This is what `csa-hub join-token` prints; paste it as
+a single line. It installs curl first if it's missing:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh \
-  | sudo bash -s -- agent --hub https://agents.yourdomain.com --join <JOIN_TOKEN> --name web01 --tags web,prod
+command -v curl >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq curl; }; curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh | sudo bash -s -- agent --hub https://agents.yourdomain.com --join <JOIN_TOKEN>
 ```
 
 ### 4.3 What the installer did
