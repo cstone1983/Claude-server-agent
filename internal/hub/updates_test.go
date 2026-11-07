@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+func TestNewerVersion(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"v0.1.2", "v0.1.1", true},
+		{"v0.1.1", "v0.1.2", false}, // never suggest a downgrade
+		{"v0.1.2", "v0.1.2", false},
+		{"v0.1.10", "v0.1.9", true},
+		{"v0.2.0", "v0.1.99", true},
+		{"v0.1.2", "a1b2c3d", true}, // source build
+		{"v0.1.2", "dev", true},
+		{"garbage", "v0.1.1", false},
+	}
+	for _, c := range cases {
+		if got := newerVersion(c.a, c.b); got != c.want {
+			t.Errorf("newerVersion(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 func TestReleaseWatcher(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/cstone1983/Claude-server-agent/releases/tag/v0.1.7", http.StatusFound)
