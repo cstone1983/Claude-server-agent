@@ -299,22 +299,55 @@ valid_name() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'; 
 
 current_agent_name() { { sed -n 's/^name: *//p' /etc/csa/agent.yaml 2>/dev/null || true; } | tr -d '"'; }
 
+# generic_name: names that say nothing about the machine (many VM images use
+# them as hostnames), so they are never accepted as a server name.
+generic_name() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    ""|ubuntu|ubuntu-server|localhost|localhost.localdomain|debian|linux|server|host|vm|default) return 0 ;;
+  esac
+  return 1
+}
+
+# machine_name: the kernel's hostname (short form). Unlike `hostname -s`, this
+# never does a DNS lookup, which on some VMs returns a shared name like "Ubuntu".
+machine_name() { uname -n | cut -d. -f1; }
+
 enroll_agent() {
   local hub="$1" name="$NAME" tags="$TAGS" out
+  if [ -n "$name" ] && generic_name "$name"; then
+    warn "'$name' is too generic to tell servers apart; ignoring --name"
+    name=""
+  fi
   if [ -n "$name" ]; then
-    say "Using server name '$name' (from --name; leave --name out to be asked)"
-  elif ! can_ask; then
-    say "No terminal to ask on; using the hostname as the server name (rename later with: sudo csa-hub rename)"
+    say "Using server name '$name' (from --name)"
   fi
   if [ -z "$name" ]; then
-    local def; def="$(current_agent_name)"; [ -n "$def" ] || def="$(hostname -s)"
-    if can_ask; then
+    local def; def="$(current_agent_name)"; generic_name "$def" && def="$(machine_name)"
+    generic_name "$def" && def=""
+    if ! can_ask; then
+      [ -n "$def" ] || die "no usable server name: pass --name <friendly-name> (generic names like 'Ubuntu' are not allowed)"
+      say "No terminal to ask on; using '$def' as the server name (rename later with: sudo csa-hub rename)"
+      name="$def"
+    else
       printf '\n\033[1;32m===== Last step: name this server =====\033[0m\n' >/dev/tty
-      printf 'This is how you and Claude will refer to it. Press Enter to use "%s".\n' "$def" >/dev/tty
-    fi
-    name="$(ask "Friendly name" "$def")"
-    if [ -z "$TAGS" ]; then
-      tags="$(ask "Tags, comma-separated (optional, e.g. web,prod; Enter to skip)" "")"
+      if [ -n "$def" ]; then
+        printf 'This is how you and Claude will refer to it. Press Enter to use "%s".\n' "$def" >/dev/tty
+      else
+        printf 'This is how you and Claude will refer to it (e.g. plex, web01, jessy-desktop).\n' >/dev/tty
+      fi
+      while :; do
+        name="$(ask "Friendly name" "$def")"
+        if [ -z "$name" ]; then
+          warn "please type a name"
+        elif generic_name "$name"; then
+          warn "'$name' is too generic; pick a name that identifies this machine"
+        else
+          break
+        fi
+      done
+      if [ -z "$TAGS" ]; then
+        tags="$(ask "Tags, comma-separated (optional, e.g. web,prod; Enter to skip)" "")"
+      fi
     fi
     say "Server name: $name${tags:+ (tags: $tags)}"
   fi
@@ -324,6 +357,12 @@ enroll_agent() {
       warn "'$name' is not a valid name (letters, digits, . _ -; max 63)"
       name="$(ask "Friendly name for this server" "")"
     done
+    if generic_name "$name"; then
+      can_ask || die "'$name' is too generic; pass --name <friendly-name>"
+      warn "'$name' is too generic"
+      name="$(ask "Friendly name for this server" "")"
+      continue
+    fi
     local args=(--hub "$hub" --join "$JOIN" --name "$name")
     [ -n "$tags" ] && args+=(--tags "$tags")
     # Re-enrolling this same machine under its current name replaces its old entry.
