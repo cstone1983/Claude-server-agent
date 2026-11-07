@@ -40,7 +40,7 @@ usage in [README.md](README.md).
 |---|---|---|---|
 | n8n | hub, tag `hub`; runs n8n + cloudflared | Ubuntu 24.04.5 | 97 GB, 43% used (extended today); an unused 500 GB `sdb` is to be removed in Proxmox |
 | vm-fiance | personal-finance-dashboard + starhaul (11 containers, 2 Postgres) | **Ubuntu 26.04.1** (upgraded today) | 97 GB, 41% (extended today) |
-| solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156 | Ubuntu 24.04.5 | 97 GB, 16% (extended today) |
+| solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156, 64 GB RAM | Ubuntu 24.04.5 | 97 GB, 16% (extended today) |
 | AI-recipes | | Ubuntu 24.04.5 | 97 GB, 10% (extended today) |
 | jessy-desktop | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 22% (no LVM) |
 | Ubuntu-Anthony | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 28% (no LVM) |
@@ -49,6 +49,8 @@ usage in [README.md](README.md).
 - **Ubuntu 26.04.1 LTS** is available for all the 24.04 machines. Only
   vm-fiance has been upgraded.
 - All servers are fully updated (including kernel and firmware) and rebooted.
+  AI-recipes and solar_perdiction moved to kernel 6.8.0-149 on 2026-11-07,
+  and autoremove ran on AI-recipes.
 
 ### vm-fiance upgrade record
 
@@ -123,9 +125,27 @@ usage in [README.md](README.md).
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
       `timedatectl status|show` is allowed, with no extra arguments.
 - [ ] **Remove the unused 500 GB disk** from the n8n VM in Proxmox (user).
-- [ ] **Optional agent on the Proxmox host** (`--name proxmox --tags proxmox`,
-      no sudo), plus read-only rules for `qm list`, `qm config`, `pct list`,
-      `pvesm status` and `pvesh get`.
+- [ ] **Agent on the Proxmox host** (node `starwars`). Blocked until the user
+      resets the forgotten root password (GRUB `init=/bin/bash`, then
+      `passwd root`; this reboots all VMs, so snapshot first). The web shell
+      user `stonec` isn't root and Proxmox has no sudo. Then:
+      1. Install without `sudo`, using `--tags proxmox` and the name `proxmox`.
+      2. Propose read-only rules: `qm list`, `qm config`, `pct list`,
+         `pvesm status`, `pvesh get`.
+      3. Add local deny rules in `/etc/csa/policy.yaml`: `qm destroy`,
+         `pct destroy`, `pvecm`.
+- [ ] **Proxmox backups are broken.**
+      - Its `local` storage was 100% full of backups from Oct 2025; the
+        backup job most likely stopped once the disk filled.
+      - On 2026-11-07 the user deleted every backup, leaving 77 GB free, so
+        **no VM has a backup now.**
+      - The user needs a backup job that saves to non-`local` storage, covers
+        all VMs and uses "keep last 3".
+      - VMs: 100 Solar-Calc, 101 Ubuntu-Anthony, 102 n8n, 103 haos16.0 (Home
+        Assistant), 104 CPU-Share, 106 Jessy, 107 Recipies, 110
+        Autopilot-Climate, 111 Fiance.
+- [ ] **The join command always adds `sudo`,** which fails on Proxmox and
+      other machines without it. Use `sudo` only when it's present.
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
 - [ ] **Ubuntu 26.04 for the other servers,** one at a time, with a snapshot
