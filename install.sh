@@ -104,7 +104,8 @@ build_from_source() {
     curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -xz -C "$TMP"
     gobin="$TMP/go/bin/go"
   fi
-  git clone -q --depth 1 --branch "$REF" "https://github.com/$REPO.git" "$TMP/src"
+  git clone -q --depth 1 --branch "$REF" "https://github.com/$REPO.git" "$TMP/src" \
+    || die "could not download the source (branch '$REF') from github.com/$REPO; pass --ref <branch> if main does not exist yet"
   local ver; ver="$(cd "$TMP/src" && git describe --tags --always 2>/dev/null || echo source)"
   (cd "$TMP/src" && GOFLAGS=-trimpath CGO_ENABLED=0 GOCACHE="$TMP/gocache" GOPATH="$TMP/gopath" "$gobin" build \
      -ldflags "-s -w -X github.com/cstone1983/Claude-server-agent/internal/version.Version=$ver" -o "$TMP" ./cmd/csa-hub ./cmd/csa-agent)
@@ -363,8 +364,8 @@ do_agent() {
 
 $(say "Server connected")
   It now appears in Claude via list_servers. Local policy: /etc/csa/policy.yaml
-  Test a command's tier:  csa-agent check -- systemctl restart nginx
-  Audit log:              csa-agent audit
+  Test a command's tier:  sudo csa-agent check -- systemctl restart nginx
+  Audit log:              sudo csa-agent audit
 EOF
 }
 

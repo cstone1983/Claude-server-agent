@@ -47,6 +47,9 @@ can't sneak in a second command.
 
 ## Install
 
+> **Full step-by-step guide: [INSTALL.md](INSTALL.md)**. It covers downloading the installer,
+> the Cloudflare setup, saving credentials, verifying each step, upgrades and troubleshooting.
+
 ### 1. Create the Cloudflare Tunnel (once)
 
 1. In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels →
@@ -156,9 +159,9 @@ Pattern syntax for each argv element:
 | `**` | Any remaining arguments (last element only) |
 
 Useful commands on each server:
-- `csa-agent check -- <command>`: shows which tier a command falls into.
+- `sudo csa-agent check -- <command>`: shows which tier a command falls into.
 - `systemctl reload csa-agent`: applies your policy edits.
-- `csa-agent audit`: shows the server's audit log.
+- `sudo csa-agent audit`: shows the server's audit log.
 
 The hub can **add** allow rules ("always allow"), but it can never change
 your local `policy.yaml` or override its deny rules. To ignore hub rules on a
