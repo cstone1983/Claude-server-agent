@@ -294,6 +294,11 @@ current_agent_name() { { sed -n 's/^name: *//p' /etc/csa/agent.yaml 2>/dev/null 
 
 enroll_agent() {
   local hub="$1" name="$NAME" tags="$TAGS" out
+  if [ -n "$name" ]; then
+    say "Using server name '$name' (from --name; leave --name out to be asked)"
+  elif ! can_ask; then
+    say "No terminal to ask on; using the hostname as the server name (rename later with: sudo csa-hub rename)"
+  fi
   if [ -z "$name" ]; then
     local def; def="$(current_agent_name)"; [ -n "$def" ] || def="$(hostname -s)"
     echo

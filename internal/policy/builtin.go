@@ -1,5 +1,7 @@
 package policy
 
+import "strings"
+
 // builtinRead are commands that only inspect the system. They run freely as
 // any user. Flags that would make them modify state are excluded via NotArgs.
 var builtinRead = []Rule{
@@ -80,10 +82,69 @@ var builtinRead = []Rule{
 
 // builtinAllow are harmless maintenance commands that change state but run
 // without approval (as root). Turn off with disable_builtin_allow: true.
-var builtinAllow = []Rule{
-	// Refreshes package lists only; installs nothing.
-	{ID: "builtin-allow:apt-update", Argv: []string{"apt-get|apt", "update", "**"},
-		NotArgs: []string{"-o*", "--option*", "-c*", "--config-file*"}},
+var builtinAllow = []Rule{}
+
+// aptMaintenanceID identifies the built-in apt rule in decisions and policy_view.
+const aptMaintenanceID = "builtin-allow:apt-update-upgrade"
+
+const aptMaintenanceDesc = "apt / apt-get update or upgrade, with any flags (-y, -q, --with-new-pkgs, -o Dpkg::Options::=..., ...), " +
+	"but no package names and no options that can run programs or change apt's paths (*Invoke*, Pre-Install-Pkgs, Dir::, ::Path, Binary::, -c/--config-file, --allow-*)"
+
+// aptMaintenance reports whether argv is a routine package-list refresh or
+// upgrade of installed packages: "apt[-get] [flags] update|upgrade [flags]".
+// Flags are allowed freely except those that can execute arbitrary programs
+// (apt hooks), point apt at other binaries/paths, load another config file,
+// or weaken package verification. Package names are not allowed.
+func aptMaintenance(argv []string) bool {
+	if len(argv) < 2 || (argv[0] != "apt" && argv[0] != "apt-get") {
+		return false
+	}
+	sub := ""
+	for i := 1; i < len(argv); i++ {
+		a := argv[i]
+		switch {
+		case a == "-o" || a == "--option":
+			if i+1 >= len(argv) || !safeAptOption(argv[i+1]) {
+				return false
+			}
+			i++
+		case strings.HasPrefix(a, "--option="):
+			if !safeAptOption(strings.TrimPrefix(a, "--option=")) {
+				return false
+			}
+		case strings.HasPrefix(a, "-o") && !strings.HasPrefix(a, "--"):
+			if !safeAptOption(a[2:]) {
+				return false
+			}
+		case a == "-c" || strings.HasPrefix(a, "-c") && !strings.HasPrefix(a, "--"),
+			strings.HasPrefix(a, "--config-file"),
+			strings.HasPrefix(strings.ToLower(a), "--allow-"):
+			return false
+		case a == "-t" || a == "--target-release":
+			i++ // takes a release name, harmless
+		case strings.HasPrefix(a, "-"):
+			// other flags (-y, -q, -s, --with-new-pkgs, --no-install-recommends, ...)
+		default:
+			if sub != "" || (a != "update" && a != "upgrade") {
+				return false // second subcommand or a package name
+			}
+			sub = a
+		}
+	}
+	return sub != ""
+}
+
+// safeAptOption rejects apt configuration overrides that can run programs or
+// redirect apt/dpkg to other binaries or paths. apt treats option names
+// case-insensitively, so the check does too.
+func safeAptOption(opt string) bool {
+	o := strings.ToLower(opt)
+	for _, bad := range []string{"invoke", "pre-install-pkgs", "dir::", "dir=", "::path", "binary::", "dpkg::tools", "allowunauthenticated", "allow-unauthenticated", "allowinsecure", "allow-insecure", "allowdowngrade", "trusted"} {
+		if strings.Contains(o, bad) {
+			return false
+		}
+	}
+	return true
 }
 
 // builtinDeny can never run, even with approval. Remove the agent's ability
