@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -191,7 +192,7 @@ func initCmd(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	publicURL := fs.String("public-url", "", "public https URL of the hub, e.g. https://agents.example.com")
 	listen := fs.String("listen", "127.0.0.1:7420", "local listen address (cloudflared forwards here)")
-	password := fs.String("password", "", "admin password (default: generate one)")
+	password := fs.String("password", "", "admin password (default: $CSA_ADMIN_PASSWORD, else generate one)")
 	force := fs.Bool("force", false, "overwrite an existing config")
 	cli.Parse(fs, args)
 	if *publicURL == "" {
@@ -205,6 +206,13 @@ func initCmd(args []string) {
 	}
 	pw := *password
 	if pw == "" {
+		pw = os.Getenv("CSA_ADMIN_PASSWORD")
+	}
+	chosen := pw != ""
+	if chosen && len(pw) < 10 {
+		cli.Fatal("the admin password must be at least 10 characters")
+	}
+	if pw == "" {
 		pw = genPassword()
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pw), 12)
@@ -216,8 +224,12 @@ func initCmd(args []string) {
 		cli.Fatal("%v", err)
 	}
 	fmt.Printf("Wrote %s\n\n", configPath)
-	fmt.Printf("Admin password: %s\n", pw)
-	fmt.Println("(You'll enter it once when adding the connector in Claude. Change it with `csa-hub set-password`.)")
+	if chosen {
+		fmt.Println("Admin password: (the one you chose)")
+	} else {
+		fmt.Printf("Admin password: %s\n", pw)
+	}
+	fmt.Println("(Used to connect Claude and to log in to the approvals dashboard. Change it any time with `sudo csa-hub set-password`.)")
 	fmt.Println()
 	showTOTP(cfg.TOTPSecret, cfg.PublicURL)
 }
@@ -252,25 +264,57 @@ func setPassword() {
 	if err != nil {
 		cli.Fatal("%v", err)
 	}
-	fmt.Print("New admin password: ")
-	var pw string
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		b, _ := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		pw = string(b)
-	} else {
-		pw, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-	}
-	pw = strings.TrimSpace(pw)
-	if len(pw) < 10 {
-		cli.Fatal("use at least 10 characters")
-	}
+	pw := readNewPassword()
 	hash, _ := bcrypt.GenerateFromPassword([]byte(pw), 12)
 	cfg.AdminPasswordHash = string(hash)
 	if err := hub.SaveConfig(configPath, cfg); err != nil {
 		cli.Fatal("%v", err)
 	}
-	fmt.Println("Password updated. Restart the hub: systemctl restart csa-hub")
+	fmt.Println("Password updated.")
+	restartHub()
+}
+
+// readNewPassword asks for a password twice on a terminal (input hidden), or
+// reads one line from stdin when piped.
+func readNewPassword() string {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		pw, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		pw = strings.TrimRight(pw, "\r\n")
+		if len(pw) < 10 {
+			cli.Fatal("use at least 10 characters")
+		}
+		return pw
+	}
+	for {
+		fmt.Print("New admin password (at least 10 characters): ")
+		a, _ := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if len(a) < 10 {
+			fmt.Println("Too short, try again.")
+			continue
+		}
+		fmt.Print("Repeat it: ")
+		b, _ := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if string(a) != string(b) {
+			fmt.Println("They don't match, try again.")
+			continue
+		}
+		return string(a)
+	}
+}
+
+// restartHub restarts the systemd service so a config change takes effect.
+func restartHub() {
+	if os.Geteuid() != 0 {
+		fmt.Println("Restart the hub to apply it: sudo systemctl restart csa-hub")
+		return
+	}
+	if out, err := exec.Command("systemctl", "try-restart", "csa-hub").CombinedOutput(); err != nil {
+		fmt.Printf("Could not restart csa-hub (%v): %s\nRestart it manually: systemctl restart csa-hub\n", err, strings.TrimSpace(string(out)))
+		return
+	}
+	fmt.Println("Hub restarted; the new setting is active.")
 }
 
 func resetTOTP() {
@@ -283,7 +327,8 @@ func resetTOTP() {
 		cli.Fatal("%v", err)
 	}
 	showTOTP(cfg.TOTPSecret, cfg.PublicURL)
-	fmt.Println("\nRestart the hub: systemctl restart csa-hub")
+	fmt.Println()
+	restartHub()
 }
 
 func joinToken(args []string) {

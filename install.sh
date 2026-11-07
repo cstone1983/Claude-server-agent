@@ -359,7 +359,20 @@ do_hub() {
     first=1
     mkdir -p /etc/csa-hub
     echo
-    "$BIN_DIR/csa-hub" init --public-url "$PUBLIC_URL" --listen "${LISTEN:-127.0.0.1:7420}"
+    local pw="" pw2=""
+    if can_ask; then
+      while :; do
+        printf 'Choose an admin password (at least 10 characters; Enter to generate one): ' >/dev/tty
+        IFS= read -rs pw </dev/tty || pw=""; echo >/dev/tty
+        [ -z "$pw" ] && break
+        if [ "${#pw}" -lt 10 ]; then warn "too short"; continue; fi
+        printf 'Repeat it: ' >/dev/tty
+        IFS= read -rs pw2 </dev/tty || pw2=""; echo >/dev/tty
+        [ "$pw" = "$pw2" ] && break
+        warn "they don't match"
+      done
+    fi
+    CSA_ADMIN_PASSWORD="$pw" "$BIN_DIR/csa-hub" init --public-url "$PUBLIC_URL" --listen "${LISTEN:-127.0.0.1:7420}"
     echo
   elif [ -n "$LISTEN" ]; then
     sed -i "s/^listen: .*/listen: $LISTEN/" /etc/csa-hub/hub.yaml
