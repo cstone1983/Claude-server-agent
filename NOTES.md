@@ -34,6 +34,9 @@ usage in [README.md](README.md).
   - Before new work, reset the branch to `origin/main`
     (`git checkout -B ccr-59230fbc-jw6beu origin/main`).
 
+**App inventory (what runs where):** `/srv/homelab/INVENTORY.md` on server
+`n8n`. Read it with `read_file`. It isn't kept in this public repo on purpose.
+
 ## Servers (all on agent v0.1.15, timezone America/New_York)
 
 | Name | Role / notes | OS | Disk `/` |
@@ -152,6 +155,11 @@ usage in [README.md](README.md).
       first, using the same procedure as vm-fiance.
 - [ ] **Delete the vm-fiance pre-upgrade snapshot** in Proxmox once the user
       is satisfied.
+- [x] **vm-fiance logrotate failure:** fixed 2026-11-07. A duplicate
+      `/etc/logrotate.d/cloud-init` left by the 26.04 upgrade was moved to
+      `/root/backups/`.
+- [ ] **AI Recipes runs in Vite dev mode** under pm2. Consider a
+      production build.
 - [ ] **Old containers:** two exited containers on vm-fiance
       (`elastic_hofstadter`, `priceless_hodgkin`, 7 weeks old) could be
       removed.
