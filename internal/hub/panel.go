@@ -174,7 +174,7 @@ func (h *Hub) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.loggedIn(r) {
-		renderPage(w, http.StatusOK, "Claude Server Agent hub", "Add "+h.cfg.PublicURL+"/mcp as a custom connector in Claude (Settings → Connectors). To manage servers, log in at "+h.cfg.PublicURL+"/login.", nil)
+		http.Redirect(w, r, "/login?next=/", http.StatusSeeOther)
 		return
 	}
 	servers := h.serverViews()

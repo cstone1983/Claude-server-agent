@@ -54,8 +54,8 @@ func TestControlPanelPages(t *testing.T) {
 		}
 		return string(b)
 	}
-	if !strings.Contains(get("/servers"), "Admin password") {
-		t.Fatal("panel pages must require login")
+	if !strings.Contains(get("/servers"), "Admin password") || !strings.Contains(get("/"), "Admin password") {
+		t.Fatal("panel pages, including the home page, must show the login form")
 	}
 	code, _ := totp.Code(cfg.TOTPSecret, time.Now())
 	c.PostForm(srv.URL+"/login", url.Values{"password": {"pw-123456789"}, "code": {code}, "next": {"/"}})
