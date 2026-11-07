@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -134,6 +135,7 @@ type approvalGroup struct {
 	Why       string
 	Reason    string
 	Rule      string
+	AskAlways bool
 	Approvals []Approval
 }
 
@@ -147,7 +149,7 @@ func (h *Hub) pendingGroups() []approvalGroup {
 		key := a.Tool + "\x00" + a.Summary
 		g := byKey[key]
 		if g == nil {
-			g = &approvalGroup{Key: key, Tool: a.Tool, Summary: a.Summary, Why: a.Why, Reason: a.Reason, Rule: a.Suggested.String()}
+			g = &approvalGroup{Key: key, Tool: a.Tool, Summary: a.Summary, Why: a.Why, Reason: a.Reason, Rule: a.Suggested.String(), AskAlways: a.AskAlways}
 			byKey[key] = g
 			order = append(order, key)
 		}
@@ -174,6 +176,8 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		scope := r.PostFormValue("scope")
 		if len(ids) == 0 {
 			data["Error"] = "Select at least one action."
+		} else if len(ids) > 1 && h.anyAskAlways(ids) && action != "deny" {
+			data["Error"] = "Nothing was approved: a selected request needs its own OK. Approve it on its own, separately from everything else."
 		} else {
 			done, failed := 0, []string{}
 			for _, id := range ids {
@@ -201,7 +205,17 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	data["Groups"] = h.pendingGroups()
+	// Requests that need their own OK (e.g. rebooting a Proxmox host) get
+	// their own card and button, outside the bulk form.
+	var normal, alone []approvalGroup
+	for _, g := range h.pendingGroups() {
+		if g.AskAlways {
+			alone = append(alone, g)
+		} else {
+			normal = append(normal, g)
+		}
+	}
+	data["Groups"], data["Alone"] = normal, alone
 	var recent []Approval
 	for _, a := range h.appr.list() {
 		if a.Status != StatusPending && len(recent) < 15 {
@@ -213,6 +227,16 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// anyAskAlways reports whether any of the approvals needs its own OK.
+func (h *Hub) anyAskAlways(ids []string) bool {
+	for _, a := range h.appr.list() {
+		if a.AskAlways && slices.Contains(ids, a.ID) {
+			return true
+		}
+	}
+	return false
+}
 
 func (h *Hub) handleRules(w http.ResponseWriter, r *http.Request) {
 	if !h.requireLogin(w, r) {

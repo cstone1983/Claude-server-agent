@@ -46,6 +46,9 @@ type Approval struct {
 	// add an allow rule; approving adds it for RuleScope).
 	Kind      string `json:"kind"`
 	RuleScope string `json:"rule_scope,omitempty"`
+	// AskAlways: needs its own OK every time (never bulk-approved, never
+	// turned into an "always allow" rule).
+	AskAlways bool `json:"ask_always,omitempty"`
 
 	decided chan struct{}
 	ran     chan struct{} // closed when an approved action finished running
@@ -111,7 +114,7 @@ func (h *Hub) newApproval(agent *AgentRec, call *proto.Call, na *proto.NeedsAppr
 		ID: id, AgentID: agent.ID, Server: agent.Name, ServerTags: agent.Tags, Tool: call.Tool, Args: call.Args,
 		Caller: call.Caller, Hash: na.ActionHash, Summary: na.Summary, Why: na.Why, Reason: reason.Reason,
 		Suggested: na.SuggestedRule, Status: StatusPending, CreatedAt: time.Now().UTC(),
-		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}), Kind: "action",
+		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}), Kind: "action", AskAlways: na.AskAlways,
 	}
 	h.appr.mu.Lock()
 	h.appr.m[id] = ap
@@ -154,7 +157,7 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 	}
 	h.audit.Write(audit.Entry{Event: ev, Server: snap.Server, Tool: snap.Tool, Summary: snap.Summary, ApprovalID: id, Detail: map[string]any{"always": always, "scope": scope, "via": via}})
 
-	if approve && always {
+	if approve && always && !snap.AskAlways {
 		var s string
 		switch {
 		case scope == "" || scope == "server":

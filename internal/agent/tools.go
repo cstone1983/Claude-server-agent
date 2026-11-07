@@ -60,9 +60,11 @@ func (e *Executor) gate(call *proto.Call, hash string, a policy.Action, why stri
 		}
 		entry.Event = "approval_requested"
 		e.audit.Write(entry)
-		return d, &proto.Result{NeedsApproval: &proto.NeedsApproval{
-			ActionHash: hash, Summary: a.Summary(), Why: d.Why, SuggestedRule: policy.SuggestRule(a),
-		}}
+		na := &proto.NeedsApproval{ActionHash: hash, Summary: a.Summary(), Why: d.Why, SuggestedRule: policy.SuggestRule(a)}
+		if d.AskAlways {
+			na.AskAlways, na.SuggestedRule = true, policy.Rule{}
+		}
+		return d, &proto.Result{NeedsApproval: na}
 	case policy.TierAllowed:
 		if call.MaxTier == policy.TierRead {
 			return d, &proto.Result{Error: "this caller is read-only; the action is allowlisted but not read-only"}

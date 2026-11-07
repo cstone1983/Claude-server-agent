@@ -1,6 +1,20 @@
 {{define "content"}}
 <div class="page-head"><div><h1>Approvals</h1><p>Actions waiting for your OK. Identical requests across servers are grouped. New requests appear automatically.</p></div></div>
 <div data-live>
+{{range .D.Alone}}{{$g := .}}{{range .Approvals}}
+<div class="card power-card">
+  <div class="chips"><span class="chip power">⚠ Needs its own OK</span><span class="chip">{{.Server}}</span>
+    <span class="muted small"><time datetime="{{iso .CreatedAt}}" data-fmt="rel">{{iso .CreatedAt}}</time></span></div>
+  <div class="cmd">{{$g.Summary}}</div>
+  {{if $g.Reason}}<div class="secondary-text small">Reason: {{$g.Reason}}</div>{{end}}
+  <p class="small" style="margin:.5rem 0 0">This restarts <strong>{{.Server}}</strong>{{if hasTag .ServerTags "proxmox"}}: <strong>every VM on this host goes down</strong> until it is back{{end}}. It is approved on its own, once, and can never be always-allowed.</p>
+  <form method="post" class="btn-row">
+    <input type="hidden" name="id" value="{{.ID}}">
+    <button class="btn power" name="action" value="approve">⏻ Approve restart of {{.Server}}</button>
+    <button class="btn danger" name="action" value="deny">Deny</button>
+  </form>
+</div>
+{{end}}{{end}}
 {{if .D.Groups}}
 <form method="post">
 <label class="check"><input type="checkbox" data-check-all checked> Select all</label>
@@ -29,7 +43,7 @@
   </details>
 </div>
 </form>
-{{else}}<div class="card empty">Nothing is waiting for approval. ✓</div>{{end}}
+{{else if not .D.Alone}}<div class="card empty">Nothing is waiting for approval. ✓</div>{{end}}
 </div>
 
 {{if .D.Recent}}

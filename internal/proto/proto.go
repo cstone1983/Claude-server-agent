@@ -79,4 +79,7 @@ type NeedsApproval struct {
 	Summary       string      `json:"summary"`
 	Why           string      `json:"why"`
 	SuggestedRule policy.Rule `json:"suggested_rule"`
+	// AskAlways: this action needs its own approval every time; it must not
+	// be approved together with other actions or turned into a rule.
+	AskAlways bool `json:"ask_always,omitempty"`
 }

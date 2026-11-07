@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -106,6 +107,11 @@ type File struct {
 	Read  []Rule `yaml:"read,omitempty"`
 	Allow []Rule `yaml:"allow,omitempty"`
 	Deny  []Rule `yaml:"deny,omitempty"`
+	// AskAlways rules need approval every single time, even if an allow rule
+	// or an "always allow" rule from the hub matches, and the approval can
+	// never be turned into an "always allow" rule (e.g. rebooting a
+	// hypervisor). In shell scripts a rule's Shell is matched as a substring.
+	AskAlways []Rule `yaml:"ask_always,omitempty"`
 	// SensitivePaths are read_file paths that need approval.
 	SensitivePaths []string `yaml:"sensitive_paths,omitempty"`
 	// AcceptHubRules controls whether "always allow" rules pushed from the
@@ -153,6 +159,9 @@ type Decision struct {
 	Tier   string `json:"tier"`
 	RuleID string `json:"rule_id,omitempty"`
 	Why    string `json:"why"`
+	// AskAlways: the action matched an ask_always rule. It needs its own
+	// approval every time and can never be turned into an "always allow" rule.
+	AskAlways bool `json:"ask_always,omitempty"`
 }
 
 // Policy combines built-in rules, the local file and hub-pushed rules.
@@ -281,6 +290,11 @@ func (p *Policy) Classify(a Action) Decision {
 				return Decision{Tier: TierDenied, RuleID: r.ID, Why: "matches deny rule: " + r.String()}
 			}
 		}
+		for _, r := range p.local.AskAlways {
+			if r.matchesExec(argv, a.As, true) {
+				return Decision{Tier: TierElevated, RuleID: r.ID, AskAlways: true, Why: "needs its own approval every time (ask_always rule " + r.String() + ")"}
+			}
+		}
 		read := p.local.Read
 		if !p.local.DisableBuiltinRead {
 			read = append(append([]Rule{}, builtinRead...), read...)
@@ -308,6 +322,11 @@ func (p *Policy) Classify(a Action) Decision {
 			}
 			if len(r.AnyArg) > 0 && len(r.Argv) == 0 && containsAnyLiteral(script, r.AnyArg) {
 				return Decision{Tier: TierDenied, RuleID: r.ID, Why: "script contains a denied argument"}
+			}
+		}
+		for _, r := range p.local.AskAlways {
+			if r.Shell != "" && strings.Contains(script, r.Shell) {
+				return Decision{Tier: TierElevated, RuleID: r.ID, AskAlways: true, Why: "needs its own approval every time (script contains " + strconv.Quote(r.Shell) + ")"}
 			}
 		}
 		for _, r := range allow {

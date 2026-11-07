@@ -34,6 +34,14 @@ var (
 var tmplFuncs = template.FuncMap{
 	"iso":  func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
 	"join": strings.Join,
+	"hasTag": func(tags []string, t string) bool {
+		for _, x := range tags {
+			if strings.EqualFold(x, t) {
+				return true
+			}
+		}
+		return false
+	},
 	"sortmark": func(d map[string]any, col string) string {
 		cur, _ := d["Sort"].(string)
 		dir, _ := d["Dir"].(string)
