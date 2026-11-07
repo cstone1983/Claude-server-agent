@@ -147,6 +147,18 @@ usage in [README.md](README.md).
       - VMs: 100 Solar-Calc, 101 Ubuntu-Anthony, 102 n8n, 103 haos16.0 (Home
         Assistant), 104 CPU-Share, 106 Jessy, 107 Recipies, 110
         Autopilot-Climate, 111 Fiance.
+- [ ] **Off-site copies of Proxmox backups on Google Drive.** Do this after
+      the local backup job works.
+      - The user has a 5 TB Google plan with about 4 TB free.
+      - Use `rclone` on the Proxmox host with an encrypted remote (`crypt`)
+        over Google Drive. The user keeps the encryption password in their
+        password manager.
+      - The user does the Google sign-in (`rclone config` / `rclone authorize`)
+        themselves; the token stays on the host and never goes through chat.
+      - After each nightly vzdump, a systemd timer or vzdump hook uploads the
+        newest backup of each VM and keeps the last 2 per VM on Drive.
+      - Expect 60–90 GB per full set; the first upload will be slow.
+      - Have Claude check that uploads succeed and warn when one fails.
 - [ ] **The join command always adds `sudo`,** which fails on Proxmox and
       other machines without it. Use `sudo` only when it's present.
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
