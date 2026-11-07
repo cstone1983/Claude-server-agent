@@ -78,6 +78,14 @@ var builtinRead = []Rule{
 	{ID: "builtin:getent", Argv: []string{"getent", "passwd|group|hosts", "**"}},
 }
 
+// builtinAllow are harmless maintenance commands that change state but run
+// without approval (as root). Turn off with disable_builtin_allow: true.
+var builtinAllow = []Rule{
+	// Refreshes package lists only; installs nothing.
+	{ID: "builtin-allow:apt-update", Argv: []string{"apt-get|apt", "update", "**"},
+		NotArgs: []string{"-o*", "--option*", "-c*", "--config-file*"}},
+}
+
 // builtinDeny can never run, even with approval. Remove the agent's ability
 // to lock itself out or wipe the root filesystem.
 var builtinDeny = []Rule{

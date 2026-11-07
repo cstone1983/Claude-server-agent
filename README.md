@@ -25,7 +25,7 @@ allowlist, approvals on your phone, and an audit log on every server.
 | Tier | What | Behaviour |
 |------|------|-----------|
 | read | Built-in read-only commands (`df`, `ps`, `systemctl status`, `journalctl`, `docker ps`, …), reading non-sensitive files | Runs immediately |
-| allowed | Matches an allow rule in `/etc/csa/policy.yaml`, or an "always allow" rule from an approval | Runs immediately |
+| allowed | Built-in maintenance (`apt update`), an allow rule in `/etc/csa/policy.yaml`, or an "always allow" rule from an approval | Runs immediately |
 | elevated | Everything else, including root shell scripts, file writes, installs and restarts | **Needs your approval** |
 | denied | Deny rules and built-ins (`rm -rf /`, stopping the agent, reading the hub's secrets) | Never runs |
 
