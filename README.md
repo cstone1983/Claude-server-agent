@@ -129,6 +129,7 @@ Tools Claude gets:
 | `service` | systemctl status/start/stop/restart/reload/enable/disable |
 | `logs` | journalctl for the system or one unit, or tail a log file |
 | `start_job` / `job_status` / `cancel_job` | Long-running commands in the background |
+| `session_start` / `session_send` / `session_close` | Interactive terminal sessions for installers and menus that ask questions: Claude types answers and keys (arrows, Enter, Ctrl-C), reads the screen, and asks you when a choice is yours. Passwords sent with `secret` stay out of the audit log |
 | `check_approval` | Finish an action once you've approved it |
 | `request_rule` | Propose an allow rule; it applies only after you approve it on the dashboard |
 | `update_server` | Check for, or (when you say so) install, a newer release |

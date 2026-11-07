@@ -128,6 +128,9 @@ func (sm *sessionManager) start(spec procSpec, summary string, cols, rows int) (
 	// A terminal session needs its own session/controlling TTY, not just a
 	// process group, and a terminal type that full-screen programs understand.
 	cmd.SysProcAttr.Setpgid = false
+	cmd.SysProcAttr.Setsid = true  // new session...
+	cmd.SysProcAttr.Setctty = true // ...with the pty (stdin, fd 0) as controlling terminal, so Ctrl-C etc. work
+	cmd.SysProcAttr.Ctty = 0
 	for i, e := range cmd.Env {
 		if strings.HasPrefix(e, "TERM=") {
 			cmd.Env[i] = "TERM=xterm"

@@ -173,7 +173,10 @@ var dashRulesTmpl = template.Must(template.Must(template.New("drules").Parse(bas
 <input id="comment" name="comment" type="text">
 <div class="row"><button class="primary">Add rule</button></div>
 </form>
-<p class="meta">Built in (no rule needed): read-only commands such as df, ps, systemctl status, journalctl, docker ps, and apt update. Each server's own /etc/csa/policy.yaml can add more, and its deny rules always win.</p>
+<h1 style="margin-top:28px">Built in on every server (no rule needed)</h1>
+<div class="card"><p><b>Always allowed:</b></p>{{range .BuiltinAllow}}<p class="meta">{{.}}</p>{{end}}</div>
+<div class="card"><p><b>Read-only commands</b> (run freely; state-changing flags excluded):</p><p class="meta">{{range $i, $c := .BuiltinRead}}{{if $i}}, {{end}}{{$c}}{{end}}</p></div>
+<p class="meta">Each server's own /etc/csa/policy.yaml can add more rules, and its deny rules always win.</p>
 <h1 style="margin-top:28px">Current rules</h1>
 {{if .Rules}}{{range .Rules}}
 <form method="post" class="card">
