@@ -22,13 +22,14 @@ import (
 )
 
 type Hub struct {
-	cfg     *Config
-	store   *Store
-	audit   *audit.Log
-	reg     *registry
-	appr    *approvals
-	codes   *codeStore
-	limiter *limiter
+	cfg      *Config
+	store    *Store
+	audit    *audit.Log
+	reg      *registry
+	appr     *approvals
+	codes    *codeStore
+	limiter  *limiter
+	releases *releaseWatcher
 }
 
 func New(cfg *Config) (*Hub, error) {
@@ -42,10 +43,11 @@ func New(cfg *Config) (*Hub, error) {
 	}
 	return &Hub{
 		cfg: cfg, store: st, audit: al,
-		reg:     &registry{conns: map[string]*agentConn{}},
-		appr:    &approvals{m: map[string]*Approval{}},
-		codes:   &codeStore{m: map[string]*authCode{}},
-		limiter: newLimiter(10, 15*time.Minute),
+		reg:      &registry{conns: map[string]*agentConn{}},
+		appr:     &approvals{m: map[string]*Approval{}},
+		codes:    &codeStore{m: map[string]*authCode{}},
+		limiter:  newLimiter(10, 15*time.Minute),
+		releases: newReleaseWatcher(),
 	}, nil
 }
 
@@ -53,7 +55,8 @@ const instructions = `This connector controls the user's Linux servers through C
 Start with list_servers to learn server names; every other tool takes a "server" argument (a name, "tag:<tag>" or "all").
 Prefer run_command (argv, no shell) over run_shell. Use start_job for anything that may take more than a minute.
 Read-only actions run immediately. Other actions run immediately only if the server's allowlist permits them; otherwise the result says NEEDS APPROVAL with a link: show the link to the user, wait for them to approve, then call check_approval.
-Always pass a short "reason" for actions that change things. Never try to work around a denial.`
+Always pass a short "reason" for actions that change things. Never try to work around a denial.
+If list_servers shows UPDATE AVAILABLE, tell the user; run update_server only after the user explicitly says to update.`
 
 func (h *Hub) mcpServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "claude-server-agent", Title: "Claude Server Agent", Version: version.Version}, &mcp.ServerOptions{Instructions: instructions})
@@ -238,6 +241,7 @@ func (h *Hub) Serve(ctx context.Context) error {
 	}
 	admin := &http.Server{Handler: h.adminHandler(), ReadHeaderTimeout: 10 * time.Second}
 
+	go h.releases.run(ctx)
 	go func() {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()

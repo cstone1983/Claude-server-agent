@@ -84,6 +84,11 @@ type (
 		JobID string `json:"job_id"`
 	}
 
+	UpdateServerArgs struct {
+		CheckOnly bool `json:"check_only,omitempty"`
+		Force     bool `json:"force,omitempty"`
+	}
+
 	AuditLogArgs struct {
 		Lines int `json:"lines,omitempty"`
 	}
@@ -275,6 +280,14 @@ var All = []Def{
 		Description: "Kill a running background job.",
 		Props:       map[string]Prop{"job_id": {Type: "string", Desc: "Job ID."}},
 		Required:    []string{"job_id"},
+	},
+	{
+		Name: "update_server", Title: "Update Claude Server Agent",
+		Description: "Check for or install a newer Claude Server Agent release from GitHub on a server (or tag:<tag> / all). With check_only it only reports the installed and latest versions. Otherwise it starts the update in the background and returns immediately; the agent restarts and reconnects within about a minute (on the hub machine, the connector drops briefly). Then call list_servers to confirm the new version. Runs without an approval link because it only installs official releases, but ONLY call it (without check_only) after the user has explicitly said to update.",
+		Props: map[string]Prop{
+			"check_only": {Type: "boolean", Desc: "Only report whether an update is available."},
+			"force":      {Type: "boolean", Desc: "Reinstall even if already up to date."},
+		},
 	},
 	{
 		Name: "policy_view", Title: "View policy", ReadOnly: true,

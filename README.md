@@ -96,8 +96,11 @@ curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main
 ```
 The server appears in Claude right away (`list_servers`).
 
-**Upgrade** by re-running the same install command; you don't need a join
-token again. **Remove** with `sudo bash install.sh uninstall [--purge]`.
+**Updates run only when you say so.** Every merge to `main` publishes a
+release. The hub flags servers that are behind as **UPDATE AVAILABLE** in
+`list_servers`. To update, tell Claude ("update all servers") or run
+`sudo csa-update` on the machine. **Remove** with
+`sudo bash install.sh uninstall [--purge]`.
 
 > The installer downloads release binaries from GitHub Releases. If no
 > release exists yet, it builds from source automatically: it fetches a
@@ -127,6 +130,7 @@ Tools Claude gets:
 | `logs` | journalctl for the system or one unit, or tail a log file |
 | `start_job` / `job_status` / `cancel_job` | Long-running commands in the background |
 | `check_approval` | Finish an action once you've approved it |
+| `update_server` | Check for, or (when you say so) install, a newer release |
 | `policy_view` / `audit_log` | See a server's rules and history |
 
 Every tool takes `server`: a name, `tag:<tag>` or `all`.
@@ -193,7 +197,7 @@ notify:
 ## Hub admin CLI (run as root on the hub)
 
 ```
-csa-hub servers | tag <server> <tags> | remove-server <server>
+csa-hub servers | rename <server> <new-name> | tag <server> <tags> | remove-server <server>
 csa-hub join-token [--ttl 60] [--uses 1] [--tags a,b]
 csa-hub approvals | approve <id> [--always --scope server|tag:x|all] | deny <id>
 csa-hub rules | rule-delete <id>

@@ -38,6 +38,7 @@ Setup:
 Servers:
   csa-hub join-token [--ttl 60] [--uses 1] [--tags a,b] create a token for enrolling a server
   csa-hub servers                                        list servers
+  csa-hub rename <server> <new-name>                     give a server a friendly name
   csa-hub tag <server> <tag,tag>                         set a server's tags
   csa-hub remove-server <server>                         remove a server
 
@@ -97,6 +98,11 @@ func main() {
 			cli.Fatal("usage: csa-hub tag <server> <tag,tag>")
 		}
 		printJSON(admin("POST", "/servers/"+args[0]+"/tags", map[string]any{"tags": cli.SplitList(args[1])}))
+	case "rename":
+		if len(args) != 2 {
+			cli.Fatal("usage: csa-hub rename <current-name> <new-name>")
+		}
+		printJSON(admin("POST", "/servers/"+args[0]+"/rename", map[string]any{"new_name": args[1]}))
 	case "remove-server":
 		if len(args) != 1 {
 			cli.Fatal("usage: csa-hub remove-server <server>")

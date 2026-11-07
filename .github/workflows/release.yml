@@ -1,10 +1,19 @@
-# Push a tag like v0.1.0 to publish binaries that install.sh downloads.
+# Publishes a release for every change merged to main (v0.1.<run>), or for a
+# manually pushed v* tag. The hub then flags servers as "update available";
+# nothing updates until you run csa-update or tell Claude to run update_server.
 name: release
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -13,8 +22,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go test ./...
+      - name: Test
+        run: |
+          go vet ./...
+          go test -race ./...
+          shellcheck -S warning install.sh
+      - name: Version
+        id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v0.1.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -23,14 +46,18 @@ jobs:
             mkdir -p "$out"
             for cmd in csa-hub csa-agent; do
               CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-                -ldflags "-s -w -X github.com/cstone1983/Claude-server-agent/internal/version.Version=${GITHUB_REF_NAME} -X github.com/cstone1983/Claude-server-agent/internal/version.Commit=${GITHUB_SHA::7}" \
+                -ldflags "-s -w -X github.com/cstone1983/Claude-server-agent/internal/version.Version=${TAG} -X github.com/cstone1983/Claude-server-agent/internal/version.Commit=${GITHUB_SHA::7}" \
                 -o "$out/$cmd" ./cmd/$cmd
             done
             tar -czf "dist/csa_linux_${arch}.tar.gz" -C "$out" csa-hub csa-agent
           done
-          (cd dist && sha256sum csa_linux_*.tar.gz > checksums.txt)
           cp install.sh dist/
+          (cd dist && sha256sum csa_linux_*.tar.gz install.sh > checksums.txt)
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.v.outputs.tag }}
           files: dist/*
           generate_release_notes: true
+          make_latest: true

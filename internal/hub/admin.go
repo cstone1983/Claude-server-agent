@@ -64,6 +64,47 @@ func (h *Hub) adminHandler() http.Handler {
 		h.audit.Write(audit.Entry{Event: "server_removed", Server: name})
 		writeJSON(w, http.StatusOK, map[string]string{"removed": name})
 	})
+	mux.HandleFunc("POST /servers/{name}/rename", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			NewName string `json:"new_name"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		oldName := r.PathValue("name")
+		if !nameRE.MatchString(req.NewName) {
+			http.Error(w, "invalid name (letters, digits, . _ -; max 63)", http.StatusBadRequest)
+			return
+		}
+		rules := 0
+		err := h.store.Update(func(d *stateData) error {
+			var target *AgentRec
+			for _, a := range d.Agents {
+				if a.Name == req.NewName && req.NewName != oldName {
+					return errors.New("another server is already called " + req.NewName)
+				}
+				if a.Name == oldName {
+					target = a
+				}
+			}
+			if target == nil {
+				return errors.New("no such server " + oldName)
+			}
+			target.Name = req.NewName
+			// Keep "always allow" rules that were scoped to this server.
+			for _, rl := range d.Rules {
+				if rl.Scope == "server:"+oldName {
+					rl.Scope = "server:" + req.NewName
+					rules++
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		h.audit.Write(audit.Entry{Event: "server_renamed", Server: req.NewName, Detail: map[string]any{"old_name": oldName, "rules_moved": rules}})
+		writeJSON(w, http.StatusOK, map[string]any{"old_name": oldName, "name": req.NewName, "rules_moved": rules})
+	})
 	mux.HandleFunc("POST /servers/{name}/tags", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Tags []string `json:"tags"`

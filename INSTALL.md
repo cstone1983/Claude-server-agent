@@ -296,14 +296,46 @@ In n8n, add an **HTTP Request** node:
 
 ## Part 6 — Upgrade, uninstall, troubleshooting
 
-### Upgrade
+### Updates (only when you say so)
 
-Re-run the same installer on each machine. A join token isn't needed again.
+Every change merged into `main` on GitHub is tested and published as a new
+release (`v0.1.N`). **Nothing updates automatically.** The hub checks GitHub
+once an hour. When a server runs an older version, `list_servers` shows
+**UPDATE AVAILABLE**, and Claude will mention it to you.
+
+To update, use either of these:
+- **Ask Claude**, e.g. *"update web01"* or *"update all servers"*. Claude
+  runs `update_server`. It installs only official releases and is told to do
+  so only after you say to. The update runs in the background, and the agent
+  reconnects within about a minute. Updating the hub machine briefly
+  disconnects the connector.
+- **On the machine itself:**
+  ```bash
+  sudo csa-update --check      # is an update available?
+  sudo csa-update              # update now (verifies checksums, keeps config, restarts services)
+  ```
+
+To stop Claude from triggering updates on a server, add
+`disable_remote_update: true` to that server's `/etc/csa/policy.yaml`.
+Claude can still check for updates there.
+
+Servers installed before update support existed need the installer re-run
+once to get `csa-update`:
 ```bash
 curl -fsSL -o install.sh https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh
 sudo ./install.sh hub      # on the hub (keeps the config)
 sudo ./install.sh agent    # on servers (keeps enrollment and policy)
 ```
+
+### Friendly server names
+
+The name Claude uses for a server defaults to its hostname. To rename it,
+run this on the hub:
+```bash
+sudo csa-hub servers                 # current names
+sudo csa-hub rename Ubuntu n8n       # takes effect immediately; no reinstall
+```
+"Always allow" rules that were scoped to the old name move to the new one.
 
 ### Move a server to another hub, or re-enroll it
 

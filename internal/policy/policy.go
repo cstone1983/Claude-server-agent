@@ -76,6 +76,9 @@ type File struct {
 	AcceptHubRules *bool `yaml:"accept_hub_rules,omitempty"`
 	// DisableBuiltinRead turns off the built-in read-only command list.
 	DisableBuiltinRead bool `yaml:"disable_builtin_read,omitempty"`
+	// DisableRemoteUpdate stops update_server from installing updates on this
+	// server (checking is still allowed).
+	DisableRemoteUpdate bool `yaml:"disable_remote_update,omitempty"`
 }
 
 // Action is something the agent has been asked to do.
@@ -200,6 +203,13 @@ func (p *Policy) Snapshot() map[string]any {
 		"builtin_deny":      builtinDeny,
 		"builtin_sensitive": builtinSensitive,
 	}
+}
+
+// RemoteUpdateAllowed reports whether update_server may install updates.
+func (p *Policy) RemoteUpdateAllowed() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return !p.local.DisableRemoteUpdate
 }
 
 func (p *Policy) acceptHub() bool {
