@@ -1,5 +1,6 @@
 {{define "content"}}
-<div class="page-head"><div><h1>Approvals</h1><p>Actions waiting for your OK. Identical requests across servers are grouped.</p></div></div>
+<div class="page-head"><div><h1>Approvals</h1><p>Actions waiting for your OK. Identical requests across servers are grouped. New requests appear automatically.</p></div></div>
+<div data-live>
 {{if .D.Groups}}
 <form method="post">
 <label class="check"><input type="checkbox" data-check-all checked> Select all</label>
@@ -29,6 +30,7 @@
 </div>
 </form>
 {{else}}<div class="card empty">Nothing is waiting for approval. ✓</div>{{end}}
+</div>
 
 {{if .D.Recent}}
 <h2 style="margin-top:1.6rem">Recent decisions</h2>

@@ -74,6 +74,8 @@ var builtinRead = []Rule{
 	{ID: "builtin:smartctl", Argv: []string{"smartctl", "-a|-H|-i|-x|--all|--health|--info|--xall", "**"}},
 	{ID: "builtin:zpool", Argv: []string{"zpool", "status|list|iostat", "**"}},
 	{ID: "builtin:zfs", Argv: []string{"zfs", "list|get", "**"}},
+	{ID: "builtin:lvm", Argv: []string{"lvs|vgs|pvs", "**"}},
+	{ID: "builtin:smartctl-scan", Argv: []string{"smartctl", "--scan|--scan-open"}},
 	{ID: "builtin:mount", Argv: []string{"mount"}},
 	{ID: "builtin:findmnt", Argv: []string{"findmnt", "**"}},
 	{ID: "builtin:crontab", Argv: []string{"crontab", "-l", "**"}},
