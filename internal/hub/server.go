@@ -30,6 +30,7 @@ type Hub struct {
 	codes    *codeStore
 	limiter  *limiter
 	releases *releaseWatcher
+	sess     *sessions
 }
 
 func New(cfg *Config) (*Hub, error) {
@@ -48,6 +49,7 @@ func New(cfg *Config) (*Hub, error) {
 		codes:    &codeStore{m: map[string]*authCode{}},
 		limiter:  newLimiter(10, 15*time.Minute),
 		releases: newReleaseWatcher(),
+		sess:     &sessions{m: map[string]time.Time{}},
 	}, nil
 }
 
@@ -132,6 +134,10 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("/agent/connect", h.handleAgentConnect)
 
 	mux.HandleFunc("/approve/", h.handleApprovePage)
+	mux.HandleFunc("/login", h.handleLogin)
+	mux.HandleFunc("/logout", h.handleLogout)
+	mux.HandleFunc("/approvals", h.handleApprovals)
+	mux.HandleFunc("/rules", h.handleRules)
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/servers", func(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,8 @@ button{flex:1;padding:12px;font-size:1rem;border:0;border-radius:8px;cursor:poin
 .err{background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px}
 .ok{background:#dcfce7;color:#166534;padding:10px;border-radius:8px}
 .meta{color:#57534e;font-size:.9rem}
+.card{border:1px solid #e7e5e4;border-radius:10px;padding:12px;margin:12px 0}
+main{max-width:720px}
 .check{display:flex;gap:8px;align-items:center;margin-top:14px;font-weight:400}
 `
 
@@ -44,6 +46,7 @@ var loginTmpl = template.Must(template.Must(template.New("login").Parse(base)).P
 var approveTmpl = template.Must(template.Must(template.New("approve").Parse(base)).Parse(`
 {{define "title"}}Approve action on {{.A.Server}}{{end}}
 {{define "body"}}
+<p class="meta"><a href="/approvals">Review all pending approvals →</a></p>
 <h1>Approve action on <b>{{.A.Server}}</b>?</h1>
 <p class="meta">Requested by {{.A.Caller}} · {{.A.CreatedAt.Format "2006-01-02 15:04:05 MST"}} · status: <b>{{.A.Status}}</b></p>
 <pre>{{.A.Summary}}</pre>
@@ -83,3 +86,101 @@ func renderTemplate(w http.ResponseWriter, status int, t *template.Template, dat
 func renderPage(w http.ResponseWriter, status int, title, msg string, _ any) {
 	renderTemplate(w, status, msgTmpl, map[string]string{"Title": title, "Msg": msg})
 }
+
+const dashNav = `<p class="meta"><a href="/approvals">Approvals</a> · <a href="/rules">Allow rules</a> · <a href="/logout">Log out</a></p>`
+
+var dashLoginTmpl = template.Must(template.Must(template.New("dlogin").Parse(base)).Parse(`
+{{define "title"}}Claude Server Agent — log in{{end}}
+{{define "body"}}
+<h1>Log in</h1>
+<p>Review approvals and manage allow rules for all servers. You stay logged in for 12 hours.</p>
+{{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+<form method="post" autocomplete="off">
+<input type="hidden" name="next" value="{{.Next}}">
+<label for="password">Admin password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+<label for="code">Authenticator code</label>
+<input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required>
+<div class="row"><button class="primary">Log in</button></div>
+</form>
+{{end}}`))
+
+var dashApprovalsTmpl = template.Must(template.Must(template.New("dappr").Funcs(template.FuncMap{"first": func(a []Approval) Approval { return a[0] }}).Parse(base)).Parse(`
+{{define "title"}}Approvals — Claude Server Agent{{end}}
+{{define "body"}}
+` + dashNav + `
+<h1>Pending approvals</h1>
+{{if .Done}}<p class="ok">{{.Done}}</p>{{end}}
+{{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+{{if .Groups}}
+<form method="post">
+{{range .Groups}}
+<div class="card">
+{{if eq .Tool "request_rule"}}<p class="meta"><b>Rule request</b> — Claude asks to always allow:</p>{{end}}
+<pre>{{.Summary}}</pre>
+{{if .Reason}}<p class="meta">Reason: {{.Reason}}</p>{{end}}
+{{if ne .Tool "request_rule"}}<p class="meta">{{.Why}} · rule if always allowed: <code>{{.Rule}}</code></p>{{end}}
+{{range .Approvals}}<label class="check"><input type="checkbox" name="id" value="{{.ID}}" checked> {{.Server}} <span class="meta">· {{.Caller}} · {{.CreatedAt.Format "15:04"}}</span></label>{{end}}
+</div>
+{{end}}
+<label for="scope">"Approve + always allow" applies to</label>
+<select id="scope" name="scope">
+<option value="all">all servers</option>
+<option value="server">only the server(s) each action came from</option>
+</select>
+<div class="row">
+<button class="primary" name="action" value="always">Approve + always allow</button>
+<button class="secondary" name="action" value="approve">Approve once</button>
+<button class="danger" name="action" value="deny">Deny</button>
+</div>
+<p class="meta">Rule requests from Claude are added with the servers they name when approved (either button).</p>
+</form>
+{{else}}
+<p>Nothing is waiting for approval.</p>
+{{end}}
+{{if .Recent}}<h1 style="margin-top:28px">Recent</h1>
+{{range .Recent}}<p class="meta"><b>{{.Status}}</b> · {{.Server}} · {{.Summary}}</p>{{end}}{{end}}
+{{end}}`))
+
+var dashRulesTmpl = template.Must(template.Must(template.New("drules").Parse(base)).Parse(`
+{{define "title"}}Allow rules — Claude Server Agent{{end}}
+{{define "body"}}
+` + dashNav + `
+<h1>Always-allowed actions</h1>
+{{if .Done}}<p class="ok">{{.Done}}</p>{{end}}
+{{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+<form method="post" autocomplete="off">
+<input type="hidden" name="op" value="add">
+<label for="kind">Allow</label>
+<select id="kind" name="kind">
+<option value="command">a command</option>
+<option value="script">an exact shell script</option>
+<option value="write">writing files under a path</option>
+<option value="read">reading a sensitive file/path</option>
+</select>
+<label for="value">Command, script or path</label>
+<input id="value" name="value" type="text" placeholder="systemctl restart nginx   ·   /srv/app/config/**" required>
+<label class="check"><input type="checkbox" name="any_args" value="1"> also allow any extra arguments after the command</label>
+<label for="scope">On</label>
+<select id="scope" name="scope">
+<option value="all">all servers</option>
+{{range .Servers}}<option value="server:{{.}}">{{.}}</option>{{end}}
+{{range .Tags}}<option value="tag:{{.}}">servers tagged “{{.}}”</option>{{end}}
+</select>
+<label for="as">Run as user (optional, default root)</label>
+<input id="as" name="as" type="text" placeholder="root">
+<label for="comment">Note (optional)</label>
+<input id="comment" name="comment" type="text">
+<div class="row"><button class="primary">Add rule</button></div>
+</form>
+<p class="meta">Built in (no rule needed): read-only commands such as df, ps, systemctl status, journalctl, docker ps, and apt update. Each server's own /etc/csa/policy.yaml can add more, and its deny rules always win.</p>
+<h1 style="margin-top:28px">Current rules</h1>
+{{if .Rules}}{{range .Rules}}
+<form method="post" class="card">
+<input type="hidden" name="op" value="delete"><input type="hidden" name="rule_id" value="{{.ID}}">
+<pre>{{.Text}}</pre>
+<p class="meta">on {{.ScopeText}} · added {{.CreatedAt.Format "2006-01-02 15:04"}}{{if .Rule.Comment}} · {{.Rule.Comment}}{{end}}</p>
+<div class="row"><button class="danger">Remove</button></div>
+</form>
+{{end}}{{else}}<p>No rules yet.</p>{{end}}
+{{end}}`))

@@ -163,6 +163,19 @@ var All = []Def{
 		Required:    []string{"approval_id"},
 	},
 	{
+		Name: "request_rule", Title: "Request an allow rule", HubOnly: true,
+		Description: "Ask the user to always allow a command (or exact script / writable path) so it runs without approval from now on. Nothing changes until the user approves it on the hub's approvals page (they can approve several requests at once). Use this when the user wants something whitelisted, or for routine actions they keep approving. Returns an approval_id; call check_approval to see the result.",
+		Props: map[string]Prop{
+			"kind":     {Type: "string", Desc: "What to allow (default command).", Enum: []string{"command", "script", "write", "read"}},
+			"value":    {Type: "string", Desc: `The command line (e.g. "systemctl restart nginx"), exact bash script, or absolute path glob (e.g. "/srv/app/config/**").`},
+			"any_args": {Type: "boolean", Desc: "For commands: also allow any extra arguments after the given ones."},
+			"servers":  {Type: "string", Desc: `Where the rule applies: "all" (default), a server name, or "tag:<tag>".`},
+			"as":       {Type: "string", Desc: `User the command may run as (default root).`},
+			"reason":   {Type: "string", Desc: "Why this should be allowed; shown to the user."},
+		},
+		Required: []string{"value"},
+	},
+	{
 		Name: "system_info", Title: "System info", ReadOnly: true,
 		Description: "Overview of a server: OS, kernel, uptime, load, CPU, memory, disks, IPs, pending updates, reboot-required and failed systemd units.",
 	},
