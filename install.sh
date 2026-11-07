@@ -145,28 +145,30 @@ install_bin() {
 
 is_proxmox() { [ -d /etc/pve ] || command -v pveversion >/dev/null 2>&1; }
 
-# On a Proxmox VE host every change needs approval (nothing is blocked; it is
-# a double check, not a limit): hub "always allow" rules and the built-in
-# allow list are ignored there. This file lives only on the host, so the hub
-# cannot change it.
+# On a Proxmox VE host the installer writes a careful-mode policy: reads and
+# backup work run freely, every other change needs approval (approving with
+# "always allow" for this server whitelists it), and the built-in allow list
+# (apt upgrade) is off. The hub also skips "all servers" rules for servers
+# tagged proxmox. This file lives only on the host: the hub cannot change it.
 write_proxmox_policy() {
   cat > /etc/csa/policy.yaml <<'PVE'
 # Claude Server Agent: local policy for a PROXMOX VE HOST (careful mode).
 #
 # - Read-only commands run without asking, so Claude can check before and
 #   after every change.
-# - EVERY change needs your approval, every time. "Always allow" rules from the
-#   hub are ignored here (accept_hub_rules: false), so an approval given for
-#   other servers never applies to this host.
-# - Nothing is blocked outright. To block something permanently, add a deny
-#   rule, e.g.:
+# - Backup work runs freely: running backups (vzdump) and creating or editing
+#   backup jobs. Deleting jobs or pruning backups still asks.
+# - Any other change needs your approval. "Approve + always allow" for this
+#   server (or tag:proxmox) whitelists it from then on.
+# - Rules approved for ALL servers are not applied here (keep the tag
+#   "proxmox" on this server), and apt upgrade is not automatic.
+# - Nothing is blocked outright. To block something permanently, add e.g.:
 #     deny:
 #       - argv: ["qm|pct", "destroy", "**"]
 #
 # Check a command:  csa-agent check -- qm list
 # After editing:    systemctl reload csa-agent
 
-accept_hub_rules: false
 disable_builtin_allow: true
 
 read:
@@ -187,13 +189,18 @@ read:
   - id: pve-lvm-read
     argv: ["lvs|vgs|pvs", "**"]
 
-allow: []
+allow:
+  - id: pve-backup-run
+    argv: ["vzdump", "**"]
+  - id: pve-backup-jobs
+    argv: ["pvesh", "create|set", "/cluster/backup|/cluster/backup/*", "**"]
+
 deny: []
 
 sensitive_paths: ["/etc/pve/priv/**", "/etc/pve/**/*.key", "/etc/pve/**/*.pem", "/root/.config/rclone/**"]
 PVE
   chmod 0644 /etc/csa/policy.yaml
-  say "Proxmox VE detected: careful mode (every change needs your approval)"
+  say "Proxmox VE detected: careful-mode policy installed (see /etc/csa/policy.yaml)"
 }
 
 write_default_policy() {

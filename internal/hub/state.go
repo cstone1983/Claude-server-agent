@@ -84,10 +84,14 @@ type HubRule struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
+// carefulTag marks servers (Proxmox hosts) that only get rules approved for
+// them specifically: "all servers" rules are not applied there.
+const carefulTag = "proxmox"
+
 func (r *HubRule) appliesTo(a *AgentRec) bool {
 	switch {
 	case r.Scope == "all":
-		return true
+		return !a.HasTag(carefulTag)
 	case len(r.Scope) > 7 && r.Scope[:7] == "server:":
 		return r.Scope[7:] == a.Name
 	case len(r.Scope) > 4 && r.Scope[:4] == "tag:":

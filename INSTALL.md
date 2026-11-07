@@ -259,9 +259,13 @@ when it exists.
 
 The installer detects Proxmox and writes a **careful-mode** policy:
 - Read-only commands (`qm list`, `qm config`, `pvesm status`, `pvesh get`, …)
-  run freely.
-- **Every change needs your approval, every time.**
-- "Always allow" rules from the hub are ignored on this host.
+  run freely, so Claude can verify everything before and after a change.
+- Backup work runs freely: running backups (`vzdump`) and creating or editing
+  backup jobs.
+- Any other change needs your approval. "Approve + always allow" for this
+  server (or `tag:proxmox`) whitelists it from then on.
+- Rules approved for **all servers** are not applied to servers tagged
+  `proxmox`. Keep that tag on the host.
 - Nothing is blocked outright. To block something for good, add a `deny` rule
   to `/etc/csa/policy.yaml` and run `systemctl reload csa-agent`.
 

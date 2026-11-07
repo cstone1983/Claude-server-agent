@@ -8,9 +8,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestProxmoxPolicy checks the protective policy that install.sh writes on
-// Proxmox VE hosts: reads run freely, every change needs approval, and hub
-// "always allow" rules never apply.
+// TestProxmoxPolicy checks the careful-mode policy that install.sh writes on
+// Proxmox VE hosts: reads and backup work run freely, other changes need
+// approval unless a hub rule (scoped to this host) allows them.
 func TestProxmoxPolicy(t *testing.T) {
 	raw, err := os.ReadFile("../../install.sh")
 	if err != nil {
@@ -29,7 +29,7 @@ func TestProxmoxPolicy(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(body), &f); err != nil {
 		t.Fatalf("Proxmox policy is not valid YAML: %v", err)
 	}
-	hub := []Rule{{ID: "hub-all", Argv: []string{"systemctl", "restart", "**"}}}
+	hub := []Rule{{ID: "hub-proxmox", Argv: []string{"qm", "snapshot", "**"}}}
 	p := New(f, hub)
 
 	cases := []struct {
@@ -43,10 +43,14 @@ func TestProxmoxPolicy(t *testing.T) {
 		{[]string{"df", "-h"}, TierRead},
 		{[]string{"qm", "destroy", "100"}, TierElevated},
 		{[]string{"qm", "stop", "102"}, TierElevated},
-		{[]string{"vzdump", "102"}, TierElevated},
-		{[]string{"pvesh", "create", "/cluster/backup"}, TierElevated},
-		{[]string{"apt-get", "upgrade", "-y"}, TierElevated},   // built-in allow is off
-		{[]string{"systemctl", "restart", "x"}, TierElevated}, // hub rule ignored
+		{[]string{"vzdump", "102", "--storage", "nas"}, TierAllowed},
+		{[]string{"pvesh", "create", "/cluster/backup", "--schedule", "02:00"}, TierAllowed},
+		{[]string{"pvesh", "set", "/cluster/backup/job-1", "--enabled", "0"}, TierAllowed},
+		{[]string{"pvesh", "delete", "/cluster/backup/job-1"}, TierElevated},
+		{[]string{"pvesm", "prune-backups", "local"}, TierElevated},
+		{[]string{"qm", "snapshot", "102", "pre"}, TierAllowed}, // hub rule for this host applies
+		{[]string{"apt-get", "upgrade", "-y"}, TierElevated},    // built-in allow is off
+		{[]string{"systemctl", "restart", "x"}, TierElevated},
 	}
 	for _, c := range cases {
 		if got := p.Classify(Action{Kind: "exec", Argv: c.argv}).Tier; got != c.want {

@@ -94,27 +94,36 @@ usage in [README.md](README.md).
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
 
-## Proxmox host: careful mode (the user's request: "it's critical, no mistakes")
+## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
-The installer detects Proxmox and writes a local policy:
+**What the user means:** anything that can be verified before running a
+command must be verified and double-checked. This holds on every server,
+strictest on Proxmox. The same rule is in the connector's built-in
+instructions (`internal/hub/server.go`), so every Claude chat gets it.
+
+**The installer detects Proxmox and writes a local policy:**
 - read-only commands run freely;
-- **every change needs approval, every time**;
-- hub "always allow" rules are ignored;
-- nothing is hard-blocked (the user wants caution, not limits).
+- backup work runs freely (`vzdump`, `pvesh create|set /cluster/backup…`);
+- every other change asks, and "always allow" for this server whitelists it;
+- `apt upgrade` is not automatic;
+- nothing is hard-blocked.
 
-Claude's double-check routine for **any** change on Proxmox:
-1. **Look first.** Read the current state with `qm config <id>`,
-   `qm status <id>`, `pvesh get …` and `pvesm status`. Confirm the VMID
-   matches the VM *name* the user means; never act on a VMID from memory.
-2. **Say exactly what will happen** before asking: the exact command, which
-   VMs and storage it touches, the expected downtime, and how to undo it.
-   Mention anything irreversible.
+**The hub never applies "all servers" rules to servers tagged `proxmox`.**
+Only rules scoped to them by name or tag apply.
+
+**Routine for any change on Proxmox:**
+1. **Look first.** Read the current state with `qm list` / `qm config <id>`,
+   `pvesh get …` and `pvesm status`. Confirm the VMID matches the VM *name*
+   the user means; never act on a VMID from memory.
+2. **Say exactly what will happen:** the exact command, which VMs and storage
+   it touches, the expected downtime and how to undo it. Flag anything
+   irreversible.
 3. **Make it reversible where possible.** Take a snapshot or backup before
-   risky VM changes, and have a fresh backup before deleting old ones.
-4. **One change at a time.** No batching of changes across VMs on Proxmox.
-5. **Verify afterwards** with the same read commands, and report the result.
-6. **Ask the user** if anything looks different from what was expected.
-   Never retry or try a workaround on your own.
+   risky VM changes; have a fresh backup before deleting old ones.
+4. **One change at a time,** then verify with the same read commands and
+   report the result.
+5. **Stop and ask** if anything looks different from what was expected.
+   Never improvise a workaround.
 
 ## How things work (gotchas learned)
 
