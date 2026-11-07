@@ -1,0 +1,42 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Servers</h1><p>Rename, tag, update or remove servers, and add new ones.</p></div></div>
+
+<details class="card add"{{if .D.Join}} open{{end}}>
+<summary><span class="btn primary sm">+ Add a server</span></summary>
+{{if .D.Join}}
+<p class="secondary-text small" style="margin-top:.8rem">Run this <b>as one line</b> on the new server (valid until <time datetime="{{iso .D.Join.Expires}}">{{iso .D.Join.Expires}}</time>, {{.D.Join.Uses}} use(s)). It asks for a friendly name at the end.</p>
+<div class="copybox"><pre id="joincmd">{{.D.Join.Command}}</pre><button class="btn sm" type="button" data-copy="joincmd">Copy</button></div>
+{{end}}
+<form method="post" style="margin-top:.6rem">
+<input type="hidden" name="op" value="join">
+<div class="form-row">
+  <div><label for="uses">Servers it can add</label><input id="uses" name="uses" type="text" value="1"></div>
+  <div><label for="ttl">Valid for (minutes)</label><input id="ttl" name="ttl" type="text" value="60"></div>
+  <div><label for="jtags">Tags (optional)</label><input id="jtags" name="tags" type="text" placeholder="web,prod"></div>
+  <div><button class="btn">Create install command</button></div>
+</div>
+</form>
+</details>
+
+<div class="card" style="margin-top:1rem">
+<div class="toolbar"><input type="search" placeholder="Search servers…" data-filter="servers-table"></div>
+<div class="table-wrap"><table id="servers-table">
+<thead><tr><th>Server</th><th>Tags</th><th>System</th><th>Agent</th><th>Last seen</th><th></th></tr></thead>
+<tbody>
+{{range .D.Servers}}<tr>
+  <td class="nowrap"><span class="dot {{if .Online}}on{{else}}off{{end}}"></span><b>{{.Name}}</b><div class="muted small">{{.Hostname}}</div></td>
+  <td><form method="post" class="inline-form"><input type="hidden" name="op" value="tags"><input type="hidden" name="name" value="{{.Name}}">
+      <input type="text" name="tags" value="{{join .Tags ","}}" placeholder="no tags" size="14"><button class="btn sm">Save</button></form></td>
+  <td class="small">{{.OS}}<div class="muted">{{.Arch}}</div></td>
+  <td class="nowrap">{{.Version}}{{if .UpdateAvailable}}<div><span class="chip warn">{{.Latest}} available</span></div>{{end}}</td>
+  <td class="nowrap muted small">{{if .Online}}online{{else}}<time datetime="{{.LastSeen}}" data-fmt="rel">{{.LastSeen}}</time>{{end}}</td>
+  <td class="actions">
+    {{if and .Online .UpdateAvailable}}<form method="post"><input type="hidden" name="op" value="update"><input type="hidden" name="name" value="{{.Name}}"><button class="btn sm primary">Update</button></form>{{end}}
+    <form method="post" class="inline-form" style="display:inline-flex"><input type="hidden" name="op" value="rename"><input type="hidden" name="name" value="{{.Name}}">
+      <input type="text" name="new_name" placeholder="new name" size="10" required><button class="btn sm">Rename</button></form>
+    <form method="post" data-confirm="Remove {{.Name}} from the hub? Its agent will be disconnected (uninstall it on the server too)."><input type="hidden" name="op" value="remove"><input type="hidden" name="name" value="{{.Name}}"><button class="btn sm danger">Remove</button></form>
+  </td>
+</tr>{{else}}<tr><td colspan="6" class="empty">No servers yet.</td></tr>{{end}}
+</tbody></table></div>
+</div>
+{{end}}

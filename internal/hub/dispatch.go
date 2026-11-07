@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -120,9 +121,14 @@ func (h *Hub) invokeOne(ctx context.Context, caller Caller, agent *AgentRec, too
 	snap, _ := h.appr.snapshot(ap.ID)
 	switch snap.Status {
 	case StatusApproved:
-		res, _, err := h.executeApproved(ctx, ap.ID, caller.maxTier())
+		res, st, err := h.executeApproved(ctx, ap.ID, caller.maxTier())
 		if err != nil {
 			sr.Error = "approved, but running it failed: " + err.Error() + ". Retry with check_approval approval_id=" + ap.ID
+			return sr
+		}
+		if res == nil && st == StatusExecuting {
+			sr.Pending = true
+			sr.Text = "Approved by the user and now running. Call check_approval with approval_id=" + strconv.Quote(ap.ID) + " to get the result."
 			return sr
 		}
 		sr = fromResult(sr, res)
@@ -251,8 +257,6 @@ func (h *Hub) checkApproval(ctx context.Context, caller Caller, id string) Outco
 		return Outcome{Text: "The user denied: " + snap.Summary, IsError: true}
 	case StatusExpired:
 		return Outcome{Text: "This approval expired. Run the action again to request a new one.", IsError: true}
-	case StatusExecuting:
-		return Outcome{Text: "Approved; the action is running now. Call check_approval again shortly."}
 	}
 	res, st, err := h.executeApproved(ctx, id, caller.maxTier())
 	if err != nil {
@@ -260,6 +264,9 @@ func (h *Hub) checkApproval(ctx context.Context, caller Caller, id string) Outco
 		return Outcome{Text: "Approved, but running it failed: " + err.Error(), IsError: true}
 	}
 	if res == nil {
+		if st == StatusExecuting {
+			return Outcome{Text: "Approved; the action is still running on " + snap.Server + ". Call check_approval again in a minute to get the result."}
+		}
 		return Outcome{Text: "approval status: " + st}
 	}
 	sr := fromResult(ServerResult{Server: snap.Server}, res)

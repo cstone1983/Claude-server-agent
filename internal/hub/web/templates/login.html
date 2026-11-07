@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Log in</h1>
+<p class="muted small">You stay logged in for {{.D.Hours}} hours on this browser.</p>
+<form method="post" autocomplete="off">
+<input type="hidden" name="next" value="{{.D.Next}}">
+<label for="password">Admin password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+<label for="code">Authenticator code</label>
+<input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required>
+<div class="btn-row"><button class="btn primary" style="width:100%">Log in</button></div>
+</form>
+{{end}}

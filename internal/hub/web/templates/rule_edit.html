@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Edit rule</h1><p><a href="/rules">← Back to rules</a></p></div></div>
+<div class="card" style="max-width:760px">
+<form method="post" action="/rules/edit" autocomplete="off">
+<input type="hidden" name="rule_id" value="{{.D.ID}}">
+<div class="form-row">
+  <div><label for="kind">Allow</label><select id="kind" name="kind">
+    <option value="command" {{if eq .D.Kind "command"}}selected{{end}}>a command</option>
+    <option value="script" {{if eq .D.Kind "script"}}selected{{end}}>an exact shell script</option>
+    <option value="write" {{if eq .D.Kind "write"}}selected{{end}}>writing files under a path</option>
+    <option value="read" {{if eq .D.Kind "read"}}selected{{end}}>reading a sensitive path</option></select></div>
+  <div><label for="scope">On</label><select id="scope" name="scope">
+    <option value="all" {{if eq .D.Scope "all"}}selected{{end}}>all servers</option>
+    {{range .D.Servers}}<option value="server:{{.}}" {{if eq $.D.Scope (printf "server:%s" .)}}selected{{end}}>{{.}}</option>{{end}}
+    {{range .D.Tags}}<option value="tag:{{.}}" {{if eq $.D.Scope (printf "tag:%s" .)}}selected{{end}}>tag: {{.}}</option>{{end}}</select></div>
+  <div><label for="as">Run as</label><input id="as" name="as" type="text" value="{{.D.As}}" placeholder="root"></div>
+</div>
+<label for="value">Command, script or path</label>
+{{if eq .D.Kind "script"}}<textarea id="value" name="value" rows="6">{{.D.Value}}</textarea>{{else}}<input id="value" name="value" type="text" value="{{.D.Value}}" required>{{end}}
+<label class="check"><input type="checkbox" name="any_args" value="1" {{if .D.AnyArgs}}checked{{end}}> also allow any extra arguments after the command</label>
+<label for="comment">Note</label><input id="comment" name="comment" type="text" value="{{.D.Comment}}">
+<label class="check"><input type="checkbox" name="disabled" value="1" {{if .D.Disabled}}checked{{end}}> disabled (the action needs approval again)</label>
+{{if .D.Complex}}<p class="notice err small">This rule uses advanced patterns that the form can't show exactly; saving will replace it with the plain command above.</p>{{end}}
+<div class="btn-row"><button class="btn primary">Save</button><a class="btn" href="/rules">Cancel</a></div>
+</form>
+</div>
+{{end}}

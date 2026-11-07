@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="page-head"><div><h1>Activity</h1><p>What ran where, and why it was allowed.</p></div></div>
+<div class="card">
+<form method="get" class="toolbar">
+  <select name="server">
+    <option value="">Hub events (logins, approvals, rules)</option>
+    {{range .D.Servers}}<option value="{{.}}" {{if eq $.D.Server .}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <select name="n">{{range .D.Sizes}}<option value="{{.}}" {{if eq $.D.N .}}selected{{end}}>last {{.}}</option>{{end}}</select>
+  <button class="btn sm">Show</button>
+  <input type="search" placeholder="Filter…" data-filter="activity-table" style="margin-left:auto">
+</form>
+{{if .D.Err}}<div class="notice err">{{.D.Err}}</div>{{end}}
+{{if .D.Entries}}
+<div class="table-wrap"><table id="activity-table">
+<thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Allowed by</th><th>Result</th></tr></thead><tbody>
+{{range .D.Entries}}<tr>
+  <td class="nowrap muted small"><time datetime="{{.Time}}">{{.Time}}</time></td>
+  <td><span class="chip {{.Class}}">{{.Event}}</span>{{if .Caller}}<div class="muted small">{{.Caller}}</div>{{end}}</td>
+  <td>{{if .Summary}}<code>{{.Summary}}</code>{{end}}{{if .Server}} <span class="muted small">{{.Server}}</span>{{end}}</td>
+  <td class="small">{{if .Tier}}<span class="chip">{{.Tier}}</span>{{end}}{{if .Rule}}<div class="muted">{{.Rule}}</div>{{end}}</td>
+  <td class="small nowrap">{{if .Exit}}exit {{.Exit}}{{end}}{{if .Error}}<span class="chip crit">{{.Error}}</span>{{end}}</td>
+</tr>{{end}}
+</tbody></table></div>
+{{else}}<div class="empty">No activity recorded.</div>{{end}}
+</div>
+{{end}}

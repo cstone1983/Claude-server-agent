@@ -333,7 +333,7 @@ func (e *Executor) sessionStart(call *proto.Call, a tools.SessionStartArgs, hash
 		entry.ApprovalID, entry.RuleID = d.RuleID, ""
 	}
 	e.audit.Write(entry)
-	out, exited, code := s.settle(waitDur(a.WaitSec, 10, 120), 1500*time.Millisecond)
+	out, exited, code := s.settle(waitDur(a.WaitSec, 10, 45), 1500*time.Millisecond)
 	return sessionResult(s, out, exited, code, false, fmt.Sprintf("session %s started (tier: %s)", s.ID, d.Tier))
 }
 
@@ -366,7 +366,7 @@ func (e *Executor) sessionSend(call *proto.Call, a tools.SessionSendArgs) *proto
 			return r
 		}
 	}
-	out, exited, code := s.settle(waitDur(a.WaitSec, 10, 300), 1500*time.Millisecond)
+	out, exited, code := s.settle(waitDur(a.WaitSec, 10, 45), 1500*time.Millisecond)
 	return sessionResult(s, out, exited, code, a.Screen, "")
 }
 

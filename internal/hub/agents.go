@@ -258,6 +258,9 @@ func (h *Hub) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 		switch env.Type {
 		case proto.TypeHello:
 			h.touch(id, env.Hello)
+			if h.metrics != nil {
+				go h.sampleOne(context.Background(), id)
+			}
 		case proto.TypeResult:
 			c.mu.Lock()
 			ch := c.pending[env.ID]
@@ -286,6 +289,9 @@ func (h *Hub) touch(id string, hello *proto.Hello) {
 
 var errNameTaken = errors.New("name taken")
 
+// errNotSent means the call never reached the agent, so it did not run.
+var errNotSent = errors.New("could not send to the agent")
+
 var errOffline = errors.New("server is offline (its agent is not connected to the hub)")
 
 // callAgent sends one call and waits for the result.
@@ -304,8 +310,12 @@ func (h *Hub) callAgent(ctx context.Context, agentID string, call *proto.Call) (
 		delete(c.pending, id)
 		c.mu.Unlock()
 	}()
-	if err := c.send(proto.Envelope{Type: proto.TypeCall, ID: id, Call: call}); err != nil {
-		return nil, fmt.Errorf("sending to agent: %w", err)
+	send := c.send
+	if h.testSend != nil {
+		send = func(env proto.Envelope) error { return h.testSend(c, env) }
+	}
+	if err := send(proto.Envelope{Type: proto.TypeCall, ID: id, Call: call}); err != nil {
+		return nil, fmt.Errorf("%w: %v", errNotSent, err)
 	}
 	timeout := time.Duration(h.cfg.CallTimeoutSec) * time.Second
 	select {
@@ -325,7 +335,7 @@ func (h *Hub) rulesFor(a *AgentRec) []policy.Rule {
 	var out []policy.Rule
 	h.store.View(func(d *stateData) {
 		for _, r := range d.Rules {
-			if r.appliesTo(a) {
+			if !r.Disabled && r.appliesTo(a) {
 				rule := r.Rule
 				rule.ID = r.ID
 				out = append(out, rule)

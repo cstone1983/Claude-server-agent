@@ -1,0 +1,45 @@
+{{define "layout"}}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="same-origin"><title>{{.Title}} · Server Agent</title>
+<link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}"><script src="/static/app.js?v={{.AssetVersion}}" defer></script></head>
+<body{{if .Refresh}} data-refresh="{{.Refresh}}"{{end}}>
+<div class="bg-glow"><div class="glow-3"></div></div>
+<button class="btn mobile-menu-toggle" data-menu-toggle aria-label="Menu">☰</button>
+<div class="sidebar-backdrop"></div>
+<div class="shell">
+<aside class="app-sidebar">
+  <div class="brand"><span class="brand-mark"></span><div>Server Agent<small>Control panel</small></div></div>
+  <nav class="nav">
+    <a href="/" class="{{if eq .Nav "overview"}}active{{end}}">Overview</a>
+    <a href="/approvals" class="{{if eq .Nav "approvals"}}active{{end}}">Approvals{{if .Pending}}<span class="badge">{{.Pending}}</span>{{end}}</a>
+    <a href="/rules" class="{{if eq .Nav "rules"}}active{{end}}">Rules</a>
+    <a href="/servers" class="{{if eq .Nav "servers"}}active{{end}}">Servers</a>
+    <a href="/activity" class="{{if eq .Nav "activity"}}active{{end}}">Activity</a>
+  </nav>
+  <div class="sidebar-foot">
+    <a href="#" data-theme-toggle>◐ Light / dark</a>
+    <a href="/logout">Log out</a>
+    <span>{{.Version}}</span>
+  </div>
+</aside>
+<main class="main-content">
+{{if .Done}}<div class="notice ok">{{.Done}}</div>{{end}}
+{{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
+{{template "content" .}}
+</main>
+</div>
+</body></html>{{end}}
+
+{{define "auth"}}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="same-origin"><title>{{.Title}} · Server Agent</title>
+<link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}"><script src="/static/app.js?v={{.AssetVersion}}" defer></script></head>
+<body><div class="bg-glow"><div class="glow-3"></div></div>
+<div class="auth"><div class="card">
+<div class="brand" style="padding-left:0"><span class="brand-mark"></span><div>Server Agent<small>Control panel</small></div></div>
+{{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
+{{if .Done}}<div class="notice ok">{{.Done}}</div>{{end}}
+{{template "content" .}}
+</div></div></body></html>{{end}}
+
+{{define "spark"}}{{.}}{{end}}

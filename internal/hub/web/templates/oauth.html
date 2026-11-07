@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Connect “{{.D.Client}}”</h1>
+<p class="secondary-text small">This gives <b>{{.D.Client}}</b> (returning to <b>{{.D.RedirectHost}}</b>) access to all servers on this hub. Actions that aren't read-only or allowlisted still need your approval.</p>
+<form method="post" autocomplete="off">
+{{range $k, $v := .D.Params}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+<label for="password">Admin password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+<label for="code">Authenticator code</label>
+<input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required>
+<div class="btn-row"><button class="btn primary" name="action" value="allow">Allow access</button><button class="btn" name="action" value="deny" formnovalidate>Cancel</button></div>
+</form>
+{{end}}

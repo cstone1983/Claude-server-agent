@@ -48,6 +48,8 @@ type Approval struct {
 	RuleScope string `json:"rule_scope,omitempty"`
 
 	decided chan struct{}
+	ran     chan struct{} // closed when an approved action finished running
+	lastErr string
 }
 
 type approvals struct {
@@ -183,7 +185,7 @@ func (h *Hub) proposeRule(caller Caller, r policy.Rule, scope, reason string) *A
 	id := randomToken("apr_", 12)
 	ap := &Approval{
 		ID: id, Server: scopeLabel(scope), Tool: "request_rule", Caller: caller.Name, Kind: "rule", RuleScope: scope,
-		Summary: r.String() + "\non " + scopeLabel(scope), Why: "Claude asked to allow this without approval from now on",
+		Summary: r.Describe() + "\non " + scopeLabel(scope), Why: "Claude asked to allow this without approval from now on",
 		Reason: reason, Suggested: r, Status: StatusPending, CreatedAt: time.Now().UTC(),
 		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}),
 	}
@@ -282,6 +284,13 @@ func (h *Hub) executeApproved(ctx context.Context, id string, maxTier string) (*
 		res := ap.Result
 		h.appr.mu.Unlock()
 		return res, StatusExecuted, nil
+	case StatusExecuting:
+		ran := ap.ran
+		h.appr.mu.Unlock()
+		if ran == nil {
+			return nil, StatusExecuting, nil
+		}
+		return h.awaitApproved(ctx, ap, ran, executeWait)
 	case StatusApproved:
 		ap.Status = StatusExecuting
 	default:
@@ -291,18 +300,52 @@ func (h *Hub) executeApproved(ctx context.Context, id string, maxTier string) (*
 	}
 	call := &proto.Call{Tool: ap.Tool, Args: ap.Args, Caller: ap.Caller, MaxTier: maxTier, Approval: &proto.Approval{ID: ap.ID, ActionHash: ap.Hash}}
 	agentID := ap.AgentID
+	ap.ran = make(chan struct{})
+	ran := ap.ran
 	h.appr.mu.Unlock()
 
-	res, err := h.callAgent(ctx, agentID, call)
+	// Run detached from the caller: a client that stops waiting (tool-call
+	// timeouts are about a minute) must not abort the action or let it run
+	// twice. The result is kept for the next check_approval.
+	go func() {
+		defer close(ran)
+		res, err := h.callAgent(context.Background(), agentID, call)
+		h.appr.mu.Lock()
+		defer h.appr.mu.Unlock()
+		switch {
+		case err == nil:
+			ap.Status, ap.Result = StatusExecuted, res
+		case errors.Is(err, errOffline) || errors.Is(err, errNotSent):
+			ap.Status = StatusApproved // never reached the server: allow a retry
+			ap.lastErr = err.Error()
+		default:
+			// It may have run (e.g. the agent disconnected mid-way): don't run it again.
+			ap.Status = StatusExecuted
+			ap.Result = &proto.Result{Error: "approved, but the result was lost: " + err.Error() + ". Check the server (e.g. its audit_log) before retrying."}
+		}
+	}()
+	return h.awaitApproved(ctx, ap, ran, executeWait)
+}
+
+// executeWait is how long a caller waits for an approved action before
+// getting "still running" (kept under typical tool-call timeouts).
+var executeWait = 40 * time.Second
+
+func (h *Hub) awaitApproved(ctx context.Context, ap *Approval, ran chan struct{}, wait time.Duration) (*proto.Result, string, error) {
+	select {
+	case <-ran:
+	case <-time.After(wait):
+	case <-ctx.Done():
+	}
 	h.appr.mu.Lock()
 	defer h.appr.mu.Unlock()
-	if err != nil {
-		ap.Status = StatusApproved // allow retry, e.g. if the server was offline
-		return nil, StatusApproved, err
+	switch ap.Status {
+	case StatusExecuted:
+		return ap.Result, StatusExecuted, nil
+	case StatusApproved:
+		return nil, StatusApproved, errors.New(ap.lastErr)
 	}
-	ap.Status = StatusExecuted
-	ap.Result = res
-	return res, StatusExecuted, nil
+	return nil, ap.Status, nil
 }
 
 func truncate(s string, n int) string {

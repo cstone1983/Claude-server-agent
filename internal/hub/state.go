@@ -79,6 +79,9 @@ type HubRule struct {
 	Rule       policy.Rule `json:"rule"`
 	ApprovalID string      `json:"approval_id,omitempty"`
 	CreatedAt  time.Time   `json:"created_at"`
+	// Disabled rules are kept but not pushed to agents.
+	Disabled  bool      `json:"disabled,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 func (r *HubRule) appliesTo(a *AgentRec) bool {
