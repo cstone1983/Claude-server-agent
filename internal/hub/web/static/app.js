@@ -50,7 +50,7 @@
   // Select-all checkbox for approvals.
   document.querySelectorAll("[data-check-all]").forEach(function (box) {
     box.addEventListener("change", function () {
-      document.querySelectorAll("input[name=id]").forEach(function (c) { c.checked = box.checked; });
+      document.querySelectorAll("input[type=checkbox][name=id]").forEach(function (c) { c.checked = box.checked; });
     });
   });
 

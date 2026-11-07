@@ -10,7 +10,7 @@
 <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required autofocus>
 {{if ne .D.A.Kind "rule"}}
 <details class="add" style="margin-top:.6rem"><summary class="secondary-text small">▸ Also allow this from now on…</summary>
-<label class="check"><input type="checkbox" name="always" value="1"> Always allow this exact action</label>
+{{if .D.A.AskAlways}}<p class="muted small">This action needs your OK every time. It cannot be always-allowed.</p>{{else}}<label class="check"><input type="checkbox" name="always" value="1"> Always allow this exact action</label>{{end}}
 <select name="scope"><option value="server">on this server ({{.D.A.Server}})</option>{{range .D.A.ServerTags}}<option value="tag:{{.}}">on servers tagged {{.}}</option>{{end}}<option value="all">on all servers</option></select>
 <p class="muted small">Rule: <code>{{.D.Rule}}</code></p></details>{{end}}
 <div class="btn-row"><button class="btn primary" name="decision" value="approve">Approve</button><button class="btn danger" name="decision" value="deny">Deny</button></div>

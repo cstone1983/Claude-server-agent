@@ -108,6 +108,16 @@ instructions (`internal/hub/server.go`), so every Claude chat gets it.
 - `apt upgrade` is not automatic;
 - nothing is hard-blocked.
 
+**Power on the Proxmox host:**
+- **Reboot:** needs the user's explicit, separate OK every time (`ask_always`).
+  It can't be bulk-approved or always-allowed, and gets its own orange
+  approve button on the approvals page.
+- **Shutdown or poweroff:** never; the user does that by hand. Denied in
+  policy.
+- **Scripts that contain a reboot:** refused.
+- **Refresh an older host's policy:** run `install.sh proxmox-policy` as root.
+  It backs up the old file and reloads the agent.
+
 **The hub never applies "all servers" rules to servers tagged `proxmox`.**
 Only rules scoped to them by name or tag apply.
 

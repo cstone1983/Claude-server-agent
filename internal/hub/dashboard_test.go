@@ -202,3 +202,47 @@ func TestRulesTableFilterSort(t *testing.T) {
 		t.Errorf("sort links: %v", links)
 	}
 }
+
+// TestAskAlwaysApprovals: a reboot request that needs its own OK gets its own
+// card, cannot be approved together with other requests, and approving it
+// with "always" never creates a rule.
+func TestAskAlwaysApprovals(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{StateDir: filepath.Join(dir, "s"), AuditLog: filepath.Join(dir, "a.jsonl"), PublicURL: "http://x"}
+	cfg.applyDefaults()
+	h, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pve := &AgentRec{ID: "p", Name: "Proxmox", Tags: []string{"proxmox"}}
+	h.store.Update(func(d *stateData) error { d.Agents["p"] = pve; return nil })
+	call := &proto.Call{Tool: "run_command", Args: json.RawMessage(`{"argv":["reboot"]}`), Caller: "claude:test"}
+	boot := h.newApproval(pve, call, &proto.NeedsApproval{ActionHash: "h1", Summary: "run: reboot", Why: "x", AskAlways: true})
+	other := h.newApproval(pve, call, &proto.NeedsApproval{ActionHash: "h2", Summary: "run: apt-get update", Why: "x",
+		SuggestedRule: policy.Rule{Argv: []string{"apt-get", "update"}}})
+
+	if !h.anyAskAlways([]string{other.ID, boot.ID}) || h.anyAskAlways([]string{other.ID}) {
+		t.Fatal("anyAskAlways")
+	}
+	groups := h.pendingGroups()
+	alone := 0
+	for _, g := range groups {
+		if g.AskAlways {
+			alone++
+		}
+	}
+	if alone != 1 {
+		t.Fatalf("want 1 ask-always group, got %d", alone)
+	}
+	if _, err := h.Decide(boot.ID, true, true, "all", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := h.appr.snapshot(boot.ID); s.RuleID != "" {
+		t.Fatal("an ask-always approval created an always-allow rule")
+	}
+	var rules int
+	h.store.View(func(d *stateData) { rules = len(d.Rules) })
+	if rules != 0 {
+		t.Fatalf("rules = %d, want 0", rules)
+	}
+}

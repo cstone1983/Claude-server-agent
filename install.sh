@@ -34,6 +34,8 @@ Options:
   update [--check] [--force]      install the latest GitHub release if it is newer (what csa-update runs)
   Updates never run on their own: run sudo csa-update, or let Claude run update_server when you approve.
   uninstall [--purge]
+  proxmox-policy                  rewrite /etc/csa/policy.yaml with the current Proxmox careful-mode
+                                  policy (the old file is kept as a timestamped backup)
 EOF
 }
 
@@ -162,7 +164,10 @@ write_proxmox_policy() {
 #   server (or tag:proxmox) whitelists it from then on.
 # - Rules approved for ALL servers are not applied here (keep the tag
 #   "proxmox" on this server), and apt upgrade is not automatic.
-# - Nothing is blocked outright. To block something permanently, add e.g.:
+# - Rebooting the host always needs its own approval, on its own (ask_always),
+#   and scripts that contain a reboot are refused.
+# - Shutting the host down is never allowed: do that yourself.
+# - Nothing else is blocked outright. To block something permanently, add e.g.:
 #     deny:
 #       - argv: ["qm|pct", "destroy", "**"]
 #
@@ -195,7 +200,31 @@ allow:
   - id: pve-backup-jobs
     argv: ["pvesh", "create|set", "/cluster/backup|/cluster/backup/*", "**"]
 
-deny: []
+# Rebooting the host takes every VM down. It always needs its own approval,
+# on its own: never bundled, never "always allowed".
+ask_always:
+  - id: pve-host-reboot
+    argv: ["reboot", "**"]
+  - id: pve-host-reboot-shutdown-r
+    argv: ["shutdown", "**"]
+    any_arg: ["-r", "--reboot"]
+  - id: pve-host-reboot-systemctl
+    argv: ["systemctl", "reboot|soft-reboot|kexec", "**"]
+
+deny:
+  # Never shut the host down: the owner does that by hand. (shutdown -r, a
+  # reboot, and shutdown -c, cancelling one, are still possible.)
+  - id: pve-no-poweroff
+    argv: ["poweroff|halt", "**"]
+  - id: pve-no-shutdown
+    argv: ["shutdown", "**"]
+    not_args: ["-r", "--reboot", "-c"]
+  - id: pve-no-systemctl-poweroff
+    argv: ["systemctl", "poweroff|halt", "**"]
+  # A reboot must be requested as its own command, not inside a script.
+  - {id: pve-no-power-in-scripts-reboot, shell: "reboot"}
+  - {id: pve-no-power-in-scripts-shutdown, shell: "shutdown"}
+  - {id: pve-no-power-in-scripts-poweroff, shell: "poweroff"}
 
 sensitive_paths: ["/etc/pve/priv/**", "/etc/pve/**/*.key", "/etc/pve/**/*.pem", "/root/.config/rclone/**"]
 PVE
@@ -653,14 +682,29 @@ do_uninstall() {
   say "cloudflared was left installed; remove it with: cloudflared service uninstall && apt-get remove cloudflared"
 }
 
+do_proxmox_policy() {
+  is_proxmox || die "this is not a Proxmox VE host"
+  mkdir -p /etc/csa && chmod 0755 /etc/csa
+  if [ -f /etc/csa/policy.yaml ]; then
+    local bak; bak="/etc/csa/policy.yaml.bak-$(date +%Y%m%d-%H%M%S)"
+    cp -a /etc/csa/policy.yaml "$bak"
+    say "Old policy saved as $bak"
+  fi
+  write_proxmox_policy
+  /usr/local/bin/csa-agent check -- reboot || true
+  systemctl reload csa-agent 2>/dev/null || systemctl restart csa-agent
+  say "Policy reloaded"
+}
+
 main() {
   case "$MODE" in
     hub) need_root; check_os; do_hub ;;
     agent) need_root; check_os; do_agent ;;
     update) need_root; check_os; do_update ;;
     uninstall) need_root; do_uninstall ;;
+    proxmox-policy) need_root; do_proxmox_policy ;;
     -h|--help|help|"") usage ;;
-    *) die "unknown mode '$MODE' (hub, agent, update or uninstall)" ;;
+    *) die "unknown mode '$MODE' (hub, agent, update, uninstall or proxmox-policy)" ;;
   esac
 }
 

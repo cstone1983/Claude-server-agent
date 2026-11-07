@@ -152,6 +152,12 @@ label.check { display: flex; align-items: center; gap: .5rem; font-weight: 500; 
   box-shadow: 0 6px 18px color-mix(in srgb, var(--brand-1) 35%, transparent); }
 .btn.danger { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, transparent); }
 .btn.danger:hover { background: color-mix(in srgb, var(--critical) 14%, transparent); }
+.btn.power { border: 0; color: #fff; font-size: 1.05rem; padding: .8rem 1.4rem;
+  background: linear-gradient(135deg, var(--serious), var(--critical));
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--serious) 45%, transparent); }
+.btn.power:hover { filter: brightness(1.08); }
+.card.power-card { border: 2px solid var(--serious); background: color-mix(in srgb, var(--serious) 9%, var(--glass-bg)); }
+.chip.power { color: #fff; background: var(--serious); font-weight: 700; }
 .btn.sm { padding: .3rem .65rem; font-size: .8rem; border-radius: 8px; }
 .btn-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
 details.add > summary { cursor: pointer; list-style: none; }
