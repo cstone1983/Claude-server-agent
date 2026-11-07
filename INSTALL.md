@@ -228,7 +228,7 @@ sudo ./install.sh agent \
 One-liner alternative. This is what `csa-hub join-token` prints; paste it as
 a single line. It installs curl first if it's missing:
 ```bash
-command -v curl >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq curl; }; curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh | sudo bash -s -- agent --hub https://agents.yourdomain.com --join <JOIN_TOKEN>
+S=$(command -v sudo); command -v curl >/dev/null || { $S apt-get update -qq; $S apt-get install -y -qq curl; }; curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh | $S bash -s -- agent --hub https://agents.yourdomain.com --join <JOIN_TOKEN>
 ```
 
 ### 4.3 What the installer did
@@ -250,6 +250,20 @@ sudo journalctl -u csa-agent -n 20 --no-pager     # look for "connected to hub"
 Then run `sudo csa-hub servers` on the hub, or ask Claude to list servers.
 
 Repeat Part 4 for each server.
+
+### 4.5 Proxmox VE hosts
+
+Proxmox has no `sudo`, so run the join command in a **root** shell: the web
+UI's node **>_ Shell**, or `su -`. The hub's join command uses `sudo` only
+when it exists.
+
+The installer detects Proxmox and writes a **careful-mode** policy:
+- Read-only commands (`qm list`, `qm config`, `pvesm status`, `pvesh get`, …)
+  run freely.
+- **Every change needs your approval, every time.**
+- "Always allow" rules from the hub are ignored on this host.
+- Nothing is blocked outright. To block something for good, add a `deny` rule
+  to `/etc/csa/policy.yaml` and run `systemctl reload csa-agent`.
 
 ---
 

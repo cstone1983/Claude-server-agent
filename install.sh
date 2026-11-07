@@ -66,14 +66,20 @@ need_root() { [ "$(id -u)" -eq 0 ] || die "run as root (sudo)"; }
 check_os() {
   [ "$(uname -s)" = "Linux" ] || die "Linux only"
   if [ -r /etc/os-release ]; then
-    . /etc/os-release
-    case "${ID:-}${ID_LIKE:-}" in
+    # Read it in a subshell: os-release defines NAME and VERSION, which would
+    # overwrite this script's --name and --version settings.
+    local os_id os_name
+    # shellcheck source=/dev/null
+    os_id="$(. /etc/os-release; echo "${ID:-}${ID_LIKE:-}")"
+    # shellcheck source=/dev/null
+    os_name="$(. /etc/os-release; echo "${PRETTY_NAME:-unknown}")"
+    case "$os_id" in
       *ubuntu*|*debian*) ;;
-      *) warn "untested distribution ${PRETTY_NAME:-unknown}; continuing" ;;
+      *) warn "untested distribution $os_name; continuing" ;;
     esac
   fi
   command -v systemctl >/dev/null || die "systemd is required"
-  command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl ca-certificates; }
+  command -v curl >/dev/null || { apt-get update -qq || true; apt-get install -y -qq curl ca-certificates; }
 }
 
 detect_arch() {
@@ -104,7 +110,7 @@ download_release() {
 
 build_from_source() {
   say "Building from source ($REF)"
-  command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git; }
+  command -v git >/dev/null || { apt-get update -qq || true; apt-get install -y -qq git; }
   local gobin
   if command -v go >/dev/null && go version | grep -Eq 'go1\.(2[6-9]|[3-9][0-9])'; then
     gobin="$(command -v go)"
@@ -137,9 +143,63 @@ install_bin() {
   say "Installed $BIN_DIR/$1 ($("$BIN_DIR/$1" version))"
 }
 
+is_proxmox() { [ -d /etc/pve ] || command -v pveversion >/dev/null 2>&1; }
+
+# On a Proxmox VE host every change needs approval (nothing is blocked; it is
+# a double check, not a limit): hub "always allow" rules and the built-in
+# allow list are ignored there. This file lives only on the host, so the hub
+# cannot change it.
+write_proxmox_policy() {
+  cat > /etc/csa/policy.yaml <<'PVE'
+# Claude Server Agent: local policy for a PROXMOX VE HOST (careful mode).
+#
+# - Read-only commands run without asking, so Claude can check before and
+#   after every change.
+# - EVERY change needs your approval, every time. "Always allow" rules from the
+#   hub are ignored here (accept_hub_rules: false), so an approval given for
+#   other servers never applies to this host.
+# - Nothing is blocked outright. To block something permanently, add a deny
+#   rule, e.g.:
+#     deny:
+#       - argv: ["qm|pct", "destroy", "**"]
+#
+# Check a command:  csa-agent check -- qm list
+# After editing:    systemctl reload csa-agent
+
+accept_hub_rules: false
+disable_builtin_allow: true
+
+read:
+  - id: pve-qm-read
+    argv: ["qm", "list|status|config|pending|listsnapshot", "**"]
+  - id: pve-pct-read
+    argv: ["pct", "list|status|config|pending|listsnapshot|df", "**"]
+  - id: pve-storage-read
+    argv: ["pvesm", "status|list", "**"]
+  - id: pve-api-read
+    argv: ["pvesh", "get|ls", "**"]
+  - id: pve-version
+    argv: ["pveversion", "**"]
+  - id: pve-tasks
+    argv: ["pvenode", "task", "list|log|status", "**"]
+  - id: pve-zfs-read
+    argv: ["zpool|zfs", "list|status", "**"]
+  - id: pve-lvm-read
+    argv: ["lvs|vgs|pvs", "**"]
+
+allow: []
+deny: []
+
+sensitive_paths: ["/etc/pve/priv/**", "/etc/pve/**/*.key", "/etc/pve/**/*.pem", "/root/.config/rclone/**"]
+PVE
+  chmod 0644 /etc/csa/policy.yaml
+  say "Proxmox VE detected: careful mode (every change needs your approval)"
+}
+
 write_default_policy() {
   [ -f /etc/csa/policy.yaml ] && return 0
   mkdir -p /etc/csa && chmod 0755 /etc/csa
+  if is_proxmox; then write_proxmox_policy; return 0; fi
   cat > /etc/csa/policy.yaml <<'EOF'
 # Claude Server Agent — local policy for this server.
 #

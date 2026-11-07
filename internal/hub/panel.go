@@ -225,9 +225,11 @@ func (h *Hub) createJoinToken(ttlMinutes, uses int, tags []string) (string, time
 	return tok, exp
 }
 
-// InstallCommand is the one-line agent install command for a join token.
+// InstallCommand is the one-line agent install command for a join token. It
+// uses sudo only where sudo exists, so it also works in a root shell on
+// machines without it (e.g. Proxmox).
 func InstallCommand(hubURL, token string) string {
-	return "command -v curl >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq curl; }; curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh | sudo bash -s -- agent --hub " + hubURL + " --join " + token
+	return "S=$(command -v sudo); command -v curl >/dev/null || { $S apt-get update -qq; $S apt-get install -y -qq curl; }; curl -fsSL https://raw.githubusercontent.com/cstone1983/Claude-server-agent/main/install.sh | $S bash -s -- agent --hub " + hubURL + " --join " + token
 }
 
 func (h *Hub) handleServers(w http.ResponseWriter, r *http.Request) {

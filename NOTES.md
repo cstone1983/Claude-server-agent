@@ -94,6 +94,28 @@ usage in [README.md](README.md).
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
 
+## Proxmox host: careful mode (the user's request: "it's critical, no mistakes")
+
+The installer detects Proxmox and writes a local policy:
+- read-only commands run freely;
+- **every change needs approval, every time**;
+- hub "always allow" rules are ignored;
+- nothing is hard-blocked (the user wants caution, not limits).
+
+Claude's double-check routine for **any** change on Proxmox:
+1. **Look first.** Read the current state with `qm config <id>`,
+   `qm status <id>`, `pvesh get …` and `pvesm status`. Confirm the VMID
+   matches the VM *name* the user means; never act on a VMID from memory.
+2. **Say exactly what will happen** before asking: the exact command, which
+   VMs and storage it touches, the expected downtime, and how to undo it.
+   Mention anything irreversible.
+3. **Make it reversible where possible.** Take a snapshot or backup before
+   risky VM changes, and have a fresh backup before deleting old ones.
+4. **One change at a time.** No batching of changes across VMs on Proxmox.
+5. **Verify afterwards** with the same read commands, and report the result.
+6. **Ask the user** if anything looks different from what was expected.
+   Never retry or try a workaround on your own.
+
 ## How things work (gotchas learned)
 
 - **Tool-call timeout:** MCP tool calls time out after about 60 s.
@@ -159,8 +181,12 @@ usage in [README.md](README.md).
         newest backup of each VM and keeps the last 2 per VM on Drive.
       - Expect 60–90 GB per full set; the first upload will be slow.
       - Have Claude check that uploads succeed and warn when one fails.
-- [ ] **The join command always adds `sudo`,** which fails on Proxmox and
-      other machines without it. Use `sudo` only when it's present.
+- [x] **The join command always added `sudo`.** Fixed: it now uses
+      `sudo` only when present.
+- [x] **Installer variable clash.** Sourcing `/etc/os-release` overwrote
+      `NAME` and `VERSION`. That was the real reason servers enrolled as
+      "Ubuntu", and why release downloads silently fell back to building
+      from source. Fixed by reading it in a subshell.
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
 - [ ] **Ubuntu 26.04 for the other servers,** one at a time, with a snapshot
