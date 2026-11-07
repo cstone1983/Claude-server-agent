@@ -76,6 +76,8 @@ type File struct {
 	AcceptHubRules *bool `yaml:"accept_hub_rules,omitempty"`
 	// DisableBuiltinRead turns off the built-in read-only command list.
 	DisableBuiltinRead bool `yaml:"disable_builtin_read,omitempty"`
+	// DisableBuiltinAllow turns off the built-in allow list (apt update, ...).
+	DisableBuiltinAllow bool `yaml:"disable_builtin_allow,omitempty"`
 	// DisableRemoteUpdate stops update_server from installing updates on this
 	// server (checking is still allowed).
 	DisableRemoteUpdate bool `yaml:"disable_remote_update,omitempty"`
@@ -200,6 +202,7 @@ func (p *Policy) Snapshot() map[string]any {
 		"local":             p.local,
 		"hub_rules":         p.hubRules,
 		"builtin_read":      builtinRead,
+		"builtin_allow":     builtinAllow,
 		"builtin_deny":      builtinDeny,
 		"builtin_sensitive": builtinSensitive,
 	}
@@ -223,6 +226,9 @@ func (p *Policy) Classify(a Action) Decision {
 
 	deny := append(append([]Rule{}, builtinDeny...), p.local.Deny...)
 	allow := append([]Rule{}, p.local.Allow...)
+	if !p.local.DisableBuiltinAllow {
+		allow = append(allow, builtinAllow...)
+	}
 	if p.acceptHub() {
 		allow = append(allow, p.hubRules...)
 	}
