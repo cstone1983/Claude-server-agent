@@ -322,8 +322,23 @@ Only rules scoped to them by name or tag apply.
       4. Run `pve8to9` again.
       5. Reboot with `pve-safe-reboot` (with a separate OK).
       6. Verify the VMs, hub, backup job and rclone.
-- [ ] **Proxmox Backup Server (PBS)** (after the Proxmox 9 upgrade; the user
-      agreed on 2026-11-07). Today every night uploads full vzdump archives
+- [~] **Proxmox Backup Server (PBS): installed on the host 2026-11-08.**
+      - PBS 4.2.9 (repo `pbs.sources`, pbs-no-subscription; the re-added
+        `pve-enterprise.sources` is disabled, backup in /root). Web UI :8007.
+      - Datastore `main` at `/mnt/pve-backups/pbs`. Prune job
+        `main-retention` 02:30 (keep 1 daily, 1 weekly, 2 monthly, the user's
+        choice), GC 03:00, verify job `main-verify` Sun 05:00.
+      - User `pve@pbs` + token `pve@pbs!pve`, role DatastoreBackup on
+        /datastore/main for **both** user and token (token rights are capped
+        by the user's). Proxmox storage `pbs-main` (127.0.0.1, fingerprint,
+        keep-all, so PBS does the pruning). Secret only in
+        /etc/pve/priv/storage/pbs-main.pw.
+      - Test backup VM 103: 32 GB in 6m39s (~84 MB/s), OK.
+      - Nightly job 21:30 → pbs-main, VMs 100,102,103,107,110,111. The old
+        23:30 vzdump job + Drive upload stay until a test restore is done.
+      - Still to do: a test restore; off-site copy of the datastore to Drive;
+        then retire the old job.
+      Original plan: Today every night uploads full vzdump archives
       (about 79 GB, about 5 h at about 34 Mbps). PBS deduplicates and makes
       incremental backups, so nightly off-site uploads would be the changed
       chunks only (a few GB, minutes).
