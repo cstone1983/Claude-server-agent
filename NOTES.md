@@ -456,8 +456,12 @@ Only rules scoped to them by name or tag apply.
       overwritecondaddr ^(127.0.0.1|::1)$ (HTTPS overwrite only for tunnel
       traffic, so http://fileserver still works on the LAN), HSTS via
       conf nextcloud-security. www-data crontab */5 cron.php (was missing).
-      Setup checks are clean except: PHP 8.3 deprecated (NC 37 needs 8.4:
-      plan a PHP upgrade), Talk HPB (ignore unless Talk is used), mail not
+      **PHP 8.4.27** since 2026-11-08 (ppa:ondrej/php; Apache mod php8.4, CLI
+      via update-alternatives; php8.3 still installed for rollback:
+      a2dismod php8.4 && a2enmod php8.3 && update-alternatives --set php
+      /usr/bin/php8.3). Setup checks clean except: Talk HPB (not installed
+      on purpose: peer-to-peer calls need no open ports; HPB would need UDP
+      port forwards; add a hosted TURN if a call fails), mail not
       set, 2FA not enforced (recommend TOTP for stonec).
       To do: move the Nextcloud data dir to /srv/share/.nextcloud (offered),
       HTTPS/trusted domain for the public name, first real users.
