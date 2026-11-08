@@ -195,8 +195,8 @@ usage in [README.md](README.md).
   - HTML5 console "Certificate may not be verified": open
     https://10.10.1.10:5900 once and accept the certificate.
   - After a host reboot the Proxmox agent can take about 2 min to rejoin
-    (it retries while n8n and the tunnel come back). The user suspects an old failing DIMM: check the iDRAC
-  System Event Log. All 8 disks Online.
+    (it retries while n8n and the tunnel come back). The SEL shows no memory faults (the old RAM issue is
+  probably on another server). All 8 disks Online.
 
 ## UniFi UDM Pro SE (router, 10.10.1.1)
 
@@ -394,7 +394,7 @@ Only rules scoped to them by name or tag apply.
       (about 400 MB/s); needs a storage switch or VLAN plus multipath. Need: its
       group/management IP, firmware version and whether the admin password
       (default grpadmin) is known.
-- [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
+- [x] **Failing DIMM?** Not on the R630 (SEL clean, EDAC 0 errors). The user thinks the memory issue is on their *other* server; check that one when it comes up.
 - [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
