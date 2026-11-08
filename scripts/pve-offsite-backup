@@ -42,26 +42,34 @@ rclone purge "${REMOTE}_test" >/dev/null 2>&1 || true
 
 dow=$(date +%u); dom=$(date +%d); month=$((10#$(date +%m)))
 uploaded=0; problems=()
+declare -A BASE FOLDER NEWEST PID
 
-# Newest backup archive per VM ID.
+# 1) Start one upload per VM, all at the same time (several connections are
+#    much faster than one on a link with some packet loss).
 for vmid in $(ls "$DUMP" | sed -n 's/^vzdump-qemu-\([0-9]\+\)-.*\.vma\.zst$/\1/p' | sort -un); do
   newest=$(ls -1t "$DUMP"/vzdump-qemu-"$vmid"-*.vma.zst | head -1)
   base=$(basename "$newest" .vma.zst)
-  name=$(cat "$newest.notes" 2>/dev/null | tr -cd 'A-Za-z0-9._-' ); [ -n "$name" ] || name="vm$vmid"
-  folder="${REMOTE}${vmid}-${name}"
+  name=$(tr -cd 'A-Za-z0-9._-' < "$newest.notes" 2>/dev/null); [ -n "$name" ] || name="vm$vmid"
   age_h=$(( ( $(date +%s) - $(stat -c %Y "$newest") ) / 3600 ))
   if [ "$age_h" -gt "$MAX_AGE_H" ]; then
     problems+=("VM $vmid: newest local backup is ${age_h}h old (tonight's backup missing?)"); continue
   fi
+  NEWEST[$vmid]=$newest; BASE[$vmid]=$base; FOLDER[$vmid]="${REMOTE}${vmid}-${name}"
   log "VM $vmid ($name): uploading $base ($(du -h "$newest" | cut -f1))"
-  if ! rclone copy "$DUMP" "$folder/daily" --include "$base.*" "${RCLONE_OPTS[@]}" >> "$LOG" 2>&1; then
-    problems+=("VM $vmid: upload failed"); continue
-  fi
+  rclone copy "$DUMP" "${FOLDER[$vmid]}/daily" --include "$base.*" "${RCLONE_OPTS[@]}" >> "$LOG" 2>&1 &
+  PID[$vmid]=$!
+done
+
+# 2) As each upload finishes: verify it, drop older copies, rotate weekly/2-monthly.
+for vmid in $(printf '%s\n' "${!PID[@]}" | sort -n); do
+  base=${BASE[$vmid]}; folder=${FOLDER[$vmid]}; newest=${NEWEST[$vmid]}
+  if ! wait "${PID[$vmid]}"; then problems+=("VM $vmid: upload failed"); continue; fi
   # Verify size on Drive matches before deleting anything.
   remote_size=$(rclone size "$folder/daily" --include "$base.vma.zst" --json 2>/dev/null | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')
   if [ "$remote_size" != "$(stat -c %s "$newest")" ]; then
     problems+=("VM $vmid: size check failed after upload"); continue
   fi
+  log "VM $vmid: upload verified"
   rclone delete "$folder/daily" --exclude "$base.*" >> "$LOG" 2>&1
   uploaded=$((uploaded + 1))
 
