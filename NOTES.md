@@ -412,7 +412,18 @@ Only rules scoped to them by name or tag apply.
       the standalone Group Manager Java app; or an old-Java VM. Possible use:
       iSCSI storage for Proxmox (PBS datastore and bulk/low-IO VM disks; about 16 TB raw, so about 11-13 TB usable in RAID 6/50; 1 GbE ports, use multipath). Service Tag 6V9CVL1; two Type 7 control modules (C0/C1), each with
       4 x 1 GbE and a serial port; active/standby, so 4 ports carry traffic
-      (about 400 MB/s); needs a storage switch or VLAN plus multipath. Plan (2026-11-08): console via a USB-serial adapter + null-modem DB9
+      (about 400 MB/s); needs a storage switch or VLAN plus multipath. **Set up 2026-11-08:** password recovery (Ctrl-P → `EQL>` prompt,
+      `setenv RESETPASSWORD 1`, `reload`), then `reset` (DeleteAllMyDataNow),
+      then `setup`. Group `eqlgroup` at **10.10.1.31**, member `eql1` on
+      **eth3 10.10.1.30** (switch port 26 on USW Pro 48; eth0 has no link).
+      The grpadmin password is the user's (in their password manager; the
+      temp file was shredded). Firmware V7.0.4; GUI is a Java applet.
+      Disks: 15 × 1 TB SATA 7200 (Hitachi HUA722010CLA330 / Seagate
+      ST1000NM0011), all healthy; slot 15 spare; **slot 8 empty/missing**
+      (the user may add it later, hot-add). RAID policy **raid6** (~10.5 TB).
+      Warnings: **PSU 1 has no AC/failed**, CMOS coin battery low (2.65 V),
+      the cache battery was charging, and the second control module (slot 0)
+      was pulled for the reset; reinsert it. Was: plan (2026-11-08): console via a USB-serial adapter + null-modem DB9
       cable into the R630 (`/dev/ttyUSB0`, picocom, 9600 8N1) through the
       Proxmox agent session tools; no laptop needed. The user is OK using the
       factory default login `grpadmin` for now: keep the SAN's Ethernet off
