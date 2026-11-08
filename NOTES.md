@@ -449,7 +449,17 @@ Only rules scoped to them by name or tag apply.
       its own passwords, unix password sync = no, so the Linux login is
       unaffected); stonec was set up once by hand + added to Nextcloud group
       fileshare.
-      To do: Cloudflare tunnel for Nextcloud only (if wanted),
+      **Public:** https://nextcloud.stoneyshome.com via Cloudflare tunnel
+      (cloudflared service on the file server, hostname -> HTTP localhost:80;
+      Samba is NOT published). Nextcloud: trusted_domains += the public name +
+      fileserver.localdomain, trusted_proxies 127.0.0.1/::1,
+      overwritecondaddr ^(127.0.0.1|::1)$ (HTTPS overwrite only for tunnel
+      traffic, so http://fileserver still works on the LAN), HSTS via
+      conf nextcloud-security. www-data crontab */5 cron.php (was missing).
+      Setup checks are clean except: PHP 8.3 deprecated (NC 37 needs 8.4:
+      plan a PHP upgrade), Talk HPB (ignore unless Talk is used), mail not
+      set, 2FA not enforced (recommend TOTP for stonec).
+      To do: move the Nextcloud data dir to /srv/share/.nextcloud (offered),
       HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
       by the user (no snapshot or backup of VM 104 exists).
