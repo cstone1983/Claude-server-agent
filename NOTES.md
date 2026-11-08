@@ -380,7 +380,9 @@ Only rules scoped to them by name or tag apply.
       Group Manager web UI is a Java applet, which modern browsers can't run.
       Options: the CLI over SSH/telnet or the serial port (full management);
       the standalone Group Manager Java app; or an old-Java VM. Possible use:
-      iSCSI storage for Proxmox (PBS datastore and bulk/low-IO VM disks; about 16 TB raw, so about 11-13 TB usable in RAID 6/50; 1 GbE ports, use multipath). Need: its
+      iSCSI storage for Proxmox (PBS datastore and bulk/low-IO VM disks; about 16 TB raw, so about 11-13 TB usable in RAID 6/50; 1 GbE ports, use multipath). Service Tag 6V9CVL1; two Type 7 control modules (C0/C1), each with
+      4 x 1 GbE and a serial port; active/standby, so 4 ports carry traffic
+      (about 400 MB/s); needs a storage switch or VLAN plus multipath. Need: its
       group/management IP, firmware version and whether the admin password
       (default grpadmin) is known.
 - [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
