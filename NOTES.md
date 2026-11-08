@@ -374,7 +374,16 @@ Only rules scoped to them by name or tag apply.
       "Ubuntu", and why release downloads silently fell back to building
       from source. Fixed by reading it in a subshell.
 - [x] **BIOS/iDRAC update** done 2026-11-08.
-- [ ] **Retry kernel 7.0** once (watching the iDRAC console) now that the BIOS is 2.19.0.
+- [x] **Retried kernel 7.0 after the BIOS update (2026-11-08): still resets.**
+      The iDRAC SEL shows machine-check errors on **both CPU 1 and CPU 2** at
+      every 7.0 boot (13:37, 13:40, 13:43, 13:53 and 15:24 UTC), plus BERT
+      records; there are no DIMM/memory events. Under 6.8 the EDAC counters
+      show 0 errors; microcode 0x49 is final for E5-2680 v3. Conclusion:
+      kernel 7.0 is incompatible with this Haswell-EP R630, not a hardware
+      fault. Stay on 6.8; next try 6.17.13 (a one-time GRUB boot), then pin
+      it if it works.
+- [ ] **Move the pinned kernel 6.8 to 6.17** (6.8 is the PVE 8 kernel).
+- [ ] **Power supply 2:** the SEL shows input-power losses in Mar/Apr 2025. Check that both PSUs are plugged into separate live circuits and that redundancy shows OK.
 - [ ] **Update all agents to v0.1.24** (when the user says).
 - [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its
       Group Manager web UI is a Java applet, which modern browsers can't run.
