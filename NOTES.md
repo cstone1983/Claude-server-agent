@@ -1,4 +1,4 @@
-# Project notes (state as of 2026-11-07)
+# Project notes (state as of 2026-11-08)
 
 Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
@@ -96,13 +96,13 @@ usage in [README.md](README.md).
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
 
-## Proxmox host (updated 2026-11-07)
+## Proxmox host (updated 2026-11-08)
 
 - **Updates:** switched from the enterprise repo to the free no-subscription
   repo (old files in `/root/*.bak-20261107`), then updated 8.3.0 → 8.4.21
   and rebooted with pve-safe-reboot.
-  - **Proxmox VE 8 is past end of life (Aug 2026).** The upgrade to 9 is the
-    next big task: run `pve8to9` first.
+  - **Upgraded to Proxmox VE 9.2.26 (Debian trixie) on 2026-11-08**; see
+    "Proxmox 9 upgrade" below.
 - **Boot:** GRUB via `EFI\proxmox\shimx64.efi` (Boot0008); the fallback
   `EFI/BOOT` is now kept in sync. Secure Boot is off. A leftover "Windows
   Boot Manager" entry is second in the boot order.
@@ -153,14 +153,56 @@ usage in [README.md](README.md).
   - Not backed up, by the user's choice: 101, 104 and 106.
 - **Cleanup done:** n8n's unused 500 GB disk was deleted. About 300 GB of
   year-old snapshots are still there; delete them only if the user agrees.
-- **Pending: CPU-Share firewall (Akash isolation).** Waiting for the
-  go-ahead and the port list from the other chat. Scope is VM 104 `net0`
-  only.
-  - Outbound: internet only, drop 10.10.1.0/24 (mind DHCP/DNS via
-    10.10.1.1).
+- **CPU-Share firewall (Akash isolation), done 2026-11-08.** Rules in
+  `/etc/pve/firewall/104.fw`, VM 104 `net0` only.
+  - Outbound: internet only; LAN/private ranges (10/8 incl. VLANs, ipfilter
+    ipset, IPv6, multicast) dropped. DHCP (udp 67) to the UDM must stay.
   - Inbound: Akash ports, 80/443 and the NodePort range.
-  - Note: the datacenter firewall is off. Turning it on enables the host
-    firewall, so verify that 8006 and 22 stay open first.
+  - Datacenter firewall is on; the host firewall is off
+    (`/etc/pve/nodes/starwars/host.fw` `enable: 0`) so 8006/22 are unaffected.
+  - Verified: cpu-share reaches 1.1.1.1 but not 10.10.1.15.
+  - VM 104 CPU type is x86-64-v3. Memory trimmed: VM 100 to 8 GB, VM 102
+    to 16 GB.
+- **BBR** congestion control on the host (`/etc/sysctl.d/90-bbr.conf`,
+  `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
+  speed from about 10 to about 34 Mbps.
+
+## Proxmox 9 upgrade (2026-11-08)
+
+- Now **pve-manager 9.2.26** on trixie. Apt sources are deb822
+  `proxmox.sources` / `ceph.sources` (squid, no-subscription); the PVE 8
+  sources are in `/root/apt-sources-pve8/`, a config tarball in
+  `/root/pve8-pre-upgrade-20261108-0808.tar.gz`.
+- **Kernel 7.0.14-28 resets the R630** right after "Loading initial
+  ramdisk" (UEFI0078 machine-check messages, boot loop). Booting
+  **6.8.12-43-pve** works, and it is pinned in
+  `/etc/default/grub.d/proxmox-kernel-pin.cfg`. Retry 7.0 once after the
+  BIOS update, watching the iDRAC console; GRUB can still pick 6.8.
+- **NIC rename:** `pve-network-interface-pinning` renamed eno3 to **nic0**
+  (`/usr/local/lib/systemd/network/50-pve-nic0.link`, MAC
+  24:6e:96:8a:39:9c); `vmbr0` uses nic0.
+- **Lessons:** run long apt/dpkg work detached with `systemd-run` (an agent
+  timeout killed the microcode install and left dpkg half-configured);
+  chrony needed a restart after the reboot.
+- **Hardware:** R630, Service Tag 9P7V8N2, iDRAC at 10.10.1.10. BIOS 2.12.1
+  and iDRAC 2.63.60.61 on 2026-11-08; updating to iDRAC **2.86.86.86**
+  (final) and BIOS **2.19.0** (staged "Install next reboot", applied with a
+  pve-safe-reboot). The user suspects an old failing DIMM: check the iDRAC
+  System Event Log. All 8 disks Online.
+
+## UniFi UDM Pro SE (router, 10.10.1.1)
+
+- A dedicated local admin; credentials in `/root/.config/unifi/.env` on n8n.
+  The `unifi` helper (`scripts/unifi`, installed `/usr/local/bin/unifi` on
+  n8n) calls the local API: `net:` = classic API, `v2:` = newer API.
+  Secret fields are redacted in output; it refuses to send `<redacted>`.
+- Done 2026-11-08: DHCP reservation for CPU-Share, the Akash port forwards
+  (enabled), three Nextcloud forwards removed, Cloudflare DNS for Akash set
+  by the user.
+- An early GET printed VPN private keys before redaction existed: the user
+  should regenerate those VPN keys.
+- Open: decide on the `rdc` port forward; a duplicate 10.10.3.100
+  reservation; a dead AdGuard entry.
 
 ## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
@@ -261,7 +303,7 @@ Only rules scoped to them by name or tag apply.
       - `pve-offsite-backup` POSTs OK/FAILED after each run.
 
       Use the LAN URL; open nothing new to the internet.
-- [ ] **Proxmox 9 upgrade:** prep done 2026-11-07 (`systemd-boot` removed,
+- [x] **Proxmox 9 upgrade** done 2026-11-08 (see its section). Prep done 2026-11-07 (`systemd-boot` removed,
       `intel-microcode` installed, `pve8to9 --full` shows 0 failures).
       Next:
       1. Confirm the first off-site upload (status file).
@@ -284,7 +326,7 @@ Only rules scoped to them by name or tag apply.
       - Keep the current vzdump + rclone setup until PBS is proven,
         including a test restore.
 - [x] **Removed the unused 500 GB disk** from the n8n VM (2026-11-07).
-- [ ] **Agent on the Proxmox host** (node `starwars`). Blocked until the user
+- [x] **Agent on the Proxmox host** (node `starwars`), installed 2026-11-07 with careful mode. Old notes: blocked until the user
       resets the forgotten root password (GRUB `init=/bin/bash`, then
       `passwd root`; this reboots all VMs, so snapshot first). The web shell
       user `stonec` isn't root and Proxmox has no sudo. Then:
@@ -293,7 +335,7 @@ Only rules scoped to them by name or tag apply.
          `pvesm status`, `pvesh get`.
       3. Add local deny rules in `/etc/csa/policy.yaml`: `qm destroy`,
          `pct destroy`, `pvecm`.
-- [ ] **Proxmox backups are broken.**
+- [x] **Proxmox backups are broken.** Fixed 2026-11-07 (local job + off-site).
       - Its `local` storage was 100% full of backups from Oct 2025; the
         backup job most likely stopped once the disk filled.
       - On 2026-11-07 the user deleted every backup, leaving 77 GB free, so
@@ -323,6 +365,9 @@ Only rules scoped to them by name or tag apply.
       `NAME` and `VERSION`. That was the real reason servers enrolled as
       "Ubuntu", and why release downloads silently fell back to building
       from source. Fixed by reading it in a subshell.
+- [ ] **BIOS/iDRAC update, then retry kernel 7.0** (2026-11-08, in progress).
+- [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
+- [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
 - [ ] **Ubuntu 26.04 for the other servers,** one at a time, with a snapshot
