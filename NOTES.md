@@ -37,7 +37,7 @@ usage in [README.md](README.md).
 **App inventory (what runs where):** `/srv/homelab/INVENTORY.md` on server
 `n8n`. Read it with `read_file`. It isn't kept in this public repo on purpose.
 
-## Servers (all on agent v0.1.15, timezone America/New_York)
+## Servers (all on agent v0.1.18, timezone America/New_York)
 
 | Name | Role / notes | OS | Disk `/` |
 |---|---|---|---|
@@ -45,6 +45,8 @@ usage in [README.md](README.md).
 | vm-fiance | personal-finance-dashboard + starhaul (11 containers, 2 Postgres) | **Ubuntu 26.04.1** (upgraded today) | 97 GB, 41% (extended today) |
 | solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156, 64 GB RAM | Ubuntu 24.04.5 | 97 GB, 16% (extended today) |
 | AI-recipes | | Ubuntu 24.04.5 | 97 GB, 10% (extended today) |
+| cpu-share | VM 104, 10.10.1.134; new and empty, 24 vCPU / 64 GB; to become an **Akash compute provider** | **Ubuntu 26.04.1** | 498 GB |
+| Proxmox | node `starwars`, 10.10.1.15, tag `proxmox`, careful-mode policy | Proxmox VE **8.4.21**, kernel 6.8.12-43 | see below |
 | jessy-desktop | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 22% (no LVM) |
 | Ubuntu-Anthony | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 28% (no LVM) |
 
@@ -93,6 +95,43 @@ usage in [README.md](README.md).
   - read-only commands;
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
+
+## Proxmox host (updated 2026-11-07)
+
+- **Updates:** switched from the enterprise repo to the free no-subscription
+  repo (old files in `/root/*.bak-20261107`), then updated 8.3.0 → 8.4.21
+  and rebooted with pve-safe-reboot.
+  - **Proxmox VE 8 is past end of life (Aug 2026).** The upgrade to 9 is the
+    next big task: run `pve8to9` first.
+- **Boot:** GRUB via `EFI\proxmox\shimx64.efi` (Boot0008); the fallback
+  `EFI/BOOT` is now kept in sync. Secure Boot is off. A leftover "Windows
+  Boot Manager" entry is second in the boot order.
+- **Disks:** 8 SAS 10k drives on a PERC H730.
+  - **RAID 1** (2 × 900 GB): Proxmox, plus an empty 702 GB LVM-thin `data`.
+  - **RAID 5** (6 drives): the ZFS pool `VM`.
+  - Drives 4 (Seagate S401HE8E) and 5 (Hitachi KPW6NXAF) each have 1 grown
+    defect: watch them.
+- **VMs:** 100 Solar-Calc, 101 Ubuntu-Anthony, 102 n8n, 103 haos16.0, 104
+  CPU-Share, 106 Jessy, 107 Recipies, 110 Autopilot-Climate (stopped), 111
+  Fiance. All are onboot except 110.
+  - Memory is overcommitted: 245 GB assigned on a 188 GB host.
+- **Backups:** the old job (VMs 101, 102, 103 to `local` at 21:00) had
+  failed every night because the disk was full; the disk was cleared on
+  2026-11-07.
+  - Planned replacement: the 702 GB `data` area as `backups`, keep 1 local
+    copy, nightly encrypted upload to Google Drive (keep the newest daily,
+    1 weekly, 2-monthly).
+  - VMs to back up: 100, 102, 103, 107, 110, 111. Not 101, 106 or 104.
+- **Cleanup done:** n8n's unused 500 GB disk was deleted. About 300 GB of
+  year-old snapshots are still there; delete them only if the user agrees.
+- **Pending: CPU-Share firewall (Akash isolation).** Waiting for the
+  go-ahead and the port list from the other chat. Scope is VM 104 `net0`
+  only.
+  - Outbound: internet only, drop 10.10.1.0/24 (mind DHCP/DNS via
+    10.10.1.1).
+  - Inbound: Akash ports, 80/443 and the NodePort range.
+  - Note: the datacenter firewall is off. Turning it on enables the host
+    firewall, so verify that 8006 and 22 stay open first.
 
 ## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
