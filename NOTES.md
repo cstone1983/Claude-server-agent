@@ -376,6 +376,7 @@ Only rules scoped to them by name or tag apply.
 - [x] **BIOS/iDRAC update** done 2026-11-08.
 - [ ] **Retry kernel 7.0** once (watching the iDRAC console) now that the BIOS is 2.19.0.
 - [ ] **Update all agents to v0.1.24** (when the user says).
+- [ ] **Old SAN: web UI doesn't work** (raised 2026-11-08, for another day). Need the make/model, firmware, and how it fails (browser error, Java/Flash-era UI, TLS/cipher error).
 - [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
 - [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
