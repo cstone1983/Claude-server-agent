@@ -250,7 +250,29 @@ Only rules scoped to them by name or tag apply.
       loses them; this happened with the timezone approvals.
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
       `timedatectl status|show` is allowed, with no extra arguments.
-- [ ] **Remove the unused 500 GB disk** from the n8n VM in Proxmox (user).
+- [ ] **Backup failure alerts to n8n** (the user asked for this later). The
+      idea: an n8n workflow with a Webhook trigger, IF failure, then notify
+      the user (HA push, Gmail or similar; ask which), optionally logging
+      to a Data Table, plus a 07:00 "dead man's switch" if no report
+      arrived. Senders:
+      - a Proxmox notification webhook target (Datacenter → Notifications);
+        switch the backup job from legacy-sendmail to notification-system.
+        This also covers ZFS and disk events.
+      - `pve-offsite-backup` POSTs OK/FAILED after each run.
+
+      Use the LAN URL; open nothing new to the internet.
+- [ ] **Proxmox 9 upgrade:** prep done 2026-11-07 (`systemd-boot` removed,
+      `intel-microcode` installed, `pve8to9 --full` shows 0 failures).
+      Next:
+      1. Confirm the first off-site upload (status file).
+      2. Switch the sources to trixie and the PVE 9 repos (ceph to
+         squid/no-subscription), backing up the sources first.
+      3. Run `apt dist-upgrade` in a tmux session, answering prompts and
+         keeping existing configs.
+      4. Run `pve8to9` again.
+      5. Reboot with `pve-safe-reboot` (with a separate OK).
+      6. Verify the VMs, hub, backup job and rclone.
+- [x] **Removed the unused 500 GB disk** from the n8n VM (2026-11-07).
 - [ ] **Agent on the Proxmox host** (node `starwars`). Blocked until the user
       resets the forgotten root password (GRUB `init=/bin/bash`, then
       `passwd root`; this reboots all VMs, so snapshot first). The web shell
