@@ -1,5 +1,28 @@
 {{define "content"}}
 <div class="page-head"><div><h1>Approvals</h1><p>Actions waiting for your OK. Identical requests across servers are grouped. New requests appear automatically.</p></div></div>
+{{if .D.Auto}}
+<div class="card power-card">
+  <div class="chips"><span class="chip power">Hands-off mode is ON</span>
+    <span class="muted small">until <time datetime="{{iso .D.Auto.Until}}">{{iso .D.Auto.Until}}</time> (<time datetime="{{iso .D.Auto.Until}}" data-fmt="rel">{{iso .D.Auto.Until}}</time>)</span></div>
+  <p class="small" style="margin:.5rem 0 0">Actions on <strong>{{.D.AutoLabel}}</strong> are approved automatically. Still asked every time: reboots that need their own OK and "always allow" rule requests. Anything a server's policy denies stays denied.</p>
+  <form method="post" class="btn-row"><input type="hidden" name="op" value="auto_off"><button class="btn danger">Turn hands-off mode off</button></form>
+</div>
+{{else}}
+<details class="card add"><summary class="secondary-text small">▸ Hands-off mode: approve actions automatically for a while (when you step away)</summary>
+  <form method="post" style="margin-top:.6rem">
+    <input type="hidden" name="op" value="auto_on">
+    <div class="form-row">
+      <div><label for="minutes">For</label>
+        <select id="minutes" name="minutes"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option><option value="480">8 hours</option><option value="720">12 hours</option></select></div>
+      <div><label for="auto_scope">On</label>
+        <select id="auto_scope" name="auto_scope"><option value="all">all servers</option>{{range .D.Servers}}<option value="server:{{.}}">only {{.}}</option>{{end}}</select></div>
+    </div>
+    <label class="check"><input type="checkbox" name="include_proxmox" value="1"> Include Proxmox hosts (their reboots still need your own OK)</label>
+    <p class="muted small">Pending requests it covers are approved right away. It switches itself off when the time is up; you can turn it off sooner here. Rule requests and Proxmox reboots are never auto-approved.</p>
+    <div class="btn-row"><button class="btn primary">Turn hands-off mode on</button></div>
+  </form>
+</details>
+{{end}}
 <div data-live>
 {{range .D.Alone}}{{$g := .}}{{range .Approvals}}
 <div class="card power-card">
@@ -51,7 +74,7 @@
 <div class="card table-wrap"><table>
 <thead><tr><th>When</th><th>Server</th><th>Action</th><th>Decision</th></tr></thead><tbody>
 {{range .D.Recent}}<tr><td class="nowrap muted"><time datetime="{{iso .CreatedAt}}">{{iso .CreatedAt}}</time></td><td>{{.Server}}</td><td><code>{{.Summary}}</code></td>
-<td>{{if eq .Status "denied"}}<span class="chip crit">denied</span>{{else if eq .Status "expired"}}<span class="chip">expired</span>{{else}}<span class="chip good">{{.Status}}</span>{{end}}{{if .RuleID}} <span class="chip brand">always allowed</span>{{end}}</td></tr>{{end}}
+<td>{{if eq .Status "denied"}}<span class="chip crit">denied</span>{{else if eq .Status "expired"}}<span class="chip">expired</span>{{else}}<span class="chip good">{{.Status}}</span>{{end}}{{if .RuleID}} <span class="chip brand">always allowed</span>{{end}}{{if .Auto}} <span class="chip">auto</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>
 {{end}}
 {{end}}

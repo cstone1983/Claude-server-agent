@@ -169,7 +169,27 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{}
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodPost && strings.HasPrefix(r.PostFormValue("op"), "auto_") {
+		via := "dashboard:" + clientIP(r)
+		switch r.PostFormValue("op") {
+		case "auto_on":
+			mins, _ := strconv.Atoi(r.PostFormValue("minutes"))
+			scope := r.PostFormValue("auto_scope")
+			n, err := h.setAutoApprove(time.Duration(mins)*time.Minute, scope, r.PostFormValue("include_proxmox") == "1", via)
+			if err != nil {
+				data["Error"] = err.Error()
+			} else {
+				msg := "Hands-off mode is on."
+				if n > 0 {
+					msg += " Also approved " + itoa(n) + " request(s) that were already waiting."
+				}
+				data["Done"] = msg
+			}
+		case "auto_off":
+			h.clearAutoApprove(via)
+			data["Done"] = "Hands-off mode is off: actions need your approval again."
+		}
+	} else if r.Method == http.MethodPost {
 		r.ParseForm()
 		ids := r.PostForm["id"]
 		action := r.PostFormValue("action")
@@ -223,6 +243,17 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data["Recent"] = recent
+	if aa := h.autoApprove(); aa != nil {
+		data["Auto"], data["AutoLabel"] = aa, aa.label()
+	}
+	var servers []string
+	h.store.View(func(d *stateData) {
+		for _, a := range d.Agents {
+			servers = append(servers, a.Name)
+		}
+	})
+	sort.Strings(servers)
+	data["Servers"] = servers
 	h.renderPanel(w, http.StatusOK, dashApprovalsTmpl, data, 10)
 }
 

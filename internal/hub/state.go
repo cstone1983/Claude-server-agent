@@ -108,6 +108,8 @@ type stateData struct {
 	Rules      []*HubRule              `json:"rules"`
 	// Sessions are dashboard logins: hashed token -> expiry.
 	Sessions map[string]time.Time `json:"dashboard_sessions"`
+	// AutoApprove is hands-off mode (nil or expired = off).
+	AutoApprove *AutoApprove `json:"auto_approve,omitempty"`
 }
 
 // Store is the hub's persistent state, saved as JSON. Secrets are stored

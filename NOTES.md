@@ -1,4 +1,4 @@
-# Project notes (state as of 2026-11-07)
+# Project notes (state as of 2026-11-08)
 
 Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
@@ -96,13 +96,13 @@ usage in [README.md](README.md).
   - `apt`/`apt-get` `update|upgrade` with any safe flags, but no package
     names, and hook, path and config options are blocked.
 
-## Proxmox host (updated 2026-11-07)
+## Proxmox host (updated 2026-11-08)
 
 - **Updates:** switched from the enterprise repo to the free no-subscription
   repo (old files in `/root/*.bak-20261107`), then updated 8.3.0 → 8.4.21
   and rebooted with pve-safe-reboot.
-  - **Proxmox VE 8 is past end of life (Aug 2026).** The upgrade to 9 is the
-    next big task: run `pve8to9` first.
+  - **Upgraded to Proxmox VE 9.2.26 (Debian trixie) on 2026-11-08**; see
+    "Proxmox 9 upgrade" below.
 - **Boot:** GRUB via `EFI\proxmox\shimx64.efi` (Boot0008); the fallback
   `EFI/BOOT` is now kept in sync. Secure Boot is off. A leftover "Windows
   Boot Manager" entry is second in the boot order.
@@ -153,14 +153,64 @@ usage in [README.md](README.md).
   - Not backed up, by the user's choice: 101, 104 and 106.
 - **Cleanup done:** n8n's unused 500 GB disk was deleted. About 300 GB of
   year-old snapshots are still there; delete them only if the user agrees.
-- **Pending: CPU-Share firewall (Akash isolation).** Waiting for the
-  go-ahead and the port list from the other chat. Scope is VM 104 `net0`
-  only.
-  - Outbound: internet only, drop 10.10.1.0/24 (mind DHCP/DNS via
-    10.10.1.1).
+- **CPU-Share firewall (Akash isolation), done 2026-11-08.** Rules in
+  `/etc/pve/firewall/104.fw`, VM 104 `net0` only.
+  - Outbound: internet only; LAN/private ranges (10/8 incl. VLANs, ipfilter
+    ipset, IPv6, multicast) dropped. DHCP (udp 67) to the UDM must stay.
   - Inbound: Akash ports, 80/443 and the NodePort range.
-  - Note: the datacenter firewall is off. Turning it on enables the host
-    firewall, so verify that 8006 and 22 stay open first.
+  - Datacenter firewall is on; the host firewall is off
+    (`/etc/pve/nodes/starwars/host.fw` `enable: 0`) so 8006/22 are unaffected.
+  - Verified: cpu-share reaches 1.1.1.1 but not 10.10.1.15.
+  - VM 104 CPU type is x86-64-v3. Memory trimmed: VM 100 to 8 GB, VM 102
+    to 16 GB.
+- **BBR** congestion control on the host (`/etc/sysctl.d/90-bbr.conf`,
+  `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
+  speed from about 10 to about 34 Mbps.
+
+## Proxmox 9 upgrade (2026-11-08)
+
+- Now **pve-manager 9.2.26** on trixie. Apt sources are deb822
+  `proxmox.sources` / `ceph.sources` (squid, no-subscription); the PVE 8
+  sources are in `/root/apt-sources-pve8/`, a config tarball in
+  `/root/pve8-pre-upgrade-20261108-0808.tar.gz`.
+- **Kernel 7.0.14-28 resets the R630** right after "Loading initial
+  ramdisk" (UEFI0078 machine-check messages, boot loop). Booting
+  **6.8.12-43-pve** works, and it is pinned in
+  `/etc/default/grub.d/proxmox-kernel-pin.cfg`. Retry 7.0 once after the
+  BIOS update, watching the iDRAC console; GRUB can still pick 6.8.
+- **NIC rename:** `pve-network-interface-pinning` renamed eno3 to **nic0**
+  (`/usr/local/lib/systemd/network/50-pve-nic0.link`, MAC
+  24:6e:96:8a:39:9c); `vmbr0` uses nic0.
+- **Lessons:** run long apt/dpkg work detached with `systemd-run` (an agent
+  timeout killed the microcode install and left dpkg half-configured);
+  chrony needed a restart after the reboot.
+- **Hardware:** R630, Service Tag 9P7V8N2, iDRAC at 10.10.1.10.
+  Updated 2026-11-08: iDRAC 2.63.60.61 → **2.86.86.86** (final), BIOS
+  2.12.1 → **2.19.0** (latest). Clean boot afterwards, no machine-check
+  errors.
+  - The 2.86 iDRAC `.EXE` failed with **RED007** (signature) on the old
+    iDRAC: extract it (`.\file.EXE /s /e=C:\dir`) and upload
+    `payload\firmimg.d7`. After that the BIOS `.EXE` installed normally
+    ("Install Next Reboot", then pve-safe-reboot).
+  - HTML5 console "Certificate may not be verified": open
+    https://10.10.1.10:5900 once and accept the certificate.
+  - After a host reboot the Proxmox agent can take about 2 min to rejoin
+    (it retries while n8n and the tunnel come back). The SEL shows no memory faults (the old RAM issue is
+  probably on another server). All 8 disks Online.
+
+## UniFi UDM Pro SE (router, 10.10.1.1)
+
+- A dedicated local admin; credentials in `/root/.config/unifi/.env` on n8n.
+  The `unifi` helper (`scripts/unifi`, installed `/usr/local/bin/unifi` on
+  n8n) calls the local API: `net:` = classic API, `v2:` = newer API.
+  Secret fields are redacted in output; it refuses to send `<redacted>`.
+- Done 2026-11-08: DHCP reservation for CPU-Share, the Akash port forwards
+  (enabled), three Nextcloud forwards removed, Cloudflare DNS for Akash set
+  by the user.
+- An early GET printed VPN private keys before redaction existed: the user
+  should regenerate those VPN keys.
+- Open: decide on the `rdc` port forward; a duplicate 10.10.3.100
+  reservation; a dead AdGuard entry.
 
 ## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
@@ -261,7 +311,7 @@ Only rules scoped to them by name or tag apply.
       - `pve-offsite-backup` POSTs OK/FAILED after each run.
 
       Use the LAN URL; open nothing new to the internet.
-- [ ] **Proxmox 9 upgrade:** prep done 2026-11-07 (`systemd-boot` removed,
+- [x] **Proxmox 9 upgrade** done 2026-11-08 (see its section). Prep done 2026-11-07 (`systemd-boot` removed,
       `intel-microcode` installed, `pve8to9 --full` shows 0 failures).
       Next:
       1. Confirm the first off-site upload (status file).
@@ -272,8 +322,29 @@ Only rules scoped to them by name or tag apply.
       4. Run `pve8to9` again.
       5. Reboot with `pve-safe-reboot` (with a separate OK).
       6. Verify the VMs, hub, backup job and rclone.
-- [ ] **Proxmox Backup Server (PBS)** (after the Proxmox 9 upgrade; the user
-      agreed on 2026-11-07). Today every night uploads full vzdump archives
+- [~] **Proxmox Backup Server (PBS): installed on the host 2026-11-08.**
+      - PBS 4.2.9 (repo `pbs.sources`, pbs-no-subscription; the re-added
+        `pve-enterprise.sources` is disabled, backup in /root). Web UI :8007.
+      - Datastore `main` at `/mnt/pve-backups/pbs`. Prune job
+        `main-retention` 02:30 (keep 1 daily, 1 weekly, 2 monthly, the user's
+        choice), GC 03:00, verify job `main-verify` Sun 05:00.
+      - User `pve@pbs` + token `pve@pbs!pve`, role DatastoreBackup on
+        /datastore/main for **both** user and token (token rights are capped
+        by the user's). Proxmox storage `pbs-main` (127.0.0.1, fingerprint,
+        keep-all, so PBS does the pruning). Secret only in
+        /etc/pve/priv/storage/pbs-main.pw.
+      - Test backup VM 103: 32 GB in 6m39s (~84 MB/s), OK.
+      - Nightly job 21:30 → pbs-main, VMs 100,102,103,107,110,111. The old
+        23:30 vzdump job + Drive upload stay until a test restore is done.
+      - Test restore OK 2026-11-08: VM 103's backup restored to VM 9103
+        `haos-restore-test` (new MAC, onboot 0, USB stick passthrough removed,
+        never started). The user deletes 9103 in the UI (qm destroy is denied
+        to the agent). Lesson: a restored copy keeps onboot and USB
+        passthrough; strip them before it can ever start.
+      - Still to do: an off-site copy of the datastore to Drive (rclone of
+        /mnt/pve-backups/pbs, only new chunks nightly); then retire the old
+        23:30 vzdump job and its upload.
+      Original plan: Today every night uploads full vzdump archives
       (about 79 GB, about 5 h at about 34 Mbps). PBS deduplicates and makes
       incremental backups, so nightly off-site uploads would be the changed
       chunks only (a few GB, minutes).
@@ -284,7 +355,7 @@ Only rules scoped to them by name or tag apply.
       - Keep the current vzdump + rclone setup until PBS is proven,
         including a test restore.
 - [x] **Removed the unused 500 GB disk** from the n8n VM (2026-11-07).
-- [ ] **Agent on the Proxmox host** (node `starwars`). Blocked until the user
+- [x] **Agent on the Proxmox host** (node `starwars`), installed 2026-11-07 with careful mode. Old notes: blocked until the user
       resets the forgotten root password (GRUB `init=/bin/bash`, then
       `passwd root`; this reboots all VMs, so snapshot first). The web shell
       user `stonec` isn't root and Proxmox has no sudo. Then:
@@ -293,7 +364,7 @@ Only rules scoped to them by name or tag apply.
          `pvesm status`, `pvesh get`.
       3. Add local deny rules in `/etc/csa/policy.yaml`: `qm destroy`,
          `pct destroy`, `pvecm`.
-- [ ] **Proxmox backups are broken.**
+- [x] **Proxmox backups are broken.** Fixed 2026-11-07 (local job + off-site).
       - Its `local` storage was 100% full of backups from Oct 2025; the
         backup job most likely stopped once the disk filled.
       - On 2026-11-07 the user deleted every backup, leaving 77 GB free, so
@@ -323,6 +394,64 @@ Only rules scoped to them by name or tag apply.
       `NAME` and `VERSION`. That was the real reason servers enrolled as
       "Ubuntu", and why release downloads silently fell back to building
       from source. Fixed by reading it in a subshell.
+- [x] **BIOS/iDRAC update** done 2026-11-08.
+- [x] **Retried kernel 7.0 after the BIOS update (2026-11-08): still resets.**
+      The iDRAC SEL shows machine-check errors on **both CPU 1 and CPU 2** at
+      every 7.0 boot (13:37, 13:40, 13:43, 13:53 and 15:24 UTC), plus BERT
+      records; there are no DIMM/memory events. Under 6.8 the EDAC counters
+      show 0 errors; microcode 0x49 is final for E5-2680 v3. Conclusion:
+      kernel 7.0 is incompatible with this Haswell-EP R630, not a hardware
+      fault. Stay on 6.8; next try 6.17.13 (a one-time GRUB boot), then pin
+      it if it works.
+- [ ] **Move the pinned kernel 6.8 to 6.17** (6.8 is the PVE 8 kernel).
+- [ ] **Power supply 2:** the SEL shows input-power losses in Mar/Apr 2025. Check that both PSUs are plugged into separate live circuits and that redundancy shows OK.
+- [x] **Agents updated to v0.1.24** (2026-11-08). Approvals-page login now lasts
+      7 days (`dashboard_session_hours: 168` in /etc/csa-hub/hub.yaml).
+- [ ] **File server, VM 112 `fileserver`** (created 2026-11-08): Ubuntu 24.04.2 from
+      ISO, 4 cores / 8 GB, 32 GB system disk on `VM`, **5100 GB data disk on
+      `eql-fileshare`** (LVM on the EqualLogic iSCSI volume `fileshare`, 5 TB
+      thin, snap-reserve 0, ACL = Proxmox IQN only; Proxmox storages
+      `eql-fileshare-iscsi` + `eql-fileshare`).
+      Plan: data at /srv/share (users/<name> private, public/ shared);
+      **Samba + Nextcloud on the same files** (Nextcloud external storage
+      "Local" with $user). A tiny custom Nextcloud app listens for
+      UserCreated / PasswordUpdated / UserDeleted events and calls one
+      sudo-restricted helper that creates or updates the Samba user (same
+      password) and the folder with permissions; it only manages members of
+      the "fileshare users" group; deletion only disables Samba (the folder
+      is kept). Samba-side password changes are disabled. Outside access
+      via Cloudflare Tunnel. Next: the user installs Ubuntu + joins the
+      agent, then build.
+- [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
+      by the user (no snapshot or backup of VM 104 exists).
+- [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its
+      Group Manager web UI is a Java applet, which modern browsers can't run.
+      Options: the CLI over SSH/telnet or the serial port (full management);
+      the standalone Group Manager Java app; or an old-Java VM. Possible use:
+      iSCSI storage for Proxmox (PBS datastore and bulk/low-IO VM disks; about 16 TB raw, so about 11-13 TB usable in RAID 6/50; 1 GbE ports, use multipath). Service Tag 6V9CVL1; two Type 7 control modules (C0/C1), each with
+      4 x 1 GbE and a serial port; active/standby, so 4 ports carry traffic
+      (about 400 MB/s); needs a storage switch or VLAN plus multipath. **Set up 2026-11-08:** password recovery (Ctrl-P → `EQL>` prompt,
+      `setenv RESETPASSWORD 1`, `reload`), then `reset` (DeleteAllMyDataNow),
+      then `setup`. Group `eqlgroup` at **10.10.1.31**, member `eql1` on
+      **eth3 10.10.1.30** (switch port 26 on USW Pro 48; eth0 has no link).
+      The grpadmin password is the user's (in their password manager; the
+      temp file was shredded). Firmware V7.0.4; GUI is a Java applet.
+      Disks: 15 × 1 TB SATA 7200 (Hitachi HUA722010CLA330 / Seagate
+      ST1000NM0011), all healthy; slot 15 spare; **slot 8 empty/missing**
+      (the user may add it later, hot-add). RAID policy **raid6** (~10.5 TB).
+      Warnings: **PSU 1 has no AC/failed**, CMOS coin battery low (2.65 V),
+      the cache battery was charging, and the second control module (slot 0)
+      was pulled for the reset; reinsert it. Was: plan (2026-11-08): console via a USB-serial adapter + null-modem DB9
+      cable into the R630 (`/dev/ttyUSB0`, picocom, 9600 8N1) through the
+      Proxmox agent session tools; no laptop needed. The user is OK using the
+      factory default login `grpadmin` for now: keep the SAN's Ethernet off
+      the LAN until the password is changed (the new password goes in via a
+      root-only file, never chat). A Windows agent with serial tools is a
+      possible separate project. Need: its
+      group/management IP, firmware version and whether the admin password
+      (default grpadmin) is known.
+- [x] **Failing DIMM?** Not on the R630 (SEL clean, EDAC 0 errors). The user thinks the memory issue is on their *other* server; check that one when it comes up.
+- [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
       the approvals page.
 - [ ] **Ubuntu 26.04 for the other servers,** one at a time, with a snapshot
