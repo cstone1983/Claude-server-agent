@@ -34,13 +34,16 @@ Options:
   update [--check] [--force]      install the latest GitHub release if it is newer (what csa-update runs)
   Updates never run on their own: run sudo csa-update, or let Claude run update_server when you approve.
   uninstall [--purge]
-  proxmox-policy                  rewrite /etc/csa/policy.yaml with the current Proxmox careful-mode
-                                  policy (the old file is kept as a timestamped backup)
+  proxmox-policy [--last-vms "102 105"]
+                                  rewrite /etc/csa/policy.yaml with the current Proxmox careful-mode
+                                  policy (the old file is kept as a timestamped backup) and install
+                                  pve-safe-reboot; --last-vms sets the VMs it shuts down last
+                                  (e.g. the VM that runs the hub)
 EOF
 }
 
 MODE="${1:-}"; shift || true
-PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 REPLACE=0 CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
+LAST_VMS="" PUBLIC_URL="" LISTEN="" CF_TOKEN="" HUB_URL="" JOIN="" NAME="" TAGS="" VERSION="latest" FROM_SOURCE=0 REF="main" LOCAL_AGENT=1 PURGE=0 REPLACE=0 CHECK_ONLY=0 FORCE=0 NO_SOURCE_FALLBACK=0 QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-url) PUBLIC_URL="${2:?}"; shift 2 ;;
@@ -56,6 +59,7 @@ while [ $# -gt 0 ]; do
     --no-local-agent) LOCAL_AGENT=0; shift ;;
     --purge) PURGE=1; shift ;;
     --replace) REPLACE=1; shift ;;
+    --last-vms) LAST_VMS="${2:?}"; shift 2 ;;
     --check) CHECK_ONLY=1; shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -165,7 +169,9 @@ write_proxmox_policy() {
 # - Rules approved for ALL servers are not applied here (keep the tag
 #   "proxmox" on this server), and apt upgrade is not automatic.
 # - Rebooting the host always needs its own approval, on its own (ask_always),
-#   and scripts that contain a reboot are refused.
+#   and scripts that contain a reboot are refused. Use pve-safe-reboot: it shuts
+#   the VMs down cleanly one by one (the "last" VMs, e.g. the hub, last) and
+#   only then reboots. "pve-safe-reboot --dry-run" shows the plan.
 # - Shutting the host down is never allowed: do that yourself.
 # - Nothing else is blocked outright. To block something permanently, add e.g.:
 #     deny:
@@ -193,6 +199,8 @@ read:
     argv: ["zpool|zfs", "list|status", "**"]
   - id: pve-lvm-read
     argv: ["lvs|vgs|pvs", "**"]
+  - id: pve-safe-reboot-plan
+    argv: ["pve-safe-reboot", "--dry-run"]
 
 allow:
   - id: pve-backup-run
@@ -203,6 +211,9 @@ allow:
 # Rebooting the host takes every VM down. It always needs its own approval,
 # on its own: never bundled, never "always allowed".
 ask_always:
+  - id: pve-safe-reboot
+    argv: ["pve-safe-reboot", "**"]
+    not_args: ["--dry-run"]
   - id: pve-host-reboot
     argv: ["reboot", "**"]
   - id: pve-host-reboot-shutdown-r
@@ -232,10 +243,101 @@ PVE
   say "Proxmox VE detected: careful-mode policy installed (see /etc/csa/policy.yaml)"
 }
 
+# pve-safe-reboot: shut every running VM down cleanly, one at a time (the VMs
+# in LAST_VMIDS, e.g. the one running the hub, last), and only then reboot.
+# If a VM does not stop in time, it aborts and the host is NOT rebooted.
+install_pve_safe_reboot() {
+  cat > /usr/local/sbin/pve-safe-reboot <<'SAFE'
+#!/bin/bash
+# pve-safe-reboot [--dry-run]
+# Shuts down every running VM cleanly, one at a time (VMs listed in
+# LAST_VMIDS in /etc/pve-safe-reboot.conf go last), then reboots the host.
+# If a VM does not stop within TIMEOUT seconds it stops there and does NOT
+# reboot. Log: /var/log/pve-safe-reboot.log
+set -u
+CONF=/etc/pve-safe-reboot.conf
+LOG=/var/log/pve-safe-reboot.log
+STATE=/var/lib/pve-safe-reboot.last-running
+TIMEOUT=180
+LAST_VMIDS=""
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+
+running_vms() { qm list | awk 'NR > 1 && $3 == "running" { print $1 }'; }
+name_of() { qm config "$1" | sed -n 's/^name: //p'; }
+onboot_of() { if qm config "$1" | grep -q '^onboot: 1'; then echo yes; else echo NO; fi; }
+
+ORDER=()
+build_plan() {
+  local first=() last=() id want
+  for id in $(running_vms); do
+    if [[ " $LAST_VMIDS " == *" $id "* ]]; then continue; fi
+    first+=("$id")
+  done
+  for want in $LAST_VMIDS; do
+    for id in $(running_vms); do [ "$id" = "$want" ] && last+=("$id"); done
+  done
+  ORDER=("${first[@]}" "${last[@]}")
+}
+
+blockers() {
+  if pgrep -x vzdump >/dev/null; then echo "a backup (vzdump) is running"; fi
+}
+
+build_plan
+if [ "${1:-}" = "--dry-run" ]; then
+  echo "Plan (nothing is done now): shut down these running VMs in this order, then reboot the host."
+  echo "Each VM gets up to ${TIMEOUT}s to stop; if one does not stop, the reboot is cancelled."
+  n=1
+  for id in "${ORDER[@]}"; do
+    printf '  %d. VM %s  %-20s start at boot: %s\n' "$n" "$id" "$(name_of "$id")" "$(onboot_of "$id")"
+    n=$((n + 1))
+  done
+  [ ${#ORDER[@]} -eq 0 ] && echo "  (no VMs are running)"
+  echo "Shut down last: ${LAST_VMIDS:-<none set>}"
+  b=$(blockers); [ -n "$b" ] && echo "BLOCKED right now: $b"
+  exit 0
+fi
+
+if [ -z "${INVOCATION_ID:-}" ]; then
+  # Run detached from whoever called us, so losing the connection (e.g. when
+  # the VM that runs the hub stops) does not interrupt it.
+  b=$(blockers); if [ -n "$b" ]; then echo "Not starting: $b." >&2; exit 1; fi
+  systemd-run --unit="pve-safe-reboot-$(date +%s)" --collect --quiet /usr/local/sbin/pve-safe-reboot || exit 1
+  echo "Safe reboot started: ${#ORDER[@]} VM(s) will be shut down one by one, then the host reboots."
+  echo "Progress: $LOG"
+  exit 0
+fi
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+log "=== safe reboot started; order: ${ORDER[*]:-none} ==="
+printf '%s\n' "${ORDER[@]}" > "$STATE"
+for id in "${ORDER[@]}"; do
+  log "Shutting down VM $id ($(name_of "$id"))..."
+  if qm shutdown "$id" --timeout "$TIMEOUT" >> "$LOG" 2>&1 && qm status "$id" | grep -q 'status: stopped'; then
+    log "VM $id stopped cleanly."
+  else
+    log "ERROR: VM $id did not stop within ${TIMEOUT}s. CANCELLED: the host was NOT rebooted. Already stopped: see above."
+    exit 1
+  fi
+done
+log "All VMs stopped. Rebooting the host now."
+sync
+systemctl reboot
+SAFE
+  chmod 0755 /usr/local/sbin/pve-safe-reboot
+  if [ -n "$LAST_VMS" ]; then
+    printf 'LAST_VMIDS="%s"\n' "$LAST_VMS" > /etc/pve-safe-reboot.conf
+  elif [ ! -f /etc/pve-safe-reboot.conf ]; then
+    printf '%s\n' '# VM IDs to shut down last, e.g. the VM that runs the Claude Server Agent hub:' 'LAST_VMIDS=""' > /etc/pve-safe-reboot.conf
+  fi
+  say "Installed pve-safe-reboot ($(grep '^LAST_VMIDS' /etc/pve-safe-reboot.conf))"
+}
+
 write_default_policy() {
   [ -f /etc/csa/policy.yaml ] && return 0
   mkdir -p /etc/csa && chmod 0755 /etc/csa
-  if is_proxmox; then write_proxmox_policy; return 0; fi
+  if is_proxmox; then write_proxmox_policy; install_pve_safe_reboot; return 0; fi
   cat > /etc/csa/policy.yaml <<'EOF'
 # Claude Server Agent — local policy for this server.
 #
@@ -691,7 +793,8 @@ do_proxmox_policy() {
     say "Old policy saved as $bak"
   fi
   write_proxmox_policy
-  /usr/local/bin/csa-agent check -- reboot || true
+  install_pve_safe_reboot
+  /usr/local/bin/csa-agent check -- pve-safe-reboot || true
   systemctl reload csa-agent 2>/dev/null || systemctl restart csa-agent
   say "Policy reloaded"
 }

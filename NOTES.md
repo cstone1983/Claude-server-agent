@@ -115,7 +115,21 @@ instructions (`internal/hub/server.go`), so every Claude chat gets it.
 - **Shutdown or poweroff:** never; the user does that by hand. Denied in
   policy.
 - **Scripts that contain a reboot:** refused.
-- **Refresh an older host's policy:** run `install.sh proxmox-policy` as root.
+- **How to reboot:** always with **`pve-safe-reboot`** in
+  `/usr/local/sbin`.
+  - It shuts each running VM down cleanly, one at a time, with up to 180 s
+    each. The VMs in `LAST_VMIDS` (in `/etc/pve-safe-reboot.conf`; n8n = 102)
+    go last.
+  - Then it reboots the host.
+  - If a VM won't stop, it cancels, the host doesn't reboot, and n8n is
+    still up.
+  - It runs detached; the log is `/var/log/pve-safe-reboot.log`, and the
+    list of VMs that were running is in
+    `/var/lib/pve-safe-reboot.last-running`.
+  - `pve-safe-reboot --dry-run` is a free read and shows the order.
+  - Before running it, check that no VM is mid-upgrade or mid-backup.
+  - Afterwards, start any VM that was running but lacks "Start at boot".
+- **Refresh an older host's policy:** run `install.sh proxmox-policy --last-vms 102` as root.
   It backs up the old file and reloads the agent.
 
 **The hub never applies "all servers" rules to servers tagged `proxmox`.**
