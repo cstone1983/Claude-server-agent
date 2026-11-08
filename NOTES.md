@@ -426,8 +426,19 @@ Only rules scoped to them by name or tag apply.
       password) and the folder with permissions; it only manages members of
       the "fileshare users" group; deletion only disables Samba (the folder
       is kept). Samba-side password changes are disabled. Outside access
-      via Cloudflare Tunnel. Next: the user installs Ubuntu + joins the
-      agent, then build.
+      via Cloudflare Tunnel.
+      **Built 2026-11-08:** 10.10.1.80 (DHCP, no reservation yet), Ubuntu 24.04,
+      data = XFS on sdb at /srv/share (fstab UUID). Samba shares "My Files"
+      (/srv/share/users/%U) + "Public" (@fsusers, setgid + default ACLs).
+      Nextcloud 35.0.2 at http://10.10.1.80 (Apache/PHP 8.3, MariaDB, Redis,
+      cron), data dir /var/lib/nextcloud-data; external storage "My Files"
+      ($user) + "Public" for Nextcloud group `fileshare`; www-data is in
+      fsusers. Sync: /usr/local/sbin/fs-user (sudo for www-data only) + app
+      apps/fssync. End-to-end tested OK (create, password change, disable,
+      enable, delete; Samba <-> Nextcloud files both ways). Note: occ
+      --password-from-env needs `sudo -u www-data env OC_PASS=...` (sudo
+      strips env). To do: DHCP reservation, Cloudflare tunnel (if wanted),
+      HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
       by the user (no snapshot or backup of VM 104 exists).
 - [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its
