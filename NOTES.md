@@ -437,7 +437,14 @@ Only rules scoped to them by name or tag apply.
       apps/fssync. End-to-end tested OK (create, password change, disable,
       enable, delete; Samba <-> Nextcloud files both ways). Note: occ
       --password-from-env needs `sudo -u www-data env OC_PASS=...` (sudo
-      strips env). To do: DHCP reservation, Cloudflare tunnel (if wanted),
+      strips env). Name: **\\fileserver**. UDM DHCP reservation 10.10.1.80 (client
+      named fileserver) + UDM local DNS A record `fileserver` (resolves as
+      fileserver.localdomain); Samba `netbios name = FILESERVER`, nmbd on,
+      bound to lo + 10.10.1.0/24; wsdd via a custom unit
+      /etc/systemd/system/wsdd.service (the Ubuntu package ships none) on
+      enp6s18. Samba/SMB stays LAN-only (no router forwards; the user wants it
+      that way). The UDM rate-limits logins: space out `unifi` calls.
+      To do: Cloudflare tunnel for Nextcloud only (if wanted),
       HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
       by the user (no snapshot or backup of VM 104 exists).
