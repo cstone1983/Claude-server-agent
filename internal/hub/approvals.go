@@ -49,6 +49,8 @@ type Approval struct {
 	// AskAlways: needs its own OK every time (never bulk-approved, never
 	// turned into an "always allow" rule).
 	AskAlways bool `json:"ask_always,omitempty"`
+	// Auto: approved by hands-off mode, not by a person.
+	Auto bool `json:"auto,omitempty"`
 
 	decided chan struct{}
 	ran     chan struct{} // closed when an approved action finished running
@@ -116,10 +118,19 @@ func (h *Hub) newApproval(agent *AgentRec, call *proto.Call, na *proto.NeedsAppr
 		Suggested: na.SuggestedRule, Status: StatusPending, CreatedAt: time.Now().UTC(),
 		URL: h.cfg.PublicURL + "/approve/" + id, decided: make(chan struct{}), Kind: "action", AskAlways: na.AskAlways,
 	}
+	auto := h.autoApproveCovers(agent, na.AskAlways)
+	if auto {
+		ap.Status, ap.Auto, ap.DecidedAt = StatusApproved, true, ap.CreatedAt
+		close(ap.decided)
+	}
 	h.appr.mu.Lock()
 	h.appr.m[id] = ap
 	h.appr.mu.Unlock()
 	h.audit.Write(audit.Entry{Event: "approval_requested", Server: agent.Name, Tool: call.Tool, Caller: call.Caller, Summary: na.Summary, ApprovalID: id})
+	if auto {
+		h.audit.Write(audit.Entry{Event: "approval_auto_granted", Server: agent.Name, Tool: call.Tool, Caller: call.Caller, Summary: na.Summary, ApprovalID: id})
+		return ap
+	}
 	go h.notify(*ap)
 	return ap
 }
@@ -144,6 +155,7 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 	}
 	if approve {
 		ap.Status = StatusApproved
+		ap.Auto = via == "auto-approve"
 	} else {
 		ap.Status = StatusDenied
 	}

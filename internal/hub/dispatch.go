@@ -132,7 +132,7 @@ func (h *Hub) invokeOne(ctx context.Context, caller Caller, agent *AgentRec, too
 			return sr
 		}
 		sr = fromResult(sr, res)
-		sr.Text = "(approved by user)\n" + sr.Text
+		sr.Text = approvedPrefix(snap) + ")\n" + sr.Text
 		return sr
 	case StatusDenied:
 		sr.Error = "the user denied this action"
@@ -141,6 +141,15 @@ func (h *Hub) invokeOne(ctx context.Context, caller Caller, agent *AgentRec, too
 	sr.Pending = true
 	sr.Text = fmt.Sprintf("NEEDS APPROVAL — not run yet.\nAction: %s\nWhy: %s\n\nAsk the user to approve it here: %s\nThen call check_approval with approval_id=%q.\n(Approving with \"always allow\" lets this exact action run without asking next time. All pending approvals can be reviewed together at %s/approvals)", snap.Summary, snap.Why, snap.URL, snap.ID, h.cfg.PublicURL)
 	return sr
+}
+
+// approvedPrefix starts the "(approved …" note on an approved action's result
+// (without the closing parenthesis).
+func approvedPrefix(ap Approval) string {
+	if ap.Auto {
+		return "(auto-approved: hands-off mode is on"
+	}
+	return "(approved by user"
 }
 
 func fromResult(sr ServerResult, res *proto.Result) ServerResult {
@@ -270,7 +279,7 @@ func (h *Hub) checkApproval(ctx context.Context, caller Caller, id string) Outco
 		return Outcome{Text: "approval status: " + st}
 	}
 	sr := fromResult(ServerResult{Server: snap.Server}, res)
-	prefix := "(approved by user"
+	prefix := approvedPrefix(snap)
 	if snap.RuleID != "" {
 		prefix += "; rule added so this runs without approval next time"
 	}
