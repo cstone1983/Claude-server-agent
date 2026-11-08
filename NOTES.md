@@ -272,6 +272,17 @@ Only rules scoped to them by name or tag apply.
       4. Run `pve8to9` again.
       5. Reboot with `pve-safe-reboot` (with a separate OK).
       6. Verify the VMs, hub, backup job and rclone.
+- [ ] **Proxmox Backup Server (PBS)** (after the Proxmox 9 upgrade; the user
+      agreed on 2026-11-07). Today every night uploads full vzdump archives
+      (about 79 GB, about 5 h at about 34 Mbps). PBS deduplicates and makes
+      incremental backups, so nightly off-site uploads would be the changed
+      chunks only (a few GB, minutes).
+      - Plan: a PBS VM or install, the datastore on `/mnt/pve-backups` (or
+        similar), and the nightly job pointed at PBS.
+      - Off-site: either `rclone sync` of the datastore with crypt, or a PBS
+        remote/sync target.
+      - Keep the current vzdump + rclone setup until PBS is proven,
+        including a test restore.
 - [x] **Removed the unused 500 GB disk** from the n8n VM (2026-11-07).
 - [ ] **Agent on the Proxmox host** (node `starwars`). Blocked until the user
       resets the forgotten root password (GRUB `init=/bin/bash`, then
