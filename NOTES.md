@@ -405,6 +405,12 @@ Only rules scoped to them by name or tag apply.
       it if it works.
 - [ ] **Move the pinned kernel 6.8 to 6.17** (6.8 is the PVE 8 kernel).
 - [ ] **Power supply 2:** the SEL shows input-power losses in Mar/Apr 2025. Check that both PSUs are plugged into separate live circuits and that redundancy shows OK.
+- [x] **Hands-off mode** (v0.1.25, PR #35, 2026-11-08): the approvals page can
+      auto-approve actions for 30 min-12 h on all servers or one server.
+      Proxmox is excluded unless ticked; it never covers Proxmox reboots
+      (ask_always), rule requests or policy denials. Marked "auto" in recent
+      decisions and audited (`approval_auto_granted`). State is in hub state
+      `auto_approve`. All agents + hub on v0.1.25.
 - [x] **Agents updated to v0.1.24** (2026-11-08). Approvals-page login now lasts
       7 days (`dashboard_session_hours: 168` in /etc/csa-hub/hub.yaml).
 - [ ] **File server, VM 112 `fileserver`** (created 2026-11-08): Ubuntu 24.04.2 from
