@@ -1,0 +1,91 @@
+#!/bin/bash
+# pve-offsite-backup: copy the newest Proxmox backup of each VM to Google Drive
+# (encrypted with rclone crypt) and keep, per VM:
+#   daily/      the newest backup only
+#   weekly/     one copy, refreshed every Sunday
+#   bimonthly/  one copy, refreshed on the 1st of every odd month
+# Copies into weekly/ and bimonthly/ are made inside Google Drive (server-side),
+# so they use no upload bandwidth. Older copies are deleted.
+# Upload speed: full speed until 04:30, then 1 MB/s (about 8 Mbps).
+#
+# Runs from pve-offsite-backup.timer after the nightly vzdump job.
+# Log: /var/log/pve-offsite-backup.log   Status: /var/lib/pve-offsite-backup.status
+set -u
+export RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+DUMP=/mnt/pve-backups/dump
+REMOTE=gcrypt:
+LOG=/var/log/pve-offsite-backup.log
+STATUS=/var/lib/pve-offsite-backup.status
+MAX_AGE_H=20          # only upload backups made in the last 20 hours
+RCLONE_OPTS=(--bwlimit "04:30,1M 23:00,off" --drive-chunk-size 64M --transfers 1 --retries 5 --low-level-retries 20 --stats 10m --stats-one-line)
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+fail() { log "FAILED: $*"; echo "FAILED $(date '+%F %T') $*" > "$STATUS"; exit 1; }
+
+# Only one run at a time.
+exec 9>/run/pve-offsite-backup.lock
+flock -n 9 || { echo "another upload is already running" >&2; exit 0; }
+
+log "=== offsite upload started ==="
+
+# Wait for a running vzdump to finish (up to 3 hours).
+for _ in $(seq 180); do pgrep -x vzdump >/dev/null || break; sleep 60; done
+pgrep -x vzdump >/dev/null && fail "vzdump still running after 3 hours"
+
+[ -d "$DUMP" ] || fail "$DUMP not found (backup disk not mounted?)"
+
+# Clean up the leftover setup test folder, if any.
+rclone purge "${REMOTE}_test" >/dev/null 2>&1 || true
+
+dow=$(date +%u); dom=$(date +%d); month=$((10#$(date +%m)))
+uploaded=0; problems=()
+
+# Newest backup archive per VM ID.
+for vmid in $(ls "$DUMP" | sed -n 's/^vzdump-qemu-\([0-9]\+\)-.*\.vma\.zst$/\1/p' | sort -un); do
+  newest=$(ls -1t "$DUMP"/vzdump-qemu-"$vmid"-*.vma.zst | head -1)
+  base=$(basename "$newest" .vma.zst)
+  name=$(cat "$newest.notes" 2>/dev/null | tr -cd 'A-Za-z0-9._-' ); [ -n "$name" ] || name="vm$vmid"
+  folder="${REMOTE}${vmid}-${name}"
+  age_h=$(( ( $(date +%s) - $(stat -c %Y "$newest") ) / 3600 ))
+  if [ "$age_h" -gt "$MAX_AGE_H" ]; then
+    problems+=("VM $vmid: newest local backup is ${age_h}h old (tonight's backup missing?)"); continue
+  fi
+  log "VM $vmid ($name): uploading $base ($(du -h "$newest" | cut -f1))"
+  if ! rclone copy "$DUMP" "$folder/daily" --include "$base.*" "${RCLONE_OPTS[@]}" >> "$LOG" 2>&1; then
+    problems+=("VM $vmid: upload failed"); continue
+  fi
+  # Verify size on Drive matches before deleting anything.
+  remote_size=$(rclone size "$folder/daily" --include "$base.vma.zst" --json 2>/dev/null | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')
+  if [ "$remote_size" != "$(stat -c %s "$newest")" ]; then
+    problems+=("VM $vmid: size check failed after upload"); continue
+  fi
+  rclone delete "$folder/daily" --exclude "$base.*" >> "$LOG" 2>&1
+  uploaded=$((uploaded + 1))
+
+  # Weekly: refresh on Sundays, or seed if empty.
+  if [ "$dow" = 7 ] || [ -z "$(rclone lsf "$folder/weekly" 2>/dev/null)" ]; then
+    rclone copy "$folder/daily" "$folder/weekly" --include "$base.*" >> "$LOG" 2>&1 \
+      && rclone delete "$folder/weekly" --exclude "$base.*" >> "$LOG" 2>&1 \
+      && log "VM $vmid: weekly copy refreshed"
+  fi
+  # Every 2 months: refresh on the 1st of odd months, or seed if empty.
+  if { [ "$dom" = 01 ] && [ $((month % 2)) -eq 1 ]; } || [ -z "$(rclone lsf "$folder/bimonthly" 2>/dev/null)" ]; then
+    rclone copy "$folder/daily" "$folder/bimonthly" --include "$base.*" >> "$LOG" 2>&1 \
+      && rclone delete "$folder/bimonthly" --exclude "$base.*" >> "$LOG" 2>&1 \
+      && log "VM $vmid: 2-monthly copy refreshed"
+  fi
+done
+
+# Proxmox host settings (VM configs, storage, network): small, keep the last 7.
+cfg="/tmp/pve-host-config-$(date +%F).tar.gz"
+tar -czf "$cfg" /etc/pve /etc/network/interfaces /etc/fstab /etc/hosts /etc/apt/sources.list.d \
+    /etc/pve-safe-*.conf /etc/csa/policy.yaml 2>/dev/null
+rclone copy "$cfg" "${REMOTE}_host-config" "${RCLONE_OPTS[@]}" >> "$LOG" 2>&1 || problems+=("host config upload failed")
+rm -f "$cfg"
+rclone delete "${REMOTE}_host-config" --min-age 7d >> "$LOG" 2>&1 || true
+
+if [ ${#problems[@]} -gt 0 ]; then
+  fail "$uploaded VM(s) uploaded; problems: ${problems[*]}"
+fi
+log "=== done: $uploaded VM(s) uploaded ==="
+echo "OK $(date '+%F %T') $uploaded VM(s) uploaded" > "$STATUS"

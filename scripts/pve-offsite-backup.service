@@ -1,0 +1,12 @@
+[Unit]
+Description=Upload the newest Proxmox backups to Google Drive (encrypted)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/mnt/pve-backups
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-offsite-backup
+TimeoutStartSec=14h
+Nice=10
+IOSchedulingClass=idle

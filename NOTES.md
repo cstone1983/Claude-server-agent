@@ -115,13 +115,42 @@ usage in [README.md](README.md).
   CPU-Share, 106 Jessy, 107 Recipies, 110 Autopilot-Climate (stopped), 111
   Fiance. All are onboot except 110.
   - Memory is overcommitted: 245 GB assigned on a 188 GB host.
-- **Backups:** the old job (VMs 101, 102, 103 to `local` at 21:00) had
+- **Backups (working since 2026-11-07):**
+  - **Local:** storage `backups` is the 700 GB LV `pve/backups` at
+    `/mnt/pve-backups` (RAID 1, separate from the VM pool). Job
+    `backup-79526ae3-5f24` runs nightly at 23:30, snapshot mode, zstd, keep
+    last 1, for VMs 100, 102, 103, 107, 110 and 111. The first full set was
+    79 GB and took 32 min.
+  - **Off-site:** `/usr/local/sbin/pve-offsite-backup` (source in
+    `scripts/`) runs from `pve-offsite-backup.timer` at 23:35 and waits for
+    vzdump.
+    - It uploads with rclone remote `gcrypt:`, a crypt over `drive:`. The
+      Google Drive scope is `drive.file`; `root_folder_id` is the user's
+      folder "backup/proxmox vm"; file and folder names stay readable.
+    - Layout: `<vmid>-<name>/daily|weekly|bimonthly`, keeping 1 each.
+      Weekly refreshes on Sunday; 2-monthly on the 1st of odd months.
+      Copies between slots are server-side.
+    - `_host-config/` keeps the last 7 tarballs of `/etc/pve`, network and
+      fstab.
+    - Bandwidth limit: off at night, 1 MB/s from 04:30 to 23:00. The
+      connection is 40 Mbps up, so 79 GB takes about 4.5 h.
+    - Log: `/var/log/pve-offsite-backup.log`. Status (OK/FAILED):
+      `/var/lib/pve-offsite-backup.status`.
+    - rclone needs `RCLONE_CONFIG=/root/.config/rclone/rclone.conf` (the
+      agent runs with a minimal env). Never run `rclone config update` on
+      `drive`, because it triggers a browser re-auth.
+    - **Keys:** the crypt passwords are only in the user's password manager
+      and in `rclone.conf` on the host. If they're lost, the off-site copies
+      are unrecoverable.
+  - **To do:**
+    - a test restore from Drive;
+    - qemu-guest-agent in the Ubuntu VMs (only HA has it);
+    - failure alerts (the job's mail goes through legacy sendmail and
+      probably never arrives).
+- **History:** the old job (VMs 101, 102, 103 to `local` at 21:00) had
   failed every night because the disk was full; the disk was cleared on
   2026-11-07.
-  - Planned replacement: the 702 GB `data` area as `backups`, keep 1 local
-    copy, nightly encrypted upload to Google Drive (keep the newest daily,
-    1 weekly, 2-monthly).
-  - VMs to back up: 100, 102, 103, 107, 110, 111. Not 101, 106 or 104.
+  - Not backed up, by the user's choice: 101, 104 and 106.
 - **Cleanup done:** n8n's unused 500 GB disk was deleted. About 300 GB of
   year-old snapshots are still there; delete them only if the user agrees.
 - **Pending: CPU-Share firewall (Akash isolation).** Waiting for the
@@ -241,7 +270,9 @@ Only rules scoped to them by name or tag apply.
       - VMs: 100 Solar-Calc, 101 Ubuntu-Anthony, 102 n8n, 103 haos16.0 (Home
         Assistant), 104 CPU-Share, 106 Jessy, 107 Recipies, 110
         Autopilot-Climate, 111 Fiance.
-- [ ] **Off-site copies of Proxmox backups on Google Drive.** Do this after
+- [x] **Off-site copies of Proxmox backups on Google Drive** (done
+      2026-11-07; see the Proxmox section).
+- [ ] *(old plan, kept for reference)* **Off-site copies of Proxmox backups on Google Drive.** Do this after
       the local backup job works.
       - The user has a 5 TB Google plan with about 4 TB free.
       - Use `rclone` on the Proxmox host with an encrypted remote (`crypt`)
