@@ -463,7 +463,19 @@ Only rules scoped to them by name or tag apply.
       on purpose: peer-to-peer calls need no open ports; HPB would need UDP
       port forwards; add a hosted TURN if a call fails), mail not
       set, 2FA not enforced (recommend TOTP for stonec).
-      To do: move the Nextcloud data dir to /srv/share/.nextcloud (offered),
+      **Layout changed 2026-11-08 (user's request):** Nextcloud datadirectory
+      is now **/srv/share/.nextcloud** (SAN); oc_storages local:: id updated;
+      the old dir is kept at /var/lib/nextcloud-data.old (80 MB, delete
+      once confirmed). Samba "My Files" = /srv/share/.nextcloud/%U/files =
+      the user's own Nextcloud files (the "My Files" external mount and
+      /srv/share/users were removed). Public unchanged (/srv/share/public,
+      external mount + Samba). filesystem_check_changes=1 (Samba edits show
+      immediately), skeleton/template dirs disabled. Permissions:
+      .nextcloud 0770 + g:fsusers:--x; user home 0750 + u:<user>:--x;
+      files dir ACL u:<user>:rwX + u:www-data:rwX (+ defaults); appdata and
+      internal files 0750/0640 (www-data only). fs-user has a `fixperms`
+      action. Retested: both directions, Public, privacy (other users,
+      appdata, log, data folder all blocked). Users stonec and jessy exist.
       HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
       by the user (no snapshot or backup of VM 104 exists).
