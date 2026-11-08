@@ -444,6 +444,11 @@ Only rules scoped to them by name or tag apply.
       /etc/systemd/system/wsdd.service (the Ubuntu package ships none) on
       enp6s18. Samba/SMB stays LAN-only (no router forwards; the user wants it
       that way). The UDM rate-limits logins: space out `unifi` calls.
+      Exception: `EXISTING_OK="stonec"` in fs-user lets the existing system
+      account stonec (the user's Linux admin) be a file-share user (Samba has
+      its own passwords, unix password sync = no, so the Linux login is
+      unaffected); stonec was set up once by hand + added to Nextcloud group
+      fileshare.
       To do: Cloudflare tunnel for Nextcloud only (if wanted),
       HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
