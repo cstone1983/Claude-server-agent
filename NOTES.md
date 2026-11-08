@@ -184,10 +184,18 @@ usage in [README.md](README.md).
 - **Lessons:** run long apt/dpkg work detached with `systemd-run` (an agent
   timeout killed the microcode install and left dpkg half-configured);
   chrony needed a restart after the reboot.
-- **Hardware:** R630, Service Tag 9P7V8N2, iDRAC at 10.10.1.10. BIOS 2.12.1
-  and iDRAC 2.63.60.61 on 2026-11-08; updating to iDRAC **2.86.86.86**
-  (final) and BIOS **2.19.0** (staged "Install next reboot", applied with a
-  pve-safe-reboot). The user suspects an old failing DIMM: check the iDRAC
+- **Hardware:** R630, Service Tag 9P7V8N2, iDRAC at 10.10.1.10.
+  Updated 2026-11-08: iDRAC 2.63.60.61 → **2.86.86.86** (final), BIOS
+  2.12.1 → **2.19.0** (latest). Clean boot afterwards, no machine-check
+  errors.
+  - The 2.86 iDRAC `.EXE` failed with **RED007** (signature) on the old
+    iDRAC: extract it (`.\file.EXE /s /e=C:\dir`) and upload
+    `payload\firmimg.d7`. After that the BIOS `.EXE` installed normally
+    ("Install Next Reboot", then pve-safe-reboot).
+  - HTML5 console "Certificate may not be verified": open
+    https://10.10.1.10:5900 once and accept the certificate.
+  - After a host reboot the Proxmox agent can take about 2 min to rejoin
+    (it retries while n8n and the tunnel come back). The user suspects an old failing DIMM: check the iDRAC
   System Event Log. All 8 disks Online.
 
 ## UniFi UDM Pro SE (router, 10.10.1.1)
@@ -365,7 +373,9 @@ Only rules scoped to them by name or tag apply.
       `NAME` and `VERSION`. That was the real reason servers enrolled as
       "Ubuntu", and why release downloads silently fell back to building
       from source. Fixed by reading it in a subshell.
-- [ ] **BIOS/iDRAC update, then retry kernel 7.0** (2026-11-08, in progress).
+- [x] **BIOS/iDRAC update** done 2026-11-08.
+- [ ] **Retry kernel 7.0** once (watching the iDRAC console) now that the BIOS is 2.19.0.
+- [ ] **Update all agents to v0.1.24** (when the user says).
 - [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
 - [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
