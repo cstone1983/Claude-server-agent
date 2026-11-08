@@ -17,7 +17,10 @@ REMOTE=gcrypt:
 LOG=/var/log/pve-offsite-backup.log
 STATUS=/var/lib/pve-offsite-backup.status
 MAX_AGE_H=20          # only upload backups made in the last 20 hours
-RCLONE_OPTS=(--bwlimit "04:30,1M 23:00,off" --drive-chunk-size 64M --transfers 1 --retries 5 --low-level-retries 20 --stats 10m --stats-one-line)
+# Speed: full at night, 1 MB/s from 04:30 to 23:00. Override for a manual run,
+# e.g. BWLIMIT=4M (about 32 Mbps).
+BWLIMIT="${BWLIMIT:-04:30,1M 23:00,off}"
+RCLONE_OPTS=(--bwlimit "$BWLIMIT" --drive-chunk-size 64M --transfers 1 --retries 5 --low-level-retries 20 --stats 10m --stats-one-line)
 
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 fail() { log "FAILED: $*"; echo "FAILED $(date '+%F %T') $*" > "$STATUS"; exit 1; }
