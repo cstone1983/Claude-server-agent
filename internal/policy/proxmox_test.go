@@ -52,6 +52,8 @@ func TestProxmoxPolicy(t *testing.T) {
 		{[]string{"apt-get", "upgrade", "-y"}, TierElevated},    // built-in allow is off
 		{[]string{"systemctl", "restart", "x"}, TierElevated},
 		{[]string{"reboot"}, TierElevated},
+		{[]string{"pve-safe-reboot"}, TierElevated},
+		{[]string{"pve-safe-reboot", "--dry-run"}, TierRead},
 		{[]string{"shutdown", "-r", "+1", "kernel"}, TierElevated},
 		{[]string{"shutdown", "-c"}, TierElevated},
 		{[]string{"shutdown", "-h", "now"}, TierDenied},
@@ -68,6 +70,9 @@ func TestProxmoxPolicy(t *testing.T) {
 	p2 := New(f, []Rule{{ID: "hub-reboot", Argv: []string{"shutdown", "**"}}, {ID: "hub-reboot2", Argv: []string{"reboot"}}})
 	if d := p2.Classify(Action{Kind: "exec", Argv: []string{"shutdown", "-r", "+1"}}); d.Tier != TierElevated || !d.AskAlways {
 		t.Errorf("shutdown -r with an allow rule: got %+v, want elevated + ask_always", d)
+	}
+	if d := New(f, []Rule{{ID: "x", Argv: []string{"pve-safe-reboot"}}}).Classify(Action{Kind: "exec", Argv: []string{"pve-safe-reboot"}}); !d.AskAlways {
+		t.Errorf("pve-safe-reboot with an allow rule: got %+v, want ask_always", d)
 	}
 	if d := p2.Classify(Action{Kind: "exec", Argv: []string{"reboot"}}); d.Tier != TierElevated || !d.AskAlways {
 		t.Errorf("reboot with an allow rule: got %+v, want elevated + ask_always", d)
