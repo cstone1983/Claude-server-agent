@@ -405,7 +405,25 @@ Only rules scoped to them by name or tag apply.
       it if it works.
 - [ ] **Move the pinned kernel 6.8 to 6.17** (6.8 is the PVE 8 kernel).
 - [ ] **Power supply 2:** the SEL shows input-power losses in Mar/Apr 2025. Check that both PSUs are plugged into separate live circuits and that redundancy shows OK.
-- [ ] **Update all agents to v0.1.24** (when the user says).
+- [x] **Agents updated to v0.1.24** (2026-11-08). Approvals-page login now lasts
+      7 days (`dashboard_session_hours: 168` in /etc/csa-hub/hub.yaml).
+- [ ] **File server, VM 112 `fileserver`** (created 2026-11-08): Ubuntu 24.04.2 from
+      ISO, 4 cores / 8 GB, 32 GB system disk on `VM`, **5100 GB data disk on
+      `eql-fileshare`** (LVM on the EqualLogic iSCSI volume `fileshare`, 5 TB
+      thin, snap-reserve 0, ACL = Proxmox IQN only; Proxmox storages
+      `eql-fileshare-iscsi` + `eql-fileshare`).
+      Plan: data at /srv/share (users/<name> private, public/ shared);
+      **Samba + Nextcloud on the same files** (Nextcloud external storage
+      "Local" with $user). A tiny custom Nextcloud app listens for
+      UserCreated / PasswordUpdated / UserDeleted events and calls one
+      sudo-restricted helper that creates or updates the Samba user (same
+      password) and the folder with permissions; it only manages members of
+      the "fileshare users" group; deletion only disables Samba (the folder
+      is kept). Samba-side password changes are disabled. Outside access
+      via Cloudflare Tunnel. Next: the user installs Ubuntu + joins the
+      agent, then build.
+- [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
+      by the user (no snapshot or backup of VM 104 exists).
 - [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its
       Group Manager web UI is a Java applet, which modern browsers can't run.
       Options: the CLI over SSH/telnet or the serial port (full management);
