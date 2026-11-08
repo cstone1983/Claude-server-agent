@@ -3,3 +3,6 @@
 /csa-agent
 *.test
 __pycache__/
+
+# Claude Code local settings (per-machine permissions)
+.claude/settings.local.json
