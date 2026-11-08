@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""unifi: talk to the local UniFi Network application (UDM) as the dedicated
+admin saved in /root/.config/unifi/.env (UNIFI_HOST, UNIFI_USER, UNIFI_PASS).
+
+Usage:
+  unifi GET    <path>
+  unifi POST   <path> [JSON | -]      (JSON body as an argument or on stdin)
+  unifi PUT    <path> [JSON | -]
+  unifi DELETE <path>
+
+Path shortcuts:
+  net:<x>  ->  /proxy/network/api/s/default/<x>      (classic API: rest/networkconf, rest/portforward, ...)
+  v2:<x>   ->  /proxy/network/v2/api/site/default/<x> (newer API: firewall-policies, firewall/zone, ...)
+  /...     ->  used as is
+
+Examples:
+  unifi GET net:rest/networkconf        # networks / VLANs
+  unifi GET net:rest/portforward        # port forwards
+  unifi GET v2:firewall-policies        # zone-based firewall rules
+  unifi GET net:stat/sta                # connected clients
+"""
+import http.cookiejar, json, shlex, ssl, sys, urllib.error, urllib.request
+
+ENV = "/root/.config/unifi/.env"
+
+
+def load_env():
+    cfg = {}
+    with open(ENV) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                parts = shlex.split(v) if v else [""]
+                cfg[k] = parts[0] if parts else ""
+    return cfg
+
+
+def expand(path):
+    if path.startswith("net:"):
+        return "/proxy/network/api/s/default/" + path[4:]
+    if path.startswith("v2:"):
+        return "/proxy/network/v2/api/site/default/" + path[3:]
+    if not path.startswith("/"):
+        sys.exit("path must start with /, net: or v2:")
+    return path
+
+
+def main():
+    if len(sys.argv) < 3 or sys.argv[1].upper() not in ("GET", "POST", "PUT", "DELETE"):
+        sys.exit(__doc__)
+    method, path = sys.argv[1].upper(), expand(sys.argv[2])
+    body = None
+    if method in ("POST", "PUT"):
+        raw = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "-" else sys.stdin.read()
+        body = json.dumps(json.loads(raw)).encode()  # validate JSON
+
+    cfg = load_env()
+    base = "https://" + cfg.get("UNIFI_HOST", "10.10.1.1")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE  # UDM uses a self-signed cert; LAN only
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx),
+                                         urllib.request.HTTPCookieProcessor(jar))
+
+    def call(m, p, data=None, csrf=None):
+        req = urllib.request.Request(base + p, data=data, method=m,
+                                     headers={"Content-Type": "application/json", "Accept": "application/json"})
+        if csrf:
+            req.add_header("X-CSRF-Token", csrf)
+        return opener.open(req, timeout=30)
+
+    try:
+        login = call("POST", "/api/auth/login",
+                     json.dumps({"username": cfg["UNIFI_USER"], "password": cfg["UNIFI_PASS"], "remember": False}).encode())
+        csrf = login.headers.get("X-CSRF-Token") or login.headers.get("x-updated-csrf-token")
+        resp = call(method, path, body, csrf)
+        out = resp.read().decode() or "{}"
+    except urllib.error.HTTPError as e:
+        sys.exit(f"HTTP {e.code} {e.reason} for {method} {path}: {e.read().decode()[:500]}")
+    except urllib.error.URLError as e:
+        sys.exit(f"cannot reach the UDM: {e.reason}")
+    try:
+        print(json.dumps(json.loads(out), indent=2))
+    except ValueError:
+        print(out)
+
+
+if __name__ == "__main__":
+    main()
