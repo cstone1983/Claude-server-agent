@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly upload of Proxmox backups to Google Drive (after the 23:30 vzdump job)
+
+[Timer]
+OnCalendar=*-*-* 23:35
+Persistent=false
+
+[Install]
+WantedBy=timers.target
