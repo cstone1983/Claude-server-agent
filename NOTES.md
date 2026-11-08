@@ -376,7 +376,13 @@ Only rules scoped to them by name or tag apply.
 - [x] **BIOS/iDRAC update** done 2026-11-08.
 - [ ] **Retry kernel 7.0** once (watching the iDRAC console) now that the BIOS is 2.19.0.
 - [ ] **Update all agents to v0.1.24** (when the user says).
-- [ ] **Old SAN: web UI doesn't work** (raised 2026-11-08, for another day). Need the make/model, firmware, and how it fails (browser error, Java/Flash-era UI, TLS/cipher error).
+- [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its
+      Group Manager web UI is a Java applet, which modern browsers can't run.
+      Options: the CLI over SSH/telnet or the serial port (full management);
+      the standalone Group Manager Java app; or an old-Java VM. Possible use:
+      iSCSI storage for Proxmox (for example the PBS datastore). Need: its
+      group/management IP, firmware version and whether the admin password
+      (default grpadmin) is known.
 - [ ] **Find the failing DIMM** from the iDRAC SEL and replace it.
 - [ ] **Regenerate the UDM VPN keys** (exposed once in output).
 - [ ] **Delete leftover approvals:** 6 stale "timedatectl show" requests on
