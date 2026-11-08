@@ -1,0 +1,8 @@
+[Unit]
+Description=File-level backup of the file server's SAN data disk to Proxmox Backup Server
+RequiresMountsFor=/mnt/pve-backups
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-fileserver-backup
+TimeoutStartSec=12h

@@ -1,0 +1,51 @@
+#!/bin/bash
+# pbs-offsite-sync: copy the local Proxmox Backup Server datastore to Google
+# Drive (rclone crypt remote "gcrypt:"), so the off-site copy holds the same
+# deduplicated backups as the local PBS: every VM with its daily/weekly/
+# monthly versions, plus the file server's files.
+#
+# PBS chunks never change once written, so after the first run each night
+# only uploads the chunks that are new since yesterday. `rclone sync` also
+# removes chunks that PBS garbage collection deleted locally.
+#
+# Restore: rclone copy gcrypt:_pbs-datastore /some/dir, then
+#   proxmox-backup-manager datastore create restored /some/dir
+# and restore from it (needs the rclone crypt passwords from the password manager).
+#
+# Runs from pbs-offsite-sync.timer (23:00), after the 21:30 VM backup and the
+# 22:15 file server backup. PBS prune/GC run at midday so they never overlap.
+# Log: /var/log/pbs-offsite-sync.log   Status: /var/lib/pbs-offsite-sync.status
+set -u
+export RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+SRC=/mnt/pve-backups/pbs
+DST=gcrypt:_pbs-datastore
+LOG=/var/log/pbs-offsite-sync.log
+STATUS=/var/lib/pbs-offsite-sync.status
+# Full speed at night, 1 MB/s from 04:30 to 23:00. Override for a manual run, e.g. BWLIMIT=off.
+BWLIMIT="${BWLIMIT:-04:30,1M 23:00,off}"
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+report() { if [ -x /usr/local/sbin/backup-report ]; then /usr/local/sbin/backup-report pbs-offsite "$1" "$2" || true; fi; }
+fail() { log "FAILED: $*"; echo "FAILED $(date '+%F %T') $*" > "$STATUS"; report error "$*"; exit 1; }
+
+exec 9>/run/pbs-offsite-sync.lock
+flock -n 9 || { echo "already running" >&2; exit 0; }
+log "=== off-site sync started"
+[ -d "$SRC/.chunks" ] || fail "$SRC is not a PBS datastore (disk not mounted?)"
+
+# Wait for tonight's backups (VM backup and file server backup) to finish, up to 3 hours.
+busy() { pgrep -x vzdump >/dev/null || ! flock -n /run/pve-fileserver-backup.lock true; }
+for _ in $(seq 180); do busy || break; sleep 60; done
+busy && fail "tonight's backups were still running after 3 hours"
+
+start=$SECONDS
+if ! rclone sync "$SRC" "$DST" --exclude "/.lock" --bwlimit "$BWLIMIT" \
+      --transfers 8 --checkers 16 --tpslimit 8 --drive-chunk-size 32M \
+      --retries 5 --low-level-retries 20 --stats 10m --stats-one-line >> "$LOG" 2>&1; then
+  fail "rclone sync failed (see $LOG)"
+fi
+size=$(du -sh "$SRC" 2>/dev/null | cut -f1)
+msg="PBS datastore ($size) synced to Google Drive in $(( (SECONDS - start) / 60 )) min"
+log "=== done: $msg"
+echo "OK $(date '+%F %T') $msg" > "$STATUS"
+report ok "$msg"

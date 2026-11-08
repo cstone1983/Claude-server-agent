@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly file server backup (after the 21:30 VM backup)
+
+[Timer]
+OnCalendar=*-*-* 22:15
+Persistent=false
+
+[Install]
+WantedBy=timers.target

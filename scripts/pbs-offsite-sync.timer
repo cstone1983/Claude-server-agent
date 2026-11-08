@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly off-site sync of the PBS datastore (after the night's backups)
+
+[Timer]
+OnCalendar=*-*-* 23:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target
