@@ -5,13 +5,15 @@ admin saved in /root/.config/unifi/.env (UNIFI_HOST, UNIFI_USER, UNIFI_PASS).
 Usage:
   unifi GET    <path>
   unifi POST   <path> [JSON | -]      (JSON body as an argument or on stdin)
-  unifi PUT    <path> [JSON | -]
+  unifi PUT    <path> [JSON | -]      (send ONLY the fields being changed)
   unifi DELETE <path>
 
 Path shortcuts:
   net:<x>  ->  /proxy/network/api/s/default/<x>      (classic API: rest/networkconf, rest/portforward, ...)
   v2:<x>   ->  /proxy/network/v2/api/site/default/<x> (newer API: firewall-policies, firewall/zone, ...)
   /...     ->  used as is
+
+Secret fields (x_*, passwords, keys, PSKs) are printed as <redacted>.
 
 Examples:
   unifi GET net:rest/networkconf        # networks / VLANs
@@ -22,6 +24,18 @@ Examples:
 import http.cookiejar, json, shlex, ssl, sys, urllib.error, urllib.request
 
 ENV = "/root/.config/unifi/.env"
+SECRET_KEYS = ("password", "passphrase", "secret", "private_key", "psk", "token")
+
+
+def redact(obj):
+    """Blank secrets before printing: UniFi prefixes secret fields with "x_"
+    (VPN keys, PSKs, Wi-Fi passphrases), plus a few well-known names."""
+    if isinstance(obj, dict):
+        return {k: ("<redacted>" if (k.startswith("x_") or any(s in k.lower() for s in SECRET_KEYS)) and v not in ("", None, [], {})
+                    else redact(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [redact(v) for v in obj]
+    return obj
 
 
 def load_env():
@@ -54,6 +68,8 @@ def main():
     if method in ("POST", "PUT"):
         raw = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != "-" else sys.stdin.read()
         body = json.dumps(json.loads(raw)).encode()  # validate JSON
+        if b"<redacted>" in body:
+            sys.exit("refusing to send '<redacted>' placeholders; send only the fields you are changing")
 
     cfg = load_env()
     base = "https://" + cfg.get("UNIFI_HOST", "10.10.1.1")
@@ -81,9 +97,9 @@ def main():
     except urllib.error.URLError as e:
         sys.exit(f"cannot reach the UDM: {e.reason}")
     try:
-        print(json.dumps(json.loads(out), indent=2))
+        print(json.dumps(redact(json.loads(out)), indent=2))
     except ValueError:
-        print(out)
+        print(out[:2000])
 
 
 if __name__ == "__main__":
