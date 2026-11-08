@@ -336,8 +336,14 @@ Only rules scoped to them by name or tag apply.
       - Test backup VM 103: 32 GB in 6m39s (~84 MB/s), OK.
       - Nightly job 21:30 → pbs-main, VMs 100,102,103,107,110,111. The old
         23:30 vzdump job + Drive upload stay until a test restore is done.
-      - Still to do: a test restore; off-site copy of the datastore to Drive;
-        then retire the old job.
+      - Test restore OK 2026-11-08: VM 103's backup restored to VM 9103
+        `haos-restore-test` (new MAC, onboot 0, USB stick passthrough removed,
+        never started). The user deletes 9103 in the UI (qm destroy is denied
+        to the agent). Lesson: a restored copy keeps onboot and USB
+        passthrough; strip them before it can ever start.
+      - Still to do: an off-site copy of the datastore to Drive (rclone of
+        /mnt/pve-backups/pbs, only new chunks nightly); then retire the old
+        23:30 vzdump job and its upload.
       Original plan: Today every night uploads full vzdump archives
       (about 79 GB, about 5 h at about 34 Mbps). PBS deduplicates and makes
       incremental backups, so nightly off-site uploads would be the changed
