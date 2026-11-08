@@ -412,7 +412,13 @@ Only rules scoped to them by name or tag apply.
       the standalone Group Manager Java app; or an old-Java VM. Possible use:
       iSCSI storage for Proxmox (PBS datastore and bulk/low-IO VM disks; about 16 TB raw, so about 11-13 TB usable in RAID 6/50; 1 GbE ports, use multipath). Service Tag 6V9CVL1; two Type 7 control modules (C0/C1), each with
       4 x 1 GbE and a serial port; active/standby, so 4 ports carry traffic
-      (about 400 MB/s); needs a storage switch or VLAN plus multipath. Need: its
+      (about 400 MB/s); needs a storage switch or VLAN plus multipath. Plan (2026-11-08): console via a USB-serial adapter + null-modem DB9
+      cable into the R630 (`/dev/ttyUSB0`, picocom, 9600 8N1) through the
+      Proxmox agent session tools; no laptop needed. The user is OK using the
+      factory default login `grpadmin` for now: keep the SAN's Ethernet off
+      the LAN until the password is changed (the new password goes in via a
+      root-only file, never chat). A Windows agent with serial tools is a
+      possible separate project. Need: its
       group/management IP, firmware version and whether the admin password
       (default grpadmin) is known.
 - [x] **Failing DIMM?** Not on the R630 (SEL clean, EDAC 0 errors). The user thinks the memory issue is on their *other* server; check that one when it comes up.
