@@ -23,8 +23,7 @@ connect to Trusted" is a single allow rule plus a default block.
 | Zone | Members | May start connections to |
 |---|---|---|
 | Trusted (Main) | PCs, phones, the two desktop VMs (101, 106) | everything they manage: Servers, IoT, the UDM; internet |
-| Servers (new VLAN 10) | VMs: n8n/hub, file server, HA, apps | internet; IoT (HA controls devices); UDM API (n8n); not Trusted, not Management |
-| Management (new VLAN 30) | Proxmox host, iDRAC, switch/AP management later | internet (updates, hub agent, off-site backup); n8n backup webhook; not reachable from Servers/IoT/DMZ |
+| Servers (new VLAN 10) | VMs: n8n/hub, file server, HA, apps; Proxmox host and iDRAC (Phase 7) | internet; IoT (HA controls devices); UDM API (n8n); not Trusted |
 | DMZ (new VLAN 20) | CPU-Share / Akash only | internet only |
 | IoT (VLAN 3) | plugs, lamps, TVs... | internet (or less); nothing local except DNS/DHCP/NTP; specific HA ports only if a device must push to HA |
 | Cameras (VLAN 4) | cameras | the UDM only (UniFi Protect, DHCP, DNS, NTP); no internet |
@@ -77,8 +76,8 @@ Every step: one change, then verify, with a stated rollback. Nothing in phases
   -> Autopilot (110, stopped) -> Home Assistant (103, after the HA -> IoT allow
   rule) -> n8n/hub (102) last (after the n8n -> UDM rule; Claude is offline for
   ~1-2 min while it re-addresses).
-- Phase 7 (separate window, planned): Proxmox host and iDRAC to Management
-  (VLAN 30), SAN to Storage (VLAN 40). See "Management and Storage" below.
+- Phase 7 (separate window, planned): Proxmox host and iDRAC to Servers
+  (VLAN 10), SAN to Storage (VLAN 40). See "Proxmox, iDRAC and Storage" below.
   Until then they stay on Main behind the new rules.
 
 Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
@@ -107,7 +106,6 @@ Zones after the migration plus our edits:
 | Internal (= Trusted) | Main |
 | VPN | OpenVPN (treated like Trusted) |
 | Servers (custom) | Servers VLAN 10 |
-| Management (custom) | Management VLAN 30 |
 | IoT (custom) | IoT VLAN 3 |
 | Cameras (custom) | Cameras VLAN 4 |
 | DMZ (built-in) | DMZ VLAN 20 |
@@ -139,9 +137,6 @@ of an allowed connection is always allowed):
 | 18 | DMZ | Gateway | DNS, DHCP, NTP | allow |
 | 19 | DMZ | everything else | any | block |
 | 20 | Hotspot | External only | (built-in guest isolation) | as is |
-| 21 | Management | External, Servers, Gateway | any (updates, agent, PBS off-site, backup webhook; the host manages the VMs) | allow |
-| 22 | Management | Internal, IoT, Cameras, DMZ | any | block |
-| 23 | Servers, IoT, Cameras, DMZ, Hotspot | Management | any | block (only Trusted/VPN reach it, via rule 1) |
 
 Port forwards create their own External -> target allows automatically.
 Rules 9-12 use IP or device-group objects (from the reservations below), so the
@@ -156,9 +151,8 @@ before anyone relies on them.
 | Main / Trusted | 10.10.1.0/24 | .2-.49 (UDM .1, iDRAC .10, Proxmox .15, laptop .20, SAN .30/.31) | .50-.254 (as now) |
 | IoT | 10.10.3.0/24 | .10-.99 (thermostat, Lutron, TVs, Sonos, heat pumps, plugs...) | .100-.254 |
 | Cameras | 10.10.4.0/24 | .10-.49 | .50-.254 |
-| Servers | 10.10.10.0/24 | VM n -> 10.10.10.n (100 -> .100 ... 112 -> .112) | .200-.249 |
+| Servers | 10.10.10.0/24 | infrastructure .10-.29 (iDRAC .10, Proxmox .15, switch/AP management later); VM n -> 10.10.10.n (100 -> .100 ... 112 -> .112) | .200-.249 |
 | DMZ | 10.10.20.0/24 | CPU-Share (VM 104) -> 10.10.20.104 | .200-.249 |
-| Management | 10.10.30.0/24 | Proxmox .15, iDRAC .10 (same last octet as today); switch/APs later | none (all fixed) |
 | Storage | 10.10.40.0/24 | SAN group .30, member .31, Proxmox .15; no gateway | none |
 
 Easy rule for servers: the last octet is the VM ID. Every server also gets a
@@ -214,7 +208,7 @@ while the hub is down.
 | 103 Home Assistant | .116 -> 10.10.10.103 | n8n "Homelab Agent" workflow (.116:8123) and the n8n credentials "Home Assistant account", "HA Token", "HA Token 2" (-> `homeassistant`); RPi5 thermostat MQTT broker address; Shelly Gen1 CoIoT peer; HA's own internal URL; Ollama (laptop) rule 6 |
 | 102 n8n / hub | .86 -> 10.10.10.102 | Cloudflare n8n route (localhost first, pre-flight 4); Solar-Calc `database.json`/`.env` and `SettingsPanel.jsx` (.86:5432 -> `n8n`); the `solar-pg-lan` container is published on `10.10.1.86:5432` -> rebind to the new IP (or 0.0.0.0, the source `range=` still limits it); n8n credentials "SSH Password account" and "SSH n8n" (host .86 -> `n8n` or 127.0.0.1); the `unifi` helper keeps using 10.10.1.1 (the UDM answers on every network's gateway) |
 | 104 CPU-Share | .133 -> 10.10.20.104 (DMZ, Phase 4) | 6 Akash port forwards; Proxmox VM firewall `/etc/pve/firewall/104.fw` (10.10.1.133, 10.10.1.0/24); k3s config/service, ufw and Akash inventory on the VM |
-| Proxmox host | .15 -> 10.10.30.15 (Phase 7) | see "Management and Storage" |
+| Proxmox host | .15 -> 10.10.10.15 (Phase 7) | see "Proxmox, iDRAC and Storage" |
 
 ### Devices before Home Assistant moves
 
@@ -240,32 +234,43 @@ fileserver :445/:80, Proxmox :8006, the solar Postgres, DNS through the UDM,
 internet, Cloudflare. Plus: hub shows every agent online; HA has no new
 unavailable integrations; one Telegram test message from n8n.
 
-## Management and Storage (Phase 7)
+## Proxmox, iDRAC and Storage (Phase 7)
 
-Proxmox and the iDRAC get their own network (VLAN 30, 10.10.30.0/24); only
-Trusted and the VPN can reach it, so a compromised VM or IoT device cannot get
-at the hypervisor or the server's out-of-band console. The SAN gets a separate
-non-routed storage VLAN (40, 10.10.40.0/24): iSCSI never crosses the UDM, which
-would slow it down and put the file server's disk behind a firewall rule.
+Decision 2026-11-09: no separate management VLAN. The Proxmox host and the
+iDRAC join the Servers VLAN in the infrastructure range, keeping their last
+octet (Proxmox 10.10.10.15, iDRAC 10.10.10.10). The SAN gets a separate
+non-routed storage VLAN (40, 10.10.40.0/24), so iSCSI never crosses the UDM.
 
-Keep the last octet when moving (Proxmox .15, iDRAC .10, SAN .30/.31), so
-"10.10.1.15" simply becomes "10.10.30.15".
+Because traffic inside one VLAN never passes the UDM, the VMs (several of them
+internet-facing through Cloudflare) could reach the Proxmox and iDRAC logins
+directly. So both get their own allow-lists, set up BEFORE they move:
+
+- Proxmox firewall (Datacenter > Firewall, host level only; VM firewalls are
+  untouched): input policy DROP, allow TCP 8006 (UI) and 22 (SSH) from Trusted
+  10.10.1.0/24 and VPN 192.168.3.0/24, allow ICMP. The host's own outgoing
+  connections (hub agent, updates, PBS off-site, backup reports) are not
+  affected. Enable it from the iDRAC console session, so a mistake cannot lock
+  everyone out; rollback is `pve-firewall stop`.
+- iDRAC (iDRAC Settings > Network > IP Blocking): IP range filter = Trusted
+  10.10.1.0/24. (It takes one range: from the VPN, use a Trusted PC or the
+  Proxmox UI instead.) Rollback: the server's F2 setup screen or `racadm`
+  from the Proxmox host.
 
 Order (one window, iDRAC console open as the fallback):
-1. Create VLAN 30 and VLAN 40 (no DHCP), add the rules 21-23, confirm the
-   R630 and SAN switch ports carry the tags.
-2. iDRAC first: set its VLAN/IP in iDRAC settings (it is independent of the
-   host). Verify https://10.10.30.10 from a PC. Rollback: the front-panel/F2
-   iDRAC settings, or the iDRAC's old address via the UDM.
+1. Create VLAN 40 (no DHCP, no gateway, not routed); confirm the R630 and SAN
+   switch ports carry the tags. Turn on the two allow-lists above while
+   everything is still on Main, and test them from a PC.
+2. iDRAC: set its VLAN 10 / 10.10.10.10 in iDRAC settings (independent of the
+   host). Verify https://10.10.10.10 from a PC.
 3. SAN to Storage: add a Proxmox interface on VLAN 40 (10.10.40.15, no
    gateway), re-address the EqualLogic (serial console as fallback), point
-   `storage.cfg`/iSCSI at 10.10.40.30, re-login the session. File server (VM 112)
-   stopped during this step: its data disk is on the SAN.
-4. Proxmox host management IP: change vmbr0's address to a VLAN 30 interface
-   (10.10.30.15, gateway 10.10.30.1), update `/etc/hosts`, `/etc/issue`, the DNS
-   name `proxmox`, and the net-check targets. VMs are not affected (their
-   VLAN tags do not change). Rollback: iDRAC console, restore
+   `storage.cfg`/iSCSI at 10.10.40.30, re-login the session. File server
+   (VM 112) stopped during this step: its data disk is on the SAN.
+4. Proxmox host: move its address from vmbr0 to a VLAN 10 interface on the
+   VLAN-aware bridge (10.10.10.15, gateway 10.10.10.1); update `/etc/hosts`,
+   `/etc/issue`, the DNS name `proxmox` and the net-check targets. VMs are not
+   affected (their VLAN tags do not change). Rollback: iDRAC console, restore
    `/etc/network/interfaces` from the copy taken first, `ifreload -a`.
 5. Verify: hub shows the Proxmox agent online, PBS jobs and the off-site sync
-   run, backup reports still reach n8n, Proxmox UI and iDRAC open from a PC.
-
+   run, backup reports reach n8n, Proxmox UI and iDRAC open from a PC and do
+   NOT open from a VM (e.g. `curl -k https://10.10.10.15:8006` from n8n fails).
