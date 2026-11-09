@@ -84,6 +84,7 @@ Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 
 ## Status
 
+- Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.
