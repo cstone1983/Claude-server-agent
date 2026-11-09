@@ -256,11 +256,12 @@ Prep before the evening (no impact; Claude, with the user's OK):
   only IP literals or names in `SOLAR_WRITE_HOSTS`), so n8n "Solar Bill
   Intake" keeps an IP: change `http://10.10.1.156:8080` to
   `http://10.10.11.100:8080` in the Solar-Calc move step.
-- [ ] n8n credentials (UI, at the HA move, or switch to
-  `homeassistant.localdomain` any time): "Home Assistant account" host
-  10.10.1.116; "SSH for Game install" host 10.10.1.136 (-> `finance.localdomain`
-  any time); "SSH Password account"/"SSH n8n" host 10.10.1.86 (-> 127.0.0.1
-  or `n8n.localdomain`). "Homelab Agent" workflow (inactive) .116:8123.
+- [x] n8n credentials switched to DNS names by the user (2026-11-09) and
+  verified: "Home Assistant account" -> homeassistant.localdomain (API call
+  with its token: 200 "API running"); "SSH for Game install" ->
+  finance.localdomain; "SSH Password account" and "SSH n8n" ->
+  n8n.localdomain (names resolve, SSH answers). They now follow the DNS
+  records. Still an IP: the inactive "Homelab Agent" workflow (.116:8123).
 - [x] UDM (2026-11-09): 44 reservations at current IPs (the 6 server VMs
   without one, Lutron, RPi5, both G5 cameras, both TVs, every online IoT
   client, and the unplugged Kasa plugs: Gecko-Heat .14, Gecko-UV .78,
