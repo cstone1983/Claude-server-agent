@@ -20,12 +20,14 @@ addresses. Nothing is opened to the internet.
 
 ## Decisions
 
-- **Proxy**: a small dedicated LXC on Proxmox in the Servers infrastructure
-  range (proposed `proxy`, 10.10.10.50) running Caddy (with the Cloudflare DNS
-  plugin) or Traefik (Cloudflare support built in). Not the Traefik on the n8n
-  VM: that one serves n8n itself, and the hub VM should not also become the
-  front door for everything else. If the proxy is down, every service is
-  still reachable by IP as today.
+- **Proxy** (user's decision 2026-11-09): the existing **Traefik on the n8n
+  VM** (compose in /home/stonec/n8n-compose; today it serves only
+  n8n.stoneyshome.com, entrypoints :80/:443, docker provider, a TLS-challenge
+  resolver `mytlschallenge`). Every `<name>.lan.stoneyshome.com` record
+  points at n8n's IP (10.10.11.102 after the overhaul). If n8n is down,
+  internal HTTPS names are down with it; every service stays reachable by IP.
+  The hub itself does not go through Traefik (cloudflared -> localhost:7420),
+  so this change cannot cut Claude off.
 - **Name suffix**: `lan.stoneyshome.com` (user may pick
   `starwars.stoneyshome.com` instead; the plan is the same).
 - **Old names**: `<name>.localdomain` records stay until nothing uses them
@@ -42,16 +44,22 @@ addresses. Nothing is opened to the internet.
    `proxmox.lan.stoneyshome.com` on the node, order, verify, then switch to
    production. Auto-renews. Rollback: the self-signed cert stays in
    /etc/pve/local (pve-ssl.pem) and can be re-selected.
-3. **Proxy LXC**: create (Debian, 1 vCPU, 512 MB, Servers VLAN,
-   reservation 10.10.10.50, DNS `proxy`), install Caddy/Traefik, wildcard
-   certificate via DNS-01 (staging first), agent installed for the hub.
+3. **Traefik on n8n**: back up docker-compose.yml and the acme storage; add
+   a DNS-01 resolver `cfdns` (`--certificatesresolvers.cfdns.acme.dnschallenge.provider=cloudflare`,
+   token from a root-only file via `CF_DNS_API_TOKEN_FILE`, staging CA first),
+   a file provider (`--providers.file.directory=/etc/traefik/dynamic`,
+   mounted read-only) for routes to services that are not containers here,
+   and one router that requests `lan.stoneyshome.com` + `*.lan.stoneyshome.com`.
+   Recreating the Traefik container blips n8n.stoneyshome.com (public n8n,
+   webhooks, the n8n MCP) for a few seconds; the hub is not affected. While
+   there: turn off `--api.insecure` (dashboard not needed).
 4. **Routes**, one per service, each verified before the next; DNS record
-   `<name>.lan.stoneyshome.com` -> 10.10.10.50:
+   `<name>.lan.stoneyshome.com` -> n8n's IP:
    | Name | Upstream |
    |---|---|
    | homeassistant | http://homeassistant:8123 (HA: add the proxy to `trusted_proxies`, `use_x_forwarded_for`) |
    | nextcloud (LAN) | http://fileserver (add the name to `trusted_domains`, proxy to `trusted_proxies`) |
-   | n8n | https://n8n (keep the public n8n.stoneyshome.com tunnel as is) |
+   | n8n | the n8n container directly (same Traefik; keep the public n8n.stoneyshome.com router as is) |
    | solar | http://solar:8080 (add the name to `SOLAR_WRITE_HOSTS` only if the LAN-only pages must work through it) |
    | recipes, finance | their app ports |
    | unifi | https://10.10.1.1 (UDM UI; needs a proxy -> Gateway 443 allow rule) |
@@ -60,8 +68,10 @@ addresses. Nothing is opened to the internet.
 5. **Network domain**: set Main, Servers, IoT, Cameras, DMZ domain to
    `lan.stoneyshome.com` (clients pick it up at their next DHCP renewal);
    check `\\fileserver` and short names still work.
-6. **Firewall**: Trusted/VPN -> proxy 443 is already allowed (rule 1); add
-   proxy -> Gateway 443 (UDM UI) and keep everything else default.
+6. **Firewall**: Trusted/VPN -> n8n 443 is already allowed (rule 1); n8n ->
+   Gateway 443 is already rule 5 (UDM UI). n8n -> iDRAC/Proxmox: same Servers
+   VLAN after Phase 7, Servers -> Internal before that (needs a narrow allow
+   if those routes are wanted earlier).
 7. **Alerts**: certificate expiry check in the morning backup/dead-man run
    (warn when any served cert has < 20 days left).
 8. **Later**: switch bookmarks and the n8n credentials to the new names;

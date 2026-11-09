@@ -233,6 +233,30 @@ usage in [README.md](README.md).
 - Open: decide on the `rdc` port forward; a duplicate 10.10.3.100
   reservation; a dead AdGuard entry.
 
+## Network overhaul and internal names (2026-11-09)
+
+- Plan and runbook: `docs/network-overhaul.md` (zones, IP plan, per-server
+  swap steps, hub-continuity rules). Window: Wed 11 / Thu 12 Nov evening.
+- Firewall: zone-based since 2026-11-09 (user migrated). Networks: Main
+  (untagged, 10.10.1.0/24), Guest 2, IoT 3, Cameras 4, Servers 10
+  (10.10.10.0/23: 10.10.10.x infrastructure, 10.10.11.<VMID> VMs), DMZ 20
+  (10.10.20.0/24), Storage 40 (VLAN only, SAN iSCSI later). "test" (VLAN 5)
+  deleted.
+- Local DNS on the UDM: `<name>.localdomain` for n8n, homeassistant, solar,
+  recipes, finance, cpushare, proxmox, idrac, fileserver. The n8n credentials
+  (HA, the SSH ones) use these names, so a server move = one DNS edit.
+- Helpers: `net-check` on n8n (read-only connectivity test, run before/after
+  every change); `vm-net-move` and `pve-net-apply` on Proxmox (self-reverting
+  VLAN move / host network change, run detached with systemd-run).
+- **Internal HTTPS proxy = the Traefik on the n8n VM** (decided 2026-11-09,
+  not built yet; plan in `docs/internal-https.md`). It already serves
+  n8n.stoneyshome.com (compose in /home/stonec/n8n-compose). It will also hold
+  the wildcard `*.lan.stoneyshome.com` (Let's Encrypt DNS-01 via a scoped
+  Cloudflare token) and route the internal names to each service, so every
+  `<name>.lan.stoneyshome.com` resolves (UDM split DNS) to n8n's IP. If n8n is
+  down, internal HTTPS names are down too; every service is still reachable by
+  its IP. Proxmox gets its own certificate through its built-in ACME client.
+
 ## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
 **What the user means:** anything that can be verified before running a
