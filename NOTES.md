@@ -125,8 +125,24 @@ usage in [README.md](README.md).
     `scripts/`) runs from `pve-offsite-backup.timer` at 23:35 and waits for
     vzdump.
     - It uploads with rclone remote `gcrypt:`, a crypt over `drive:`. The
-      Google Drive scope is `drive.file`; `root_folder_id` is the user's
-      folder "backup/proxmox vm"; file and folder names stay readable.
+      Google Drive scope is `drive` (full; was `drive.file` until 2026-11-09,
+      which only sees files the same OAuth client created); `root_folder_id`
+      is the user's folder "backup/proxmox vm"; file and folder names stay
+      readable.
+    - **OAuth client (2026-11-09):** `drive:` uses the user's own Google Cloud
+      OAuth client (project "cstone1983", Google Auth Platform app "rclone",
+      Desktop client). Before that it used rclone's shared default client,
+      whose per-minute quota caused ~1,900 rateLimitExceeded/list failures on
+      the first PBS sync. The client id/secret/token live only in
+      `rclone.conf`; the old config is in `rclone.conf.bak-202611091704`.
+      Re-auth if ever needed: `rclone authorize drive <id> <secret>
+      --auth-no-open-browser` on the host, the user signs in on a PC and puts
+      the failing `http://127.0.0.1:53682/?state=...` URL into a root-only file,
+      which is curl'ed on the host; then `rclone config update drive ... token`.
+    - **Open:** the app's Publish button was greyed out ("complete your
+      configuration on the Branding page"). While the app is in Testing,
+      Google expires the refresh token after 7 days: publish it, or re-auth
+      weekly.
     - Layout: `<vmid>-<name>/daily|weekly|bimonthly`, keeping 1 each.
       Weekly refreshes on Sunday; 2-monthly on the 1st of odd months.
       Copies between slots are server-side.
@@ -319,6 +335,9 @@ Only rules scoped to them by name or tag apply.
       /mnt/pve-backups/pbs to gcrypt:_pbs-datastore. PBS prune moved to 12:30,
       GC to 13:00 (never during the sync). **Retire the old 23:30 vzdump job +
       pve-offsite-backup timer after the first sync is verified.**
+      2026-11-09: first run (started 23:00 on the 8th) was throttled by Google
+      (shared rclone client); stopped 17:04, switched to the user's own OAuth
+      client, restarted 17:08 with no rate-limit errors.
 - [x] **Cleanup 2026-11-08:** all 7 old snapshots deleted; nextcloud-data.old removed;
       UDM: dead AdGuard reservation (10.10.1.179) removed, stale 10.10.3.100 on
       the old HA Pi cleared. The vm-fiance exited containers are leftovers from
