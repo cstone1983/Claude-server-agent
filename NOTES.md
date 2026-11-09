@@ -300,7 +300,32 @@ Only rules scoped to them by name or tag apply.
       loses them; this happened with the timezone approvals.
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
       `timedatectl status|show` is allowed, with no extra arguments.
-- [ ] **Backup failure alerts to n8n** (the user asked for this later). The
+- [x] **Backup failure alerts (done 2026-11-08/09):** n8n workflow "Backup Alerts (n8n)"
+      (id Uv9JSW26gTbNid2Z), webhook /webhook/backup-report guarded by header
+      X-Backup-Token (token in /etc/backup-report.conf on Proxmox, root-only).
+      Telegram (credential "Telegram account", chat 6897458189) on error/warning;
+      07:30 dead-man check for proxmox-vzdump, fileserver-files, pbs-offsite
+      (state in workflow static data). Senders: PVE + PBS notification webhook
+      target `n8n-backup` with matcher `n8n-backup-all` (names must differ),
+      body {"source","severity","title","message"}; scripts call
+      /usr/local/sbin/backup-report <source> <ok|warning|error> <msg>.
+- [x] **File server backup:** VM 112 is in the 21:30 PBS job with its system disk only
+      (scsi1 backup=0). Data: /usr/local/sbin/pve-fileserver-backup (timer 22:15)
+      freezes the guest via the agent, LVM-snapshots eql-fileshare/vm-112-disk-0
+      (18G COW, VG has 20G free), mounts it read-only and runs
+      proxmox-backup-client (host/fileserver-share, metadata change detection)
+      with the pbs-main token. VMs 101 and 106 were added to the 21:30 job too.
+- [~] **PBS off-site:** /usr/local/sbin/pbs-offsite-sync (timer 23:00) rclone-syncs
+      /mnt/pve-backups/pbs to gcrypt:_pbs-datastore. PBS prune moved to 12:30,
+      GC to 13:00 (never during the sync). **Retire the old 23:30 vzdump job +
+      pve-offsite-backup timer after the first sync is verified.**
+- [x] **Cleanup 2026-11-08:** all 7 old snapshots deleted; nextcloud-data.old removed;
+      UDM: dead AdGuard reservation (10.10.1.179) removed, stale 10.10.3.100 on
+      the old HA Pi cleared. The vm-fiance exited containers are leftovers from
+      two failed `npm run build` image builds (no data); kept at the user's wish.
+      The user deletes test VM 9103 in the UI.
+- [ ] **unifi helper:** reuse the login session (the UDM rate-limits logins).
+- [ ] *(old)* **Backup failure alerts to n8n** (the user asked for this later). The
       idea: an n8n workflow with a Webhook trigger, IF failure, then notify
       the user (HA push, Gmail or similar; ask which), optionally logging
       to a Data Table, plus a 07:00 "dead man's switch" if no report
