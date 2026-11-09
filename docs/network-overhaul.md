@@ -88,7 +88,13 @@ Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.
-- UDM: Network app 10.6.109, still legacy firewall (no zones yet). UDM backup
+- 2026-11-09 evening: zone-based firewall migration done by the user; net-check
+  12/12 OK right after. Zones: Internal (Main, IoT, Cameras for now), External,
+  Gateway, Vpn (OpenVPN), Hotspot (Guest), Dmz (empty). The legacy rules came
+  over as 16 custom policies (the old "Lan to ALL" and "Established and
+  Related" enabled, two disabled duplicates); tidy them when the new rules go
+  in. IoT and Cameras move out of Internal into their own zones in Phase 3.
+- UDM: Network app 10.6.109. Before the migration it was the legacy firewall. UDM backup
   taken by the user 2026-11-08. mDNS is shared across all networks (needed for
   HA discovery, casting and Sonos across VLANs; keep it on).
 - No Matter devices (integration configured, empty). Zigbee (ZHA) is a USB stick
@@ -241,7 +247,7 @@ Prep before the evening (no impact; Claude, with the user's OK):
 - [ ] UDM: DNS names for every server; reservations for everything missing
   one (incl. the 7 unplugged Kasa plugs); create Servers (VLAN 10, /23), DMZ
   (20), Storage (40, no DHCP/gateway) networks.
-- [ ] User: zone-based firewall migration click; `net-check` right after.
+- [x] User: zone-based firewall migration click; `net-check` right after (done 2026-11-09, all OK).
 
 The n8n move in detail (last step of the evening):
 1. Before: Servers rules 2-7 exist and include n8n's NEW IP in rule 5
