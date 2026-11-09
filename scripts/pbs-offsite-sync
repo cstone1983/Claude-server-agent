@@ -21,8 +21,8 @@ SRC=/mnt/pve-backups/pbs
 DST=gcrypt:_pbs-datastore
 LOG=/var/log/pbs-offsite-sync.log
 STATUS=/var/lib/pbs-offsite-sync.status
-# Full speed at night, 1 MB/s from 04:30 to 23:00. Override for a manual run, e.g. BWLIMIT=off.
-BWLIMIT="${BWLIMIT:-04:30,1M 23:00,off}"
+# Full speed at night, 10 MB/s from 04:30 to 23:00. Override for a manual run, e.g. BWLIMIT=off.
+BWLIMIT="${BWLIMIT:-04:30,10M 23:00,off}"
 
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 report() { if [ -x /usr/local/sbin/backup-report ]; then /usr/local/sbin/backup-report pbs-offsite "$1" "$2" || true; fi; }
