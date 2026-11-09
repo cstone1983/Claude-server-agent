@@ -240,6 +240,8 @@ usage in [README.md](README.md).
   10.10.1.185). 2026-11-09: Java heap lowered from `-Xmx16384M -Xms16300M`
   (more than the VM has, it squeezed the desktop) to `-Xmx8G -Xms8G`; unit
   backup /etc/systemd/system/minecraft.service.bak-*.
+  Later the same day: stopped and disabled (not used); files in /opt/minecraft
+  kept. Start again with `systemctl enable --now minecraft.service`.
 
 ## Network overhaul and internal names (2026-11-09)
 
