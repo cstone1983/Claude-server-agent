@@ -21,9 +21,13 @@ Examples:
   unifi GET v2:firewall-policies        # zone-based firewall rules
   unifi GET net:stat/sta                # connected clients
 """
-import http.cookiejar, json, shlex, ssl, sys, urllib.error, urllib.request
+import http.cookiejar, json, os, shlex, ssl, sys, urllib.error, urllib.request
 
 ENV = "/root/.config/unifi/.env"
+# The login session is reused between calls (the UDM rate-limits logins).
+SESSION_DIR = "/root/.cache/unifi"
+COOKIES = SESSION_DIR + "/cookies.txt"
+CSRF_FILE = SESSION_DIR + "/csrf"
 SECRET_KEYS = ("password", "passphrase", "secret", "private_key", "psk", "token")
 
 
@@ -75,7 +79,12 @@ def main():
     base = "https://" + cfg.get("UNIFI_HOST", "10.10.1.1")
     ctx = ssl.create_default_context()
     ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE  # UDM uses a self-signed cert; LAN only
-    jar = http.cookiejar.CookieJar()
+    os.makedirs(SESSION_DIR, mode=0o700, exist_ok=True)
+    jar = http.cookiejar.MozillaCookieJar(COOKIES)
+    try:
+        jar.load(ignore_discard=True, ignore_expires=True)
+    except (OSError, http.cookiejar.LoadError):
+        pass
     opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx),
                                          urllib.request.HTTPCookieProcessor(jar))
 
@@ -86,11 +95,39 @@ def main():
             req.add_header("X-CSRF-Token", csrf)
         return opener.open(req, timeout=30)
 
+    def save(csrf):
+        old = os.umask(0o077)
+        try:
+            jar.save(ignore_discard=True, ignore_expires=True)
+            with open(CSRF_FILE, "w") as f:
+                f.write(csrf or "")
+        finally:
+            os.umask(old)
+
+    def login():
+        r = call("POST", "/api/auth/login",
+                 json.dumps({"username": cfg["UNIFI_USER"], "password": cfg["UNIFI_PASS"], "remember": True}).encode())
+        csrf = r.headers.get("X-CSRF-Token") or r.headers.get("x-updated-csrf-token")
+        save(csrf)
+        return csrf
+
     try:
-        login = call("POST", "/api/auth/login",
-                     json.dumps({"username": cfg["UNIFI_USER"], "password": cfg["UNIFI_PASS"], "remember": False}).encode())
-        csrf = login.headers.get("X-CSRF-Token") or login.headers.get("x-updated-csrf-token")
-        resp = call(method, path, body, csrf)
+        try:
+            csrf = open(CSRF_FILE).read().strip() or None
+        except OSError:
+            csrf = None
+        resp = None
+        if csrf and len(jar):
+            try:
+                resp = call(method, path, body, csrf)
+            except urllib.error.HTTPError as e:
+                if e.code not in (401, 403):
+                    raise
+        if resp is None:  # no session yet, or it expired: log in once
+            resp = call(method, path, body, login())
+        newcsrf = resp.headers.get("x-updated-csrf-token")
+        if newcsrf:
+            save(newcsrf)
         out = resp.read().decode() or "{}"
     except urllib.error.HTTPError as e:
         sys.exit(f"HTTP {e.code} {e.reason} for {method} {path}: {e.read().decode()[:500]}")
