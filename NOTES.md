@@ -188,6 +188,18 @@ usage in [README.md](README.md).
   `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
   speed from about 10 to about 34 Mbps.
 
+## Proxmox host memory: ZFS ARC capped (2026-11-09)
+
+- 188 GB RAM. The ZFS cache (ARC, for the "VM" pool; root is ext4/LVM) had
+  the old default limit of half the RAM and sat at 94 GB, so the host looked
+  nearly full. Capped at 32 GB: `/etc/modprobe.d/zfs.conf` =
+  `options zfs zfs_arc_max=34359738368`, applied live and initramfs rebuilt.
+  Right after: ARC 29 GB, ~107 GB available (was ~44).
+- Undo: delete the file, `echo 0 > /sys/module/zfs/parameters/zfs_arc_max`,
+  `update-initramfs -u -k all`.
+- VMs use far less than configured (2026-11-09: ~55 GB used of ~165 GB
+  configured); KSM saves ~11 GB. CPU-Share (104) is configured with 64 GB.
+
 ## Proxmox 9 upgrade (2026-11-08)
 
 - Now **pve-manager 9.2.26** on trixie. Apt sources are deb822
