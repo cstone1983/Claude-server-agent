@@ -82,6 +82,9 @@ Every step: one change, then verify, with a stated rollback. Nothing in phases
 
 Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 
+After the overhaul: trusted internal HTTPS under `*.lan.stoneyshome.com`,
+see docs/internal-https.md.
+
 ## Status
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
