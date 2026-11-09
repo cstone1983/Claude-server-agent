@@ -237,16 +237,43 @@ Expected loss of the hub during the evening:
 
 Prep before the evening (no impact; Claude, with the user's OK):
 - [x] Cloudflare n8n route -> https://localhost (done 2026-11-09 22:25).
-- [ ] Install `vm-net-move`, `pve-net-apply` on Proxmox; dry-run both.
-- [ ] Find the R630's switch port (MAC 24:6e:96:8a:39:9c) and confirm it
-  allows tagged VLANs; same for the SAN ports.
-- [ ] On n8n: re-publish `solar-pg-lan` on 0.0.0.0:5432 instead of
-  10.10.1.86:5432 (its `range=` still limits who may connect) so it does not
-  fail to start when n8n's IP changes; switch the n8n credentials and
-  workflows that use IPs to DNS names (`homeassistant`, `solar`, `finance`).
-- [ ] UDM: DNS names for every server; reservations for everything missing
-  one (incl. the 7 unplugged Kasa plugs); create Servers (VLAN 10, /23), DMZ
-  (20), Storage (40, no DHCP/gateway) networks.
+- [x] Install `vm-net-move`, `pve-net-apply` on Proxmox; dry-run both (2026-11-09:
+  clean; bridge change = 2 lines, saved as /root/interfaces.vlan-aware).
+- [x] Link-pulse test on VM 107 with no VLAN change: networkd dropped and
+  re-acquired its DHCP lease within 5 s. The guest agent is NOT enabled on
+  100, 102, 107, 111 (needs a VM restart to add), so the pulse is the method;
+  the agent renew is only a fallback on 103 and 112.
+- [x] Switch ports: R630 nic0 = USW port 18 (native Main, tagged VLANs "auto" =
+  all), iDRAC = port 19, EqualLogic = port 31 (default profile, all VLANs).
+- [x] n8n container resolves the UDM names as `<name>.localdomain`.
+- [ ] `solar-pg-lan`: 0.0.0.0:5432 is NOT possible (solar-postgres already
+  holds 127.0.0.1:5432; tried 2026-11-09, ~1 min Solar DB outage, restored).
+  New plan, done in the Solar-Calc move step: recreate it as
+  `-p 5433:5432` (all addresses, port 5433) with `range=10.10.11.100/32`, and
+  point Solar-Calc's `database.json`/`.env` at `n8n.localdomain:5433`. After
+  that it no longer depends on n8n's IP at all.
+- [ ] Solar-Calc refuses requests by host name on purpose (DNS-rebinding guard;
+  only IP literals or names in `SOLAR_WRITE_HOSTS`), so n8n "Solar Bill
+  Intake" keeps an IP: change `http://10.10.1.156:8080` to
+  `http://10.10.11.100:8080` in the Solar-Calc move step.
+- [ ] n8n credentials (UI, at the HA move, or switch to
+  `homeassistant.localdomain` any time): "Home Assistant account" host
+  10.10.1.116; "SSH for Game install" host 10.10.1.136 (-> `finance.localdomain`
+  any time); "SSH Password account"/"SSH n8n" host 10.10.1.86 (-> 127.0.0.1
+  or `n8n.localdomain`). "Homelab Agent" workflow (inactive) .116:8123.
+- [x] UDM (2026-11-09): 44 reservations at current IPs (the 6 server VMs
+  without one, Lutron, RPi5, both G5 cameras, both TVs, every online IoT
+  client, and the unplugged Kasa plugs: Gecko-Heat .14, Gecko-UV .78,
+  HA-Plug .247, Anthony-Christmas .237 at their old IPs; Bedroom-String-Lights
+  -> 10.10.3.21 and Outside-Plug (EP40) -> 10.10.3.22 because .117/.148 are
+  now other devices: when those two are plugged in, update their host in HA).
+  DNS names: n8n, homeassistant, solar, recipes, finance, cpushare, proxmox,
+  idrac (+ fileserver). Networks created: Servers VLAN 10 10.10.10.1/23 (DHCP
+  10.10.10.200-249), DMZ VLAN 20 10.10.20.1/24 (DHCP .200-.249), Storage VLAN
+  40 (VLAN only). They sit in the Internal zone until the evening's zones and
+  rules. net-check 12/12 OK afterwards.
+- [ ] Stale reservations to remove later: .81 (old HA Pi), .206 (old thermostat
+  VM), .239 (Dell-Ubuntu-AI).
 - [x] User: zone-based firewall migration click; `net-check` right after (done 2026-11-09, all OK).
 
 The n8n move in detail (last step of the evening):
