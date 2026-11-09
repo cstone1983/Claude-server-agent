@@ -84,6 +84,7 @@ Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 
 ## Status
 
+- 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.
 - UDM: Network app 10.6.109, still legacy firewall (no zones yet). UDM backup
@@ -151,11 +152,11 @@ before anyone relies on them.
 | Main / Trusted | 10.10.1.0/24 | .2-.49 (UDM .1, iDRAC .10, Proxmox .15, laptop .20, SAN .30/.31) | .50-.254 (as now) |
 | IoT | 10.10.3.0/24 | .10-.99 (thermostat, Lutron, TVs, Sonos, heat pumps, plugs...) | .100-.254 |
 | Cameras | 10.10.4.0/24 | .10-.49 | .50-.254 |
-| Servers | 10.10.10.0/24 | infrastructure .2-.99 (blocks below); VMs: VM n -> 10.10.10.n (100-199) | .200-.249 (.250-.254 spare) |
+| Servers | 10.10.10.0/23 (10.10.10.0-10.10.11.255, gateway 10.10.10.1) | infrastructure: all of 10.10.10.x (blocks below); VMs: VM n -> 10.10.11.n | 10.10.10.200-.249 |
 | DMZ | 10.10.20.0/24 | CPU-Share (VM 104) -> 10.10.20.104 | .200-.249 |
 | Storage | 10.10.40.0/24 | SAN .10-.49, host iSCSI ports .100-.199; no gateway | none |
 
-Servers infrastructure blocks (room for more hosts and for the unused LAN
+Servers infrastructure blocks, all in 10.10.10.x (room for more hosts and for the unused LAN
 ports on the servers and the SAN being brought into use):
 
 | Range | Use |
@@ -164,7 +165,8 @@ ports on the servers and the SAN being brought into use):
 | .10-.19 | out-of-band consoles: iDRAC of the R630 .10, next server .11, ... |
 | .20-.29 | hypervisor hosts, management address: R630 (Proxmox) .20, next host .21, ... |
 | .30-.49 | extra host interfaces that need their own address (backup/migration ports, a second management port) |
-| .50-.99 | other infrastructure: PBS if it ever runs separately, appliances, NAS, spare |
+| .50-.199 | other infrastructure: PBS if it ever runs separately, appliances, NAS, more hosts' extra ports, spare |
+| .200-.249 | DHCP pool (temporary / new devices) |
 
 Storage VLAN 40 blocks: SAN group IP .10, SAN member/port IPs .11-.49 (the
 EqualLogic has several ports per controller, all can be used); hosts' iSCSI
@@ -176,7 +178,8 @@ port failure) and (2) a two-port bond (LACP on the USW Pro 48) for vmbr0, so
 the VMs and host management do not depend on one cable. Each is its own small
 change with the iDRAC console as the fallback, after Phase 7.
 
-Easy rule for VMs: the last octet is the VM ID. Every server also gets a
+Easy rule for VMs: 10.10.11.<VM ID> (VM 103 -> 10.10.11.103). VM IDs 1-254
+fit; 10.10.10.x is never used by a VM. Every server also gets a
 local DNS name on the UDM (`n8n`, `homeassistant`, `solar`, `recipes`, `finance`,
 `fileserver`, `cpushare`, `proxmox`), and configs switch to the names, so a
 future move is one DNS edit. (`fileserver` already exists.)
@@ -199,7 +202,7 @@ future move is one DNS edit. (`fileserver` already exists.)
 ### Steps for one VM (about 1-2 minutes of downtime)
 
 1. Create the reservation on the UDM: client MAC -> Servers network, fixed IP
-   10.10.10.<id>; point the DNS name at the new IP (short TTL, takes effect
+   10.10.11.<id>; point the DNS name at the new IP (short TTL, takes effect
    at once on the UDM).
 2. Update the server's own config that names its old IP (list below).
 3. On Proxmox: `qm set <id> --net0 virtio=<MAC>,bridge=vmbr0,tag=10` (same MAC,
@@ -221,13 +224,13 @@ while the hub is down.
 
 | VM | Old IP -> new | What refers to it |
 |---|---|---|
-| 107 Recipies | .94 -> 10.10.10.107 | AI-Recipes `server.ts` and the pm2 dump (bind to 0.0.0.0, not the IP); tunnel uses localhost |
-| 100 Solar-Calc | .156 -> 10.10.10.100 | own web `vite.config.js`, `Bills.jsx` (use relative URLs); n8n "Solar Bill Intake" (.156:8080 -> `solar`); the `solar-pg-lan` socat on n8n only accepts `range=10.10.1.156/32` -> change to 10.10.10.100/32 in the same step; n8n "Solar Telegram Sender" and Solar-Calc `billread.js` use the laptop's Ollama (.20), rule 6 |
-| 111 Fiance | .136 -> 10.10.10.111 | n8n credential "SSH for Game install" (host .136 -> `finance`); tunnel uses localhost |
-| 112 fileserver | .80 -> 10.10.10.112 | Samba `interfaces = lo 10.10.1.0/24` -> the new subnet (keep `hosts allow` for Trusted 10.10.1.0/24); Nextcloud `trusted_domains` (add the new IP, keep names); DNS `fileserver` |
+| 107 Recipies | .94 -> 10.10.11.107 | AI-Recipes `server.ts` and the pm2 dump (bind to 0.0.0.0, not the IP); tunnel uses localhost |
+| 100 Solar-Calc | .156 -> 10.10.11.100 | own web `vite.config.js`, `Bills.jsx` (use relative URLs); n8n "Solar Bill Intake" (.156:8080 -> `solar`); the `solar-pg-lan` socat on n8n only accepts `range=10.10.1.156/32` -> change to 10.10.11.100/32 in the same step; n8n "Solar Telegram Sender" and Solar-Calc `billread.js` use the laptop's Ollama (.20), rule 6 |
+| 111 Fiance | .136 -> 10.10.11.111 | n8n credential "SSH for Game install" (host .136 -> `finance`); tunnel uses localhost |
+| 112 fileserver | .80 -> 10.10.11.112 | Samba `interfaces = lo 10.10.1.0/24` -> the new subnet (keep `hosts allow` for Trusted 10.10.1.0/24); Nextcloud `trusted_domains` (add the new IP, keep names); DNS `fileserver` |
 | 110 Autopilot | (stopped) | VLAN tag only |
-| 103 Home Assistant | .116 -> 10.10.10.103 | n8n "Homelab Agent" workflow (.116:8123) and the n8n credentials "Home Assistant account", "HA Token", "HA Token 2" (-> `homeassistant`); RPi5 thermostat MQTT broker address; Shelly Gen1 CoIoT peer; HA's own internal URL; Ollama (laptop) rule 6 |
-| 102 n8n / hub | .86 -> 10.10.10.102 | Cloudflare n8n route (localhost first, pre-flight 4); Solar-Calc `database.json`/`.env` and `SettingsPanel.jsx` (.86:5432 -> `n8n`); the `solar-pg-lan` container is published on `10.10.1.86:5432` -> rebind to the new IP (or 0.0.0.0, the source `range=` still limits it); n8n credentials "SSH Password account" and "SSH n8n" (host .86 -> `n8n` or 127.0.0.1); the `unifi` helper keeps using 10.10.1.1 (the UDM answers on every network's gateway) |
+| 103 Home Assistant | .116 -> 10.10.11.103 | n8n "Homelab Agent" workflow (.116:8123) and the n8n credentials "Home Assistant account", "HA Token", "HA Token 2" (-> `homeassistant`); RPi5 thermostat MQTT broker address; Shelly Gen1 CoIoT peer; HA's own internal URL; Ollama (laptop) rule 6 |
+| 102 n8n / hub | .86 -> 10.10.11.102 | Cloudflare n8n route (localhost first, pre-flight 4); Solar-Calc `database.json`/`.env` and `SettingsPanel.jsx` (.86:5432 -> `n8n`); the `solar-pg-lan` container is published on `10.10.1.86:5432` -> rebind to the new IP (or 0.0.0.0, the source `range=` still limits it); n8n credentials "SSH Password account" and "SSH n8n" (host .86 -> `n8n` or 127.0.0.1); the `unifi` helper keeps using 10.10.1.1 (the UDM answers on every network's gateway) |
 | 104 CPU-Share | .133 -> 10.10.20.104 (DMZ, Phase 4) | 6 Akash port forwards; Proxmox VM firewall `/etc/pve/firewall/104.fw` (10.10.1.133, 10.10.1.0/24); k3s config/service, ufw and Akash inventory on the VM |
 | Proxmox host | .15 -> 10.10.10.20 (Phase 7) | see "Proxmox, iDRAC and Storage" |
 
