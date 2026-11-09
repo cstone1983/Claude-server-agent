@@ -1,0 +1,54 @@
+#!/bin/bash
+# vm-net-move: move a VM to another VLAN on the Proxmox host, check it, and put
+# it back automatically if the check fails. Built for the network overhaul so a
+# move can run while Claude is disconnected (e.g. moving the hub's own VM).
+#
+# Usage (always detached, so it survives the agent/hub dropping):
+#   systemd-run --unit vm-net-move-<vmid> /usr/local/sbin/vm-net-move <vmid> <tag|none> <expected-ip> [timeout-s] [extra-check]
+#   e.g. vm-net-move 107 10 10.10.11.107 180
+#        vm-net-move 102 10 10.10.11.102 180 "curl -fsS -o /dev/null -m 10 https://agents.stoneyshome.com/"
+#   --dry-run as the first argument prints what would change.
+#
+# Steps: record net0 -> set the VLAN tag (same MAC, same bridge) -> pulse the
+# link (link_down=1, 3 s, link_down=0) so the guest's DHCP client renews ->
+# wait for <expected-ip> to answer ping (and the extra check, if given) ->
+# success, or restore the old net0 and pulse the link again.
+# The DHCP reservation for the new IP must already exist on the UDM.
+# Log: /var/log/vm-net-move.log   Result: /run/vm-net-move-<vmid>.result
+set -u
+DRY=0; [ "${1:-}" = "--dry-run" ] && { DRY=1; shift; }
+[ $# -ge 3 ] || { sed -n 2,20p "$0"; exit 2; }
+VMID=$1 TAG=$2 IP=$3 TIMEOUT=${4:-180} EXTRA=${5:-}
+LOG=/var/log/vm-net-move.log RES=/run/vm-net-move-$VMID.result
+log() { echo "$(date '+%F %T') [$VMID] $*" | tee -a "$LOG"; }
+
+old=$(qm config "$VMID" | sed -n 's/^net0: //p')
+[ -n "$old" ] || { log "VM $VMID has no net0"; exit 1; }
+name=$(qm config "$VMID" | sed -n 's/^name: //p')
+base=$(echo "$old" | tr ',' '\n' | grep -vE '^(tag|link_down)=' | paste -sd,)
+if [ "$TAG" = none ]; then new=$base; else new="$base,tag=$TAG"; fi
+log "VM $VMID ($name): net0 '$old' -> '$new', expect $IP within ${TIMEOUT}s${EXTRA:+, extra check: $EXTRA}"
+[ $DRY = 1 ] && { echo "dry run: nothing changed"; exit 0; }
+
+pulse() { qm set "$VMID" --net0 "$1,link_down=1" >/dev/null; sleep 3; qm set "$VMID" --net0 "$1" >/dev/null; }
+healthy() { ping -c1 -W2 "$IP" >/dev/null 2>&1 || return 1; [ -z "$EXTRA" ] || bash -c "$EXTRA" >/dev/null 2>&1; }
+
+echo "running" > "$RES"
+pulse "$new"
+start=$SECONDS
+while [ $((SECONDS - start)) -lt "$TIMEOUT" ]; do
+  if healthy; then log "OK after $((SECONDS - start))s"; echo "OK $IP" > "$RES"; exit 0; fi
+  # halfway: ask the guest agent to renew too, in case the link pulse was not enough
+  if [ $((SECONDS - start)) -ge $((TIMEOUT / 2)) ] && [ -z "${renewed:-}" ]; then
+    renewed=1; log "no answer yet, asking the guest agent to renew DHCP"
+    timeout 20 qm guest exec "$VMID" -- sh -c '
+      if command -v networkctl >/dev/null; then for i in $(networkctl list --no-legend | awk "\$3==\"ether\"{print \$2}"); do networkctl renew "$i"; done
+      elif command -v nmcli >/dev/null; then nmcli networking off; sleep 1; nmcli networking on
+      elif command -v dhclient >/dev/null; then dhclient -r; dhclient; fi' >/dev/null 2>&1 || true
+  fi
+  sleep 5
+done
+log "FAILED: $IP not healthy after ${TIMEOUT}s, reverting to '$old'"
+pulse "$old"
+echo "REVERTED (was $old)" > "$RES"
+exit 1

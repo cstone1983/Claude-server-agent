@@ -185,6 +185,81 @@ local DNS name on the UDM (`n8n`, `homeassistant`, `solar`, `recipes`, `finance`
 `fileserver`, `cpushare`, `proxmox`), and configs switch to the names, so a
 future move is one DNS edit. (`fileserver` already exists.)
 
+## Keeping the hub (Claude's access) up
+
+How Claude reaches everything: Claude -> agents.stoneyshome.com (Cloudflare)
+-> cloudflared on the n8n VM (102) -> the hub on localhost:7420 -> each agent,
+which itself connects OUT to agents.stoneyshome.com. The UDM is reached from
+n8n (`unifi` helper, 10.10.1.1:443). So Claude's access depends on exactly:
+the n8n VM running, n8n having internet, and (for router changes) n8n -> UDM.
+Agents on other VMs only need internet, so they survive their own moves.
+
+Rules for the window:
+
+1. **n8n stays on Main (Trusted, allow-all) until the very last VM move.**
+   Every firewall rule before that affects other zones only, so no rule can
+   cut n8n off from the internet or the UDM.
+2. **Anything that can take down n8n's network runs as a self-reverting
+   script on Proxmox, started detached** (`systemd-run`), so it finishes and,
+   if needed, rolls back even while Claude is disconnected:
+   - `pve-net-apply`: new `/etc/network/interfaces` + `ifreload`; if the host
+     cannot reach the gateway AND agents.stoneyshome.com within 120 s, it
+     restores the old file. Used for Phase 5.
+   - `vm-net-move`: VLAN tag change + link pulse (the guest renews DHCP); if
+     the VM does not answer on its new IP (plus an optional extra check)
+     within the timeout, it restores the old net0. Used for every VM in
+     Phase 6; for n8n the extra check is "the hub answers through Cloudflare".
+   Both have `--dry-run`, log to /var/log/, and leave a result in /run/.
+3. **Every UDM-side change is made before the step that depends on it**
+   (reservation, DNS name, allow rule), never during it.
+4. **One step at a time; `net-check` and the hub's server list after each.**
+5. **The user is the last fallback**, reachable from a PC on Main even if
+   everything else fails: Proxmox UI https://10.10.1.15:8006 (VM 102 ->
+   Hardware -> Network Device -> clear the VLAN tag), the iDRAC console
+   https://10.10.1.10 (host network), and the UDM web UI.
+
+Expected loss of the hub during the evening:
+
+| Step | Hub down | If it goes wrong |
+|---|---|---|
+| Firewall migration click (user) | none expected (connections are kept) | restore UDM backup (user) |
+| Creating networks, reservations, DNS names, rules | none | delete/disable the item |
+| Cameras / IoT device moves | none | move back |
+| Phase 5: vmbr0 VLAN-aware (`pve-net-apply`) | ~5-30 s (all VMs blip, tunnel reconnects) | auto-revert at 120 s |
+| Phase 6: each VM except n8n (`vm-net-move`) | none (that VM's agent reconnects in seconds) | auto-revert at 180 s |
+| Phase 6: n8n last (`vm-net-move 102 ...`) | ~30-60 s | auto-revert at 180 s, back on Main |
+
+Prep before the evening (no impact; Claude, with the user's OK):
+- [x] Cloudflare n8n route -> https://localhost (done 2026-11-09 22:25).
+- [ ] Install `vm-net-move`, `pve-net-apply` on Proxmox; dry-run both.
+- [ ] Find the R630's switch port (MAC 24:6e:96:8a:39:9c) and confirm it
+  allows tagged VLANs; same for the SAN ports.
+- [ ] On n8n: re-publish `solar-pg-lan` on 0.0.0.0:5432 instead of
+  10.10.1.86:5432 (its `range=` still limits who may connect) so it does not
+  fail to start when n8n's IP changes; switch the n8n credentials and
+  workflows that use IPs to DNS names (`homeassistant`, `solar`, `finance`).
+- [ ] UDM: DNS names for every server; reservations for everything missing
+  one (incl. the 7 unplugged Kasa plugs); create Servers (VLAN 10, /23), DMZ
+  (20), Storage (40, no DHCP/gateway) networks.
+- [ ] User: zone-based firewall migration click; `net-check` right after.
+
+The n8n move in detail (last step of the evening):
+1. Before: Servers rules 2-7 exist and include n8n's NEW IP in rule 5
+   (n8n -> UDM 443) and rule 6; Solar-Calc already on Servers and pointing at
+   the DNS name `n8n`; the `solar-pg-lan` range updated for Solar's new IP.
+2. UDM: reservation for n8n's MAC -> Servers, 10.10.11.102; DNS `n8n` ->
+   10.10.11.102. (n8n keeps its current lease until the move, so nothing
+   changes yet.)
+3. Start on Proxmox, detached:
+   `systemd-run --unit vm-net-move-102 vm-net-move 102 10 10.10.11.102 180 "curl -fsS -o /dev/null -m 10 https://agents.stoneyshome.com/"`
+4. Claude is cut off for ~30-60 s, then reconnects and checks
+   /run/vm-net-move-102.result, the hub's server list (all agents back),
+   `unifi GET net:stat/sta` (router access from the new IP), `net-check`,
+   Solar-Calc's database connection and one Telegram test message.
+5. If it reverted: n8n is back on Main with a dynamic IP (its reservation
+   now points at Servers); the hub works through Cloudflare; Claude fixes the
+   reservation back to 10.10.1.86 and investigates before retrying.
+
 ## Swap runbook (per server)
 
 ### Pre-flight (once, before Phase 6)
