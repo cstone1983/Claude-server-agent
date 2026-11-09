@@ -139,10 +139,15 @@ usage in [README.md](README.md).
       --auth-no-open-browser` on the host, the user signs in on a PC and puts
       the failing `http://127.0.0.1:53682/?state=...` URL into a root-only file,
       which is curl'ed on the host; then `rclone config update drive ... token`.
-    - **Open:** the app's Publish button was greyed out ("complete your
-      configuration on the Branding page"). While the app is in Testing,
-      Google expires the refresh token after 7 days: publish it, or re-auth
-      weekly.
+    - **Published (2026-11-09):** the app is "In production" (External,
+      unverified: the sign-in shows Google's "unverified app" warning, which is
+      fine for the owner's own account), so the refresh token does not
+      expire. Publishing required a home page + privacy policy on a verified
+      domain: stoneyshome.com is verified in Google Search Console (TXT record
+      added in Cloudflare by Search Console; do not remove it), and the pages
+      are served by the n8n workflow "rclone App Pages (Google OAuth)":
+      https://n8n.stoneyshome.com/webhook/rclone and /webhook/privacy (keep
+      that workflow active). Re-signed after publishing at 17:18.
     - Layout: `<vmid>-<name>/daily|weekly|bimonthly`, keeping 1 each.
       Weekly refreshes on Sunday; 2-monthly on the 1st of odd months.
       Copies between slots are server-side.
