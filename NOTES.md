@@ -343,7 +343,7 @@ Only rules scoped to them by name or tag apply.
       2026-11-09: first run (started 23:00 on the 8th) was throttled by Google
       (shared rclone client); stopped 17:04, switched to the user's own OAuth
       client, restarted 17:08 with no rate-limit errors.
-      Daytime limit raised to 10 MB/s (04:30-23:00; was 1 MB/s), full speed at night.
+      Daytime limit 10 Mbps (1220k, 04:30-23:00; was 1 MB/s), full speed at night. Upload line is 40 Mbps, usually ~35.
 - [x] **Cleanup 2026-11-08:** all 7 old snapshots deleted; nextcloud-data.old removed;
       UDM: dead AdGuard reservation (10.10.1.179) removed, stale 10.10.3.100 on
       the old HA Pi cleared. The vm-fiance exited containers are leftovers from
