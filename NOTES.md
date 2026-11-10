@@ -71,6 +71,21 @@ usage in [README.md](README.md).
 5. Afterwards, `/` was extended to the full disk.
 6. Its Proxmox snapshot can be deleted once the user is happy.
 
+## Hub login: remembered devices (v0.1.26, 2026-11-10)
+
+- Login/approval pages offer "Remember this device": a long-lived cookie
+  (~400 days, renewed on every use, stored as a hash) that keeps the browser
+  logged in and approves without a code. Ask-always requests (Proxmox reboot)
+  still need a current code, on the approval page and the dashboard.
+- Manage on /approvals -> "Remembered devices" (Forget). Logout forgets the
+  current browser; `sudo csa-hub revoke-sessions` forgets all devices and
+  ends all logins.
+- Why logins "did not last 7 days": the session cookie was SameSite=Strict, so
+  it was not sent when an approval link was opened from the Claude app. Now
+  Lax (cross-site form posts are still refused).
+- Hub updated to v0.1.26 on 2026-11-10; the agents are still v0.1.25 (no
+  agent change in this release).
+
 ## Allow rules in place (hub "always allow")
 
 - **Troubleshooting kit** (all servers):
@@ -383,6 +398,34 @@ Only rules scoped to them by name or tag apply.
   open on them.
 
 ## To do / ideas
+
+- [ ] **Future project: one home portal + single sign-on** (user's idea,
+      2026-11-10). There are now many separate dashboards, each with its own
+      login: Proxmox, PBS, iDRAC, UniFi, Home Assistant, n8n, Nextcloud, the
+      hub's approvals page, Solar-Calc, AI Recipes, Finance, the EqualLogic SAN.
+      Idea: one start page linking them all (status at a glance), plus one
+      login in front of them. Things to weigh when we get to it:
+      - Portal: a dashboard app (e.g. Homepage, Homarr, Dashy) with live
+        status widgets, or a page served by the hub.
+      - SSO: an identity provider (e.g. Authentik or Authelia) in front of the
+        Traefik on n8n (forward-auth), with OIDC where an app supports it
+        (Proxmox, PBS, Nextcloud, n8n, HA via add-on). Apps without SSO keep
+        their own login behind the proxy.
+      - Fits with the internal HTTPS plan (docs/internal-https.md): the same
+        Traefik and `*.lan.stoneyshome.com` names; do that first.
+      - Keep a break-glass path: every service must still be reachable by IP
+        with its own admin login if the SSO or n8n is down.
+      - Public apps behind Cloudflare could use Cloudflare Access instead of,
+        or in addition to, the internal SSO.
+- [ ] **Agent: keep a finished result across a hub reconnect.** Cloudflare
+      resets the agents' connections now and then (all agents at once, 1-2 s);
+      a command finishing in that window loses its result ("agent disconnected
+      while running the command"). Buffer the result and resend it after
+      reconnecting.
+- [ ] **Retire the old off-site backup.** pve-offsite-backup.timer was
+      disabled 2026-11-10 (it failed nightly: its VMs moved to PBS). After the
+      first PBS off-site copy is verified, also disable the old 23:30 vzdump job
+      (backup-79526ae3-5f24, now only VM 100) and remove both when sure.
 
 - [ ] **Persist pending approvals.** They're held in memory, so a hub restart
       loses them; this happened with the timezone approvals.

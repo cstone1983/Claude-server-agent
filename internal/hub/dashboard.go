@@ -185,7 +185,19 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{}
-	if r.Method == http.MethodPost && r.PostFormValue("op") == "device_forget" {
+	if r.Method == http.MethodPost && r.PostFormValue("op") == "history_allow" {
+		if s, err := h.allowFromHistory(r.PostFormValue("approval_id"), r.PostFormValue("scope"), "dashboard:"+clientIP(r)); err != nil {
+			data["Error"] = err.Error()
+		} else {
+			data["Done"] = "Always allowed on " + scopeLabel(s) + ": next time it runs without asking."
+		}
+	} else if r.Method == http.MethodPost && r.PostFormValue("op") == "rule_revoke" {
+		if s, ok := h.revokeRule(r.PostFormValue("rule_id"), "dashboard:"+clientIP(r)); ok {
+			data["Done"] = "Always-allow revoked (" + scopeLabel(s) + "): it needs approval again."
+		} else {
+			data["Error"] = "That rule no longer exists."
+		}
+	} else if r.Method == http.MethodPost && r.PostFormValue("op") == "device_forget" {
 		if h.forgetDevice(r.PostFormValue("device_id"), "dashboard:"+clientIP(r)) {
 			data["Done"] = "Device forgotten: it needs the password and code again."
 		}
@@ -260,13 +272,7 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data["Groups"], data["Alone"] = normal, alone
-	var recent []Approval
-	for _, a := range h.appr.list() {
-		if a.Status != StatusPending && len(recent) < 15 {
-			recent = append(recent, a)
-		}
-	}
-	data["Recent"] = recent
+	data["Recent"] = h.recentDecisions(15)
 	if aa := h.autoApprove(); aa != nil {
 		data["Auto"], data["AutoLabel"] = aa, aa.label()
 	}
