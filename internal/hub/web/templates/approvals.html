@@ -73,7 +73,7 @@
 <h2 id="devices" style="margin-top:1.6rem">Remembered devices</h2>
 {{if .D.Devices}}<div class="card table-wrap"><table>
 <thead><tr><th>Device</th><th>Last used</th><th>From</th><th>Remembered since</th><th></th></tr></thead><tbody>
-{{range .D.Devices}}<tr><td>{{.Label}}{{if eq .ID $.D.ThisDevice}} <span class="chip brand">this device</span>{{end}}</td>
+{{range .D.Devices}}<tr><td><form method="post" class="btn-row" style="margin:0"><input type="hidden" name="op" value="device_rename"><input type="hidden" name="device_id" value="{{.ID}}"><input name="name" value="{{.Name}}" placeholder="{{.Label}}" maxlength="60" aria-label="Device name" style="max-width:14rem"> <button class="btn sm">Rename</button>{{if eq .ID $.D.ThisDevice}} <span class="chip brand">this device</span>{{end}}</form>{{if .Name}}<div class="muted small">{{.Label}}</div>{{end}}</td>
 <td class="nowrap muted"><time datetime="{{iso .LastUsed}}">{{iso .LastUsed}}</time></td><td class="muted">{{.IP}}</td>
 <td class="nowrap muted"><time datetime="{{iso .CreatedAt}}">{{iso .CreatedAt}}</time></td>
 <td><form method="post"><input type="hidden" name="op" value="device_forget"><input type="hidden" name="device_id" value="{{.ID}}"><button class="btn danger">Forget</button></form></td></tr>{{end}}

@@ -231,3 +231,36 @@ func TestDeviceLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestRenameRememberedDevice(t *testing.T) {
+	d := newDevTest(t)
+	d.post("/login", url.Values{"password": {"pw-123456789"}, "code": {d.code()}, "next": {"/approvals"}, "remember": {"1"}})
+	dev := d.h.devices()[0]
+
+	_, body := d.post("/approvals", url.Values{"op": {"device_rename"}, "device_id": {dev.ID}, "name": {"  Chris's   phone "}})
+	if got := d.h.devices()[0]; got.Name != "Chris's phone" || got.DisplayName() != "Chris's phone" || got.Label != dev.Label {
+		t.Fatalf("rename: %+v", got)
+	}
+	if !strings.Contains(body, "Device renamed") || !strings.Contains(body, `value="Chris&#39;s phone"`) {
+		t.Fatalf("approvals page after rename:\n%s", body)
+	}
+	// The approval page shows the new name.
+	a := d.approval(false)
+	resp, _ := d.c.Get(d.srv.URL + "/approve/" + a.ID)
+	b, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(b), "Chris&#39;s phone") {
+		t.Fatalf("approval page does not show the device name:\n%s", b)
+	}
+	// Too long is refused; empty goes back to the detected label.
+	if _, err := d.h.renameDevice(dev.ID, strings.Repeat("x", 61), "t"); err == nil {
+		t.Fatal("over-long name accepted")
+	}
+	d.post("/approvals", url.Values{"op": {"device_rename"}, "device_id": {dev.ID}, "name": {""}})
+	if got := d.h.devices()[0]; got.Name != "" || got.DisplayName() != got.Label {
+		t.Fatalf("clearing the name: %+v", got)
+	}
+	// Unknown device.
+	if ok, _ := d.h.renameDevice("dev_nope", "x", "t"); ok {
+		t.Fatal("renamed a device that does not exist")
+	}
+}

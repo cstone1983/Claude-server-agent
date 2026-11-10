@@ -197,6 +197,14 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data["Error"] = "That rule no longer exists."
 		}
+	} else if r.Method == http.MethodPost && r.PostFormValue("op") == "device_rename" {
+		if ok, err := h.renameDevice(r.PostFormValue("device_id"), r.PostFormValue("name"), "dashboard:"+clientIP(r)); err != nil {
+			data["Error"] = err.Error()
+		} else if ok {
+			data["Done"] = "Device renamed."
+		} else {
+			data["Error"] = "That device is no longer remembered."
+		}
 	} else if r.Method == http.MethodPost && r.PostFormValue("op") == "device_forget" {
 		if h.forgetDevice(r.PostFormValue("device_id"), "dashboard:"+clientIP(r)) {
 			data["Done"] = "Device forgotten: it needs the password and code again."

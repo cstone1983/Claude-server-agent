@@ -209,7 +209,7 @@ func (h *Hub) handleApprovePage(w http.ResponseWriter, r *http.Request) {
 	// A remembered device approves without a code, except requests that need
 	// their own OK every time.
 	needCode := !remembered || snap.AskAlways
-	data := map[string]any{"A": snap, "Rule": snap.Suggested.String(), "NeedCode": needCode, "Remembered": remembered, "Device": dev.Label}
+	data := map[string]any{"A": snap, "Rule": snap.Suggested.String(), "NeedCode": needCode, "Remembered": remembered, "Device": dev.DisplayName()}
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		if !h.sameOrigin(r) {
