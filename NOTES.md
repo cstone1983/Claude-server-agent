@@ -71,6 +71,14 @@ usage in [README.md](README.md).
 5. Afterwards, `/` was extended to the full disk.
 6. Its Proxmox snapshot can be deleted once the user is happy.
 
+## Updates 2026-11-10
+
+- All agents v0.1.29. OS updates: cpu-share, n8n, Proxmox (vim + PBS 4.2.10),
+  Fileshare (incl. the unused PHP 8.3 packages: user chose to keep and update
+  them; Apache stays on PHP 8.4), thermostat Pi. Remaining are Ubuntu phased
+  updates. cpu-share logrotate fixed (duplicate cloud-init logrotate file moved
+  to /root); Proxmox PBS enterprise repo disabled (nightly apt 401).
+
 ## Hub login: remembered devices (v0.1.26, 2026-11-10)
 
 - Login/approval pages offer "Remember this device": a long-lived cookie
@@ -266,6 +274,9 @@ usage in [README.md](README.md).
   UNWIRED, the user uses it as a sensor only. HA entity
   climate.basement_thermostat (MQTT, broker = Mosquitto on HA).
 - Wi-Fi Obi-Wan-IoT since 2026-11-09 (old Obi-Wan profile kept, priority 0).
+- 2026-11-10: first OS update since setup (488 packages), kernel 6.12 -> 6.18
+  (6.18.60+rpt-rpi-2712, old kernel still installed); rebooted, thermostat,
+  MQTT and agent came back on their own.
 - Script /home/stonec/thermostat_client/thermostat.py, `thermostat.service`
   (user stonec). Rewritten 2026-11-09 (backup thermostat.py.bak-202611091907):
   MQTT by name (homeassistant.localdomain), credentials in root-only
