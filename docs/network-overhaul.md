@@ -65,11 +65,11 @@ Every step: one change, then verify, with a stated rollback. Nothing in phases
 - Phase 3 (low risk, instant rollback = disable rule): Cameras -> UDM only.
   IoT -> no local access except DNS/DHCP/NTP. Test HA's integrations and casting
   right after; add a narrow allow only where a device must reach HA.
-- Phase 4: DMZ: move CPU-Share (parked; Akash already broken) to VLAN 20,
-  update its 6 port forwards. First real server move, lowest stakes.
-- Phase 5 (brief blip, quiet hour): make Proxmox's bridge VLAN-aware and confirm
+- Phase 4 (brief blip, quiet hour): make Proxmox's bridge VLAN-aware and confirm
   the R630's switch port carries the tagged VLANs. A network reload on the host
-  blips all VMs for a few seconds.
+  blips all VMs for a few seconds. Must come before ANY VM gets a VLAN tag.
+- Phase 5: DMZ: move CPU-Share (parked; Akash already broken) to VLAN 20,
+  update its 6 port forwards. First real server move, lowest stakes.
 - Phase 6: move VMs to Servers one at a time, ~1-2 min each (VLAN tag in
   Proxmox + DHCP renew/new reservation, update anything that referenced the old
   IP): Recipies (107) -> Solar-Calc (100) -> Fiance (111) -> file server (112)
@@ -85,7 +85,56 @@ Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 After the overhaul: trusted internal HTTPS under `*.lan.stoneyshome.com`,
 see docs/internal-https.md.
 
-## Status
+## Final runbook (agreed 2026-11-10)
+
+Evening 1 (~2 h): firewall + devices + bridge. Next day: review logs (15-30 min).
+Evening 2 (~1.5-2 h): VM moves, n8n last. Day after: enforce blocks (15 min).
+Later evening (~1-1.5 h, optional): Proxmox/iDRAC/SAN (Phase 7).
+
+Every block starts as "allow + log" (observe), so nothing breaks on the night;
+blocks are switched to enforce only after the logs were reviewed.
+
+Evening 1, in order:
+0. User: fresh UDM backup (download). Claude: net-check baseline, confirm last
+   night's PBS backups OK, no backup/off-site sync running.
+1. Claude: objects (IP groups: HA old+new IP, n8n old+new IP, Solar old+new,
+   laptop, thermostat Pi, Shelly, Sonos), zones Servers / IoT / Cameras, assign
+   Servers/IoT/Cameras networks, DMZ network to the Dmz zone. Allow rules 1-13,
+   15, 17-18 first; then IoT/Cameras/Servers/DMZ "block" rules created as
+   allow+log (observe). net-check + HA check after.
+2. Claude: Cameras: reservations on Cameras (10.10.4.10/.11), switch ports
+   43/45 native VLAN -> Cameras. User: both cameras live in Protect.
+3. Claude: Lutron bridge: reservation IoT 10.10.3.11, switch port 11 native ->
+   IoT; update the HA Lutron integration host. User: test a few lights.
+4. TVs (LG bedroom, TLC Google TV): DECISION first (IoT Wi-Fi is 2.4 GHz only).
+   Claude tries per-device network override on the UDM; else user re-joins
+   each TV to the IoT Wi-Fi with the remote. Claude updates the HA LG host.
+   User: test casting from a phone.
+5. Claude: Proxmox bridge VLAN-aware (pve-net-apply, self-reverting; all VMs
+   blip a few seconds, hub drops ~5-30 s).
+6. Claude (optional): CPU-Share -> DMZ (vm-net-move 104 20 10.10.20.104), its
+   6 port forwards, /etc/pve/firewall/104.fw, k3s config on the VM.
+
+Next day: Claude reviews the observe logs (anything IoT/Cameras would have had
+blocked), adds narrow allows if needed; user reports anything odd at home.
+
+Evening 2, in order (each VM: reservation + DNS first, vm-net-move, verify,
+update references, remove the old reservation):
+1. Recipies (107). 2. Solar-Calc (100): relay on n8n re-created on port 5433
+   (all addresses, range=10.10.11.100/32), Solar-Calc DB host
+   n8n.localdomain:5433, n8n "Solar Bill Intake" URL -> 10.10.11.100:8080.
+3. Fiance (111). 4. File server (112): Samba interfaces, Nextcloud
+   trusted_domains, Collabora allowed hosts (+ new IP), DNS fileserver. User:
+   \\fileserver and Nextcloud from a PC. 5. Autopilot (110, stopped: tag only).
+6. Home Assistant (103): IoT->HA rules already include the new IP (object);
+   Shelly Gen1 CoIoT peer, HA internal URL, DNS homeassistant. User: glance at
+   HA. 7. n8n / hub (102) LAST: DNS n8n, hub drops ~30-60 s, self-reverts if
+   the hub does not answer. User: reachable (Proxmox UI fallback).
+
+Day after: Claude switches the observe rules to enforce (IoT, Cameras, Servers,
+DMZ), removes old IPs from the objects, cleans stale reservations.
+
+
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
