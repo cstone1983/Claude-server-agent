@@ -6,8 +6,14 @@
 {{if .D.A.Reason}}<p class="secondary-text small">Reason: {{.D.A.Reason}}</p>{{end}}
 {{if eq .D.A.Status "pending"}}
 <form method="post" autocomplete="off">
+{{if .D.NeedCode}}
+{{if and .D.A.AskAlways .D.Remembered}}<p class="muted small">This action needs your code every time, even on a remembered device.</p>{{end}}
 <label for="code">Authenticator code</label>
 <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" required autofocus>
+{{if not .D.Remembered}}<label class="check"><input type="checkbox" name="remember" value="1"> Remember this device (no code needed next time)</label>{{end}}
+{{else}}
+<p class="muted small">Remembered device ({{.D.Device}}): no code needed. <a href="/approvals#devices">Manage devices</a></p>
+{{end}}
 {{if ne .D.A.Kind "rule"}}
 <details class="add" style="margin-top:.6rem"><summary class="secondary-text small">▸ Also allow this from now on…</summary>
 {{if .D.A.AskAlways}}<p class="muted small">This action needs your OK every time. It cannot be always-allowed.</p>{{else}}<label class="check"><input type="checkbox" name="always" value="1"> Always allow this exact action</label>{{end}}

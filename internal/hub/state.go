@@ -108,6 +108,8 @@ type stateData struct {
 	Rules      []*HubRule              `json:"rules"`
 	// Sessions are dashboard logins: hashed token -> expiry.
 	Sessions map[string]time.Time `json:"dashboard_sessions"`
+	// Devices are remembered browsers: hashed cookie -> device.
+	Devices map[string]*TrustedDevice `json:"trusted_devices,omitempty"`
 	// AutoApprove is hands-off mode (nil or expired = off).
 	AutoApprove *AutoApprove `json:"auto_approve,omitempty"`
 }
@@ -147,6 +149,9 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	if s.d.Sessions == nil {
 		s.d.Sessions = map[string]time.Time{}
+	}
+	if s.d.Devices == nil {
+		s.d.Devices = map[string]*TrustedDevice{}
 	}
 	return s, nil
 }

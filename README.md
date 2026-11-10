@@ -30,7 +30,8 @@ allowlist, approvals on your phone, and an audit log on every server.
 | denied | Deny rules and built-ins (`rm -rf /`, stopping the agent, reading the hub's secrets) | Never runs |
 
 When an action needs approval, Claude shows you a link. You open it, enter
-your authenticator code and choose one of:
+your authenticator code (or nothing, on a [remembered device](#remembered-devices))
+and choose one of:
 - **Approve**
 - **Approve and always allow**, for this server, a tag or all servers. Next
   time that exact action runs without asking.
@@ -143,6 +144,19 @@ Open `https://<your-hub>/approvals` and log in with the admin password and an
 authenticator code. You stay logged in for 24 hours, even across hub restarts
 (change with `dashboard_session_hours` in `hub.yaml`).
 
+### Remembered devices
+
+Tick **Remember this device** when you log in (or when you approve one action
+with a code). That browser then stays logged in and approves without a code.
+Its cookie lasts about 400 days and renews every time you use it, so a device
+you use stays remembered. Exceptions:
+
+- Requests that need their own OK every time (rebooting a Proxmox host) still
+  need a current authenticator code, on the approval page and the dashboard.
+- **Forget** a device in the *Remembered devices* list on the approvals page.
+  Logging out forgets the browser you log out on, and
+  `sudo csa-hub revoke-sessions` forgets every device and ends every login.
+
 - **Approvals:** every pending action on one page, grouped by command across
   servers, with checkboxes. The buttons are **Approve + always allow** (on all
   servers, or only where each was requested), **Approve once** and **Deny**.
@@ -220,7 +234,7 @@ csa-hub join-token [--ttl 60] [--uses 1] [--tags a,b]
 csa-hub approvals | approve <id> [--always --scope server|tag:x|all] | deny <id>
 csa-hub rules | rule-delete <id>
 csa-hub token create|list|revoke
-csa-hub sessions | revoke-sessions          # log out every Claude connector
+csa-hub sessions | revoke-sessions          # log out every Claude connector, dashboard login and remembered device
 csa-hub set-password | reset-totp
 csa-hub call <tool> '<json>'                # e.g. csa-hub call list_servers
 ```
@@ -231,6 +245,12 @@ csa-hub call <tool> '<json>'                # e.g. csa-hub call list_servers
   the tunnel. It listens on `127.0.0.1:7420`.
 - **Claude's login:** OAuth 2.1 with PKCE. The login needs the admin password
   *and* an authenticator code, and failed attempts are rate-limited.
+- **Dashboard cookies:** HttpOnly, Secure on https, SameSite=Lax (so links
+  opened from the Claude app arrive logged in). Every form post is checked as
+  same-origin, so another site cannot submit approvals. A remembered device
+  is a long-lived cookie that the hub stores only as a hash; anyone who copied
+  it could approve ordinary requests from that browser profile, so forget a
+  device you lose.
 - **Connector registration:** only redirect URLs on `claude.ai`/`claude.com`
   (and localhost, for Claude Code) can register. Change this with
   `allowed_redirect_hosts` in `hub.yaml`.
