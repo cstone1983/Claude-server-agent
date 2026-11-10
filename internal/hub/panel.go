@@ -408,6 +408,14 @@ func (h *Hub) startAgentUpdate(ctx context.Context, name, via string) error {
 
 type activityEntry struct {
 	Time, Event, Caller, Summary, Server, Tier, Rule, Exit, Error, Class string
+	// RuleID is the allow rule that let this run (hub rule ids start with rule_).
+	RuleID string
+	// FullSummary is the untruncated summary, used to find the action's rule.
+	FullSummary string
+	// Always-allow controls (see activityRules).
+	ActiveRuleID, ActiveRuleScope string
+	CanAllow, AskAlways           bool
+	ServerTags                    []string
 }
 
 func entryFromJSON(b []byte) (activityEntry, bool) {
@@ -416,7 +424,7 @@ func entryFromJSON(b []byte) (activityEntry, bool) {
 		return activityEntry{}, false
 	}
 	a := activityEntry{Time: e.Time.UTC().Format(time.RFC3339), Event: strings.ReplaceAll(e.Event, "_", " "), Caller: e.Caller,
-		Summary: truncate(e.Summary, 300), Server: e.Server, Tier: e.Tier, Error: e.Error}
+		Summary: truncate(e.Summary, 300), Server: e.Server, Tier: e.Tier, Error: e.Error, RuleID: e.RuleID, FullSummary: e.Summary}
 	switch {
 	case e.RuleID != "":
 		a.Rule = e.RuleID
@@ -438,7 +446,11 @@ func entryFromJSON(b []byte) (activityEntry, bool) {
 }
 
 func (h *Hub) handleActivity(w http.ResponseWriter, r *http.Request) {
-	if !h.requireLogin(w, r) {
+	if !h.requireLogin(w, r) { // also refuses cross-site POSTs
+		return
+	}
+	if r.Method == http.MethodPost {
+		h.handleActivityPost(w, r)
 		return
 	}
 	q := r.URL.Query()
@@ -478,10 +490,20 @@ func (h *Hub) handleActivity(w http.ResponseWriter, r *http.Request) {
 	var entries []activityEntry
 	for i := len(lines) - 1; i >= 0; i-- { // newest first
 		if e, ok := entryFromJSON(lines[i]); ok {
+			if e.Server == "" {
+				e.Server = server // a server's own log does not name the server
+			}
 			entries = append(entries, e)
 		}
 	}
+	h.activityRules(entries)
 	data["Entries"] = entries
+	if d := q.Get("done"); d != "" {
+		data["Done"] = d
+	}
+	if e := q.Get("error"); e != "" {
+		data["Error"] = e
+	}
 	h.renderPanel(w, http.StatusOK, activityTmpl, data, 0)
 }
 
