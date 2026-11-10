@@ -276,6 +276,13 @@ Prep before the evening (no impact; Claude, with the user's OK):
   10.10.10.200-249), DMZ VLAN 20 10.10.20.1/24 (DHCP .200-.249), Storage VLAN
   40 (VLAN only). They sit in the Internal zone until the evening's zones and
   rules. net-check 12/12 OK afterwards.
+- [x] Thermostat Pi (RPi5, agent "thermostat-pi") moved to IoT early
+  (2026-11-09): Wi-Fi Obi-Wan-IoT, reservation 10.10.3.10 (was Main
+  10.10.1.128), old Obi-Wan profile kept as fallback (priority 0). MQTT to HA
+  reconnected; HA -> Pi command round trip verified. Its relay is unwired
+  (sensor only); its script still has MQTT_BROKER = "10.10.1.116" (switch to
+  homeassistant.localdomain before HA moves) and posts to the dead old
+  server 10.10.1.206:5000 every loop. Keep its internet (agent).
 - [ ] Stale reservations to remove later: .81 (old HA Pi), .206 (old thermostat
   VM), .239 (Dell-Ubuntu-AI).
 - [x] User: zone-based firewall migration click; `net-check` right after (done 2026-11-09, all OK).
