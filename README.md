@@ -165,6 +165,10 @@ you use stays remembered. Exceptions:
   (on that server, a tag, or all servers), and **Revoke** deletes the rule so
   the action needs approval again. Actions that need their own OK every time
   can't be always-allowed.
+- **Activity** (`/activity`): the same **Always allow** / **Revoke** column
+  for every logged action, for the hub's events and each server's own log.
+  It reads the hub's audit log, so it keeps working after hub restarts.
+  Actions requested before v0.1.28 have no recorded rule and show no button.
 - **Allow rules** (`/rules`): type a command such as `systemctl restart nginx`,
   optionally allow extra arguments, pick servers and click Add. It also lists
   every rule with a Remove button.

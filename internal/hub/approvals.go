@@ -126,7 +126,10 @@ func (h *Hub) newApproval(agent *AgentRec, call *proto.Call, na *proto.NeedsAppr
 	h.appr.mu.Lock()
 	h.appr.m[id] = ap
 	h.appr.mu.Unlock()
-	h.audit.Write(audit.Entry{Event: "approval_requested", Server: agent.Name, Tool: call.Tool, Caller: call.Caller, Summary: na.Summary, ApprovalID: id})
+	// The suggested rule is logged so the activity page can turn this action
+	// into an "always allow" rule later, also after a hub restart.
+	h.audit.Write(audit.Entry{Event: "approval_requested", Server: agent.Name, Tool: call.Tool, Caller: call.Caller, Summary: na.Summary, ApprovalID: id,
+		Detail: requestDetail{Rule: na.SuggestedRule, AskAlways: na.AskAlways}})
 	if auto {
 		h.audit.Write(audit.Entry{Event: "approval_auto_granted", Server: agent.Name, Tool: call.Tool, Caller: call.Caller, Summary: na.Summary, ApprovalID: id})
 		return ap

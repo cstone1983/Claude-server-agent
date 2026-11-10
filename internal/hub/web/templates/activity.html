@@ -13,13 +13,16 @@
 {{if .D.Err}}<div class="notice err">{{.D.Err}}</div>{{end}}
 {{if .D.Entries}}
 <div class="table-wrap"><table id="activity-table">
-<thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Allowed by</th><th>Result</th></tr></thead><tbody>
+<thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Allowed by</th><th>Result</th><th>Always allow</th></tr></thead><tbody>
 {{range .D.Entries}}<tr>
   <td class="nowrap muted small"><time datetime="{{.Time}}">{{.Time}}</time></td>
   <td><span class="chip {{.Class}}">{{.Event}}</span>{{if .Caller}}<div class="muted small">{{.Caller}}</div>{{end}}</td>
   <td>{{if .Summary}}<code>{{.Summary}}</code>{{end}}{{if .Server}} <span class="muted small">{{.Server}}</span>{{end}}</td>
   <td class="small">{{if .Tier}}<span class="chip">{{.Tier}}</span>{{end}}{{if .Rule}}<div class="muted">{{.Rule}}</div>{{end}}</td>
   <td class="small nowrap">{{if .Exit}}exit {{.Exit}}{{end}}{{if .Error}}<span class="chip crit">{{.Error}}</span>{{end}}</td>
+  <td class="small">{{if .ActiveRuleID}}<form method="post" class="btn-row" style="margin:0"><input type="hidden" name="op" value="rule_revoke"><input type="hidden" name="rule_id" value="{{.ActiveRuleID}}"><input type="hidden" name="view_server" value="{{$.D.Server}}"><input type="hidden" name="view_n" value="{{$.D.N}}"><span class="chip brand">always allowed · {{.ActiveRuleScope}}</span> <button class="btn sm danger" title="Delete this allow rule: the action needs approval again">Revoke</button></form>
+  {{else if .CanAllow}}<form method="post" class="btn-row" style="margin:0"><input type="hidden" name="op" value="act_allow"><input type="hidden" name="server" value="{{.Server}}"><input type="hidden" name="summary" value="{{.FullSummary}}"><input type="hidden" name="view_server" value="{{$.D.Server}}"><input type="hidden" name="view_n" value="{{$.D.N}}"><select name="scope" aria-label="Where to allow it"><option value="server">on {{.Server}}</option>{{range .ServerTags}}<option value="tag:{{.}}">on servers tagged {{.}}</option>{{end}}{{if not (hasTag .ServerTags "proxmox")}}<option value="all">on all servers</option>{{end}}</select> <button class="btn sm">Always allow</button></form>
+  {{else if .AskAlways}}<span class="muted">needs its own OK every time</span>{{end}}</td>
 </tr>{{end}}
 </tbody></table></div>
 {{else}}<div class="empty">No activity recorded.</div>{{end}}
