@@ -53,7 +53,7 @@ Approvals and rules:
 Access:
   csa-hub token create <name> [--scope read|full] [--servers web01,tag:web]   API token for n8n etc.
   csa-hub token list | token revoke <name>
-  csa-hub sessions | revoke-sessions                     Claude connector logins
+  csa-hub sessions | revoke-sessions                     Claude connector logins, dashboard logins, remembered devices
   csa-hub set-password | reset-totp
 
 Other:

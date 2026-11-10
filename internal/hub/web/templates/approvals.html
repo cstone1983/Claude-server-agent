@@ -31,8 +31,9 @@
   <div class="cmd">{{$g.Summary}}</div>
   {{if $g.Reason}}<div class="secondary-text small">Reason: {{$g.Reason}}</div>{{end}}
   <p class="small" style="margin:.5rem 0 0">This restarts <strong>{{.Server}}</strong>{{if hasTag .ServerTags "proxmox"}}: <strong>every VM on this host goes down</strong> until it is back{{end}}. It is approved on its own, once, and can never be always-allowed.</p>
-  <form method="post" class="btn-row">
+  <form method="post" class="btn-row" autocomplete="off">
     <input type="hidden" name="id" value="{{.ID}}">
+    <input name="code" type="text" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" placeholder="Authenticator code" aria-label="Authenticator code" style="max-width:11rem">
     <button class="btn power" name="action" value="approve">⏻ Approve restart of {{.Server}}</button>
     <button class="btn danger" name="action" value="deny">Deny</button>
   </form>
@@ -68,6 +69,17 @@
 </form>
 {{else if not .D.Alone}}<div class="card empty">Nothing is waiting for approval. ✓</div>{{end}}
 </div>
+
+<h2 id="devices" style="margin-top:1.6rem">Remembered devices</h2>
+{{if .D.Devices}}<div class="card table-wrap"><table>
+<thead><tr><th>Device</th><th>Last used</th><th>From</th><th>Remembered since</th><th></th></tr></thead><tbody>
+{{range .D.Devices}}<tr><td>{{.Label}}{{if eq .ID $.D.ThisDevice}} <span class="chip brand">this device</span>{{end}}</td>
+<td class="nowrap muted"><time datetime="{{iso .LastUsed}}">{{iso .LastUsed}}</time></td><td class="muted">{{.IP}}</td>
+<td class="nowrap muted"><time datetime="{{iso .CreatedAt}}">{{iso .CreatedAt}}</time></td>
+<td><form method="post"><input type="hidden" name="op" value="device_forget"><input type="hidden" name="device_id" value="{{.ID}}"><button class="btn danger">Forget</button></form></td></tr>{{end}}
+</tbody></table></div>
+<p class="muted small">A remembered device stays logged in and approves without a code (except actions that need their own OK every time). Its cookie renews each time you use it.</p>
+{{else}}<div class="card empty">No remembered devices. Tick "Remember this device" when you log in or approve with a code.</div>{{end}}
 
 {{if .D.Recent}}
 <h2 style="margin-top:1.6rem">Recent decisions</h2>

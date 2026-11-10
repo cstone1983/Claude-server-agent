@@ -1,0 +1,47 @@
+#!/bin/bash
+# pve-net-apply: apply a new /etc/network/interfaces on the Proxmox host with an
+# automatic rollback. Used for the network overhaul (making vmbr0 VLAN-aware),
+# where a mistake would cut off the host, every VM and the hub at once.
+#
+# Usage (always detached, so it survives the agent/hub dropping):
+#   systemd-run --unit pve-net-apply /usr/local/sbin/pve-net-apply <new-interfaces-file> [timeout-s]
+#   --dry-run as the first argument shows the diff and checks the syntax only.
+#
+# Steps: back up the current file -> install the new one -> ifreload -a ->
+# within <timeout> (default 120 s) the host must reach the gateway AND the hub
+# (agents.stoneyshome.com through Cloudflare) -> success; otherwise restore the
+# backup and ifreload -a again.
+# Log: /var/log/pve-net-apply.log   Result: /run/pve-net-apply.result
+set -u
+DRY=0; [ "${1:-}" = "--dry-run" ] && { DRY=1; shift; }
+NEW=${1:?usage: pve-net-apply [--dry-run] <new-interfaces-file> [timeout-s]}
+TIMEOUT=${2:-120}
+CUR=/etc/network/interfaces LOG=/var/log/pve-net-apply.log RES=/run/pve-net-apply.result
+GW=$(ip route show default | awk '{print $3; exit}')
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+healthy() {
+  ping -c1 -W2 "$GW" >/dev/null 2>&1 &&
+  curl -s -o /dev/null -m 10 https://agents.stoneyshome.com/
+}
+
+[ -s "$NEW" ] || { echo "$NEW is missing or empty"; exit 1; }
+diff -u "$CUR" "$NEW"
+ifquery --list -i "$NEW" >/dev/null || { echo "syntax check failed (ifquery)"; exit 1; }
+[ $DRY = 1 ] && { echo "dry run: nothing changed (gateway $GW)"; exit 0; }
+
+bak=$CUR.bak-$(date +%Y%m%d%H%M%S)
+cp -a "$CUR" "$bak"
+log "applying $NEW (backup $bak), gateway $GW, timeout ${TIMEOUT}s"
+echo "running" > "$RES"
+cp "$NEW" "$CUR"
+ifreload -a >> "$LOG" 2>&1
+start=$SECONDS
+while [ $((SECONDS - start)) -lt "$TIMEOUT" ]; do
+  if healthy; then log "OK after $((SECONDS - start))s"; echo "OK" > "$RES"; exit 0; fi
+  sleep 3
+done
+log "FAILED: no gateway/hub after ${TIMEOUT}s, restoring $bak"
+cp -a "$bak" "$CUR"
+ifreload -a >> "$LOG" 2>&1
+echo "REVERTED to $bak" > "$RES"
+exit 1

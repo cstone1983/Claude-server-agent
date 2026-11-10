@@ -125,8 +125,29 @@ usage in [README.md](README.md).
     `scripts/`) runs from `pve-offsite-backup.timer` at 23:35 and waits for
     vzdump.
     - It uploads with rclone remote `gcrypt:`, a crypt over `drive:`. The
-      Google Drive scope is `drive.file`; `root_folder_id` is the user's
-      folder "backup/proxmox vm"; file and folder names stay readable.
+      Google Drive scope is `drive` (full; was `drive.file` until 2026-11-09,
+      which only sees files the same OAuth client created); `root_folder_id`
+      is the user's folder "backup/proxmox vm"; file and folder names stay
+      readable.
+    - **OAuth client (2026-11-09):** `drive:` uses the user's own Google Cloud
+      OAuth client (project "cstone1983", Google Auth Platform app "rclone",
+      Desktop client). Before that it used rclone's shared default client,
+      whose per-minute quota caused ~1,900 rateLimitExceeded/list failures on
+      the first PBS sync. The client id/secret/token live only in
+      `rclone.conf`; the old config is in `rclone.conf.bak-202611091704`.
+      Re-auth if ever needed: `rclone authorize drive <id> <secret>
+      --auth-no-open-browser` on the host, the user signs in on a PC and puts
+      the failing `http://127.0.0.1:53682/?state=...` URL into a root-only file,
+      which is curl'ed on the host; then `rclone config update drive ... token`.
+    - **Published (2026-11-09):** the app is "In production" (External,
+      unverified: the sign-in shows Google's "unverified app" warning, which is
+      fine for the owner's own account), so the refresh token does not
+      expire. Publishing required a home page + privacy policy on a verified
+      domain: stoneyshome.com is verified in Google Search Console (TXT record
+      added in Cloudflare by Search Console; do not remove it), and the pages
+      are served by the n8n workflow "rclone App Pages (Google OAuth)":
+      https://n8n.stoneyshome.com/webhook/rclone and /webhook/privacy (keep
+      that workflow active). Re-signed after publishing at 17:18.
     - Layout: `<vmid>-<name>/daily|weekly|bimonthly`, keeping 1 each.
       Weekly refreshes on Sunday; 2-monthly on the 1st of odd months.
       Copies between slots are server-side.
@@ -166,6 +187,18 @@ usage in [README.md](README.md).
 - **BBR** congestion control on the host (`/etc/sysctl.d/90-bbr.conf`,
   `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
   speed from about 10 to about 34 Mbps.
+
+## Proxmox host memory: ZFS ARC capped (2026-11-09)
+
+- 188 GB RAM. The ZFS cache (ARC, for the "VM" pool; root is ext4/LVM) had
+  the old default limit of half the RAM and sat at 94 GB, so the host looked
+  nearly full. Capped at 32 GB: `/etc/modprobe.d/zfs.conf` =
+  `options zfs zfs_arc_max=34359738368`, applied live and initramfs rebuilt.
+  Right after: ARC 29 GB, ~107 GB available (was ~44).
+- Undo: delete the file, `echo 0 > /sys/module/zfs/parameters/zfs_arc_max`,
+  `update-initramfs -u -k all`.
+- VMs use far less than configured (2026-11-09: ~55 GB used of ~165 GB
+  configured); KSM saves ~11 GB. CPU-Share (104) is configured with 64 GB.
 
 ## Proxmox 9 upgrade (2026-11-08)
 
@@ -211,6 +244,61 @@ usage in [README.md](README.md).
   should regenerate those VPN keys.
 - Open: decide on the `rdc` port forward; a duplicate 10.10.3.100
   reservation; a dead AdGuard entry.
+
+## Thermostat Pi (RPi5, agent "thermostat-pi", IoT 10.10.3.10)
+
+- Basement DHT22 temperature/humidity sensor; the relay (oil furnace) is
+  UNWIRED, the user uses it as a sensor only. HA entity
+  climate.basement_thermostat (MQTT, broker = Mosquitto on HA).
+- Wi-Fi Obi-Wan-IoT since 2026-11-09 (old Obi-Wan profile kept, priority 0).
+- Script /home/stonec/thermostat_client/thermostat.py, `thermostat.service`
+  (user stonec). Rewritten 2026-11-09 (backup thermostat.py.bak-202611091907):
+  MQTT by name (homeassistant.localdomain), credentials in root-only
+  /etc/thermostat.env (drop-in thermostat.service.d/env.conf), auto-reconnect
+  even if the broker is down at start, mode/target saved in state.json
+  (default off), input validation, sensor glitch filter, relay off on stop
+  and when readings go stale, availability topic thermostat/availability
+  (LWT "offline"), humidity on thermostat/humidity. Dead post to the old
+  server 10.10.1.206 removed.
+- The MQTT password (mqtt-user) is weak and was shown once in a session
+  output: change it in the Mosquitto add-on, then in /etc/thermostat.env.
+- Optional HA side: availability_topic thermostat/availability on the climate
+  entity; a humidity sensor from thermostat/humidity. A stale retained topic
+  thermostat/status_text from an older script is still on the broker.
+
+## Anthony's desktop (VM 101, Ubuntu-Anthony)
+
+- 14.3 GB RAM, 16 vCPUs. Runs the Minecraft server (`minecraft.service`,
+  /opt/minecraft, user minecraft, port 25565, forwarded on the UDM to
+  10.10.1.185). 2026-11-09: Java heap lowered from `-Xmx16384M -Xms16300M`
+  (more than the VM has, it squeezed the desktop) to `-Xmx8G -Xms8G`; unit
+  backup /etc/systemd/system/minecraft.service.bak-*.
+  Later the same day: stopped and disabled (not used); files in /opt/minecraft
+  kept. Start again with `systemctl enable --now minecraft.service`.
+
+## Network overhaul and internal names (2026-11-09)
+
+- Plan and runbook: `docs/network-overhaul.md` (zones, IP plan, per-server
+  swap steps, hub-continuity rules). Window: Wed 11 / Thu 12 Nov evening.
+- Firewall: zone-based since 2026-11-09 (user migrated). Networks: Main
+  (untagged, 10.10.1.0/24), Guest 2, IoT 3, Cameras 4, Servers 10
+  (10.10.10.0/23: 10.10.10.x infrastructure, 10.10.11.<VMID> VMs), DMZ 20
+  (10.10.20.0/24), Storage 40 (VLAN only, SAN iSCSI later). "test" (VLAN 5)
+  deleted.
+- Local DNS on the UDM: `<name>.localdomain` for n8n, homeassistant, solar,
+  recipes, finance, cpushare, proxmox, idrac, fileserver. The n8n credentials
+  (HA, the SSH ones) use these names, so a server move = one DNS edit.
+- Helpers: `net-check` on n8n (read-only connectivity test, run before/after
+  every change); `vm-net-move` and `pve-net-apply` on Proxmox (self-reverting
+  VLAN move / host network change, run detached with systemd-run).
+- **Internal HTTPS proxy = the Traefik on the n8n VM** (decided 2026-11-09,
+  not built yet; plan in `docs/internal-https.md`). It already serves
+  n8n.stoneyshome.com (compose in /home/stonec/n8n-compose). It will also hold
+  the wildcard `*.lan.stoneyshome.com` (Let's Encrypt DNS-01 via a scoped
+  Cloudflare token) and route the internal names to each service, so every
+  `<name>.lan.stoneyshome.com` resolves (UDM split DNS) to n8n's IP. If n8n is
+  down, internal HTTPS names are down too; every service is still reachable by
+  its IP. Proxmox gets its own certificate through its built-in ACME client.
 
 ## Proxmox host: careful mode (the user's rule: "verify, don't assume")
 
@@ -300,7 +388,36 @@ Only rules scoped to them by name or tag apply.
       loses them; this happened with the timezone approvals.
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
       `timedatectl status|show` is allowed, with no extra arguments.
-- [ ] **Backup failure alerts to n8n** (the user asked for this later). The
+- [x] **Backup failure alerts (done 2026-11-08/09):** n8n workflow "Backup Alerts (n8n)"
+      (id Uv9JSW26gTbNid2Z), webhook /webhook/backup-report guarded by header
+      X-Backup-Token (token in /etc/backup-report.conf on Proxmox, root-only).
+      Telegram (credential "Telegram account", chat 6897458189) on error/warning;
+      07:30 dead-man check for proxmox-vzdump, fileserver-files, pbs-offsite
+      (state in workflow static data). Senders: PVE + PBS notification webhook
+      target `n8n-backup` with matcher `n8n-backup-all` (names must differ),
+      body {"source","severity","title","message"}; scripts call
+      /usr/local/sbin/backup-report <source> <ok|warning|error> <msg>.
+- [x] **File server backup:** VM 112 is in the 21:30 PBS job with its system disk only
+      (scsi1 backup=0). Data: /usr/local/sbin/pve-fileserver-backup (timer 22:15)
+      freezes the guest via the agent, LVM-snapshots eql-fileshare/vm-112-disk-0
+      (18G COW, VG has 20G free), mounts it read-only and runs
+      proxmox-backup-client (host/fileserver-share, metadata change detection)
+      with the pbs-main token. VMs 101 and 106 were added to the 21:30 job too.
+- [~] **PBS off-site:** /usr/local/sbin/pbs-offsite-sync (timer 23:00) rclone-syncs
+      /mnt/pve-backups/pbs to gcrypt:_pbs-datastore. PBS prune moved to 12:30,
+      GC to 13:00 (never during the sync). **Retire the old 23:30 vzdump job +
+      pve-offsite-backup timer after the first sync is verified.**
+      2026-11-09: first run (started 23:00 on the 8th) was throttled by Google
+      (shared rclone client); stopped 17:04, switched to the user's own OAuth
+      client, restarted 17:08 with no rate-limit errors.
+      Daytime limit 10 Mbps (1220k, 04:30-23:00; was 1 MB/s), full speed at night. Upload line is 40 Mbps, usually ~35.
+- [x] **Cleanup 2026-11-08:** all 7 old snapshots deleted; nextcloud-data.old removed;
+      UDM: dead AdGuard reservation (10.10.1.179) removed, stale 10.10.3.100 on
+      the old HA Pi cleared. The vm-fiance exited containers are leftovers from
+      two failed `npm run build` image builds (no data); kept at the user's wish.
+      The user deletes test VM 9103 in the UI.
+- [ ] **unifi helper:** reuse the login session (the UDM rate-limits logins).
+- [ ] *(old)* **Backup failure alerts to n8n** (the user asked for this later). The
       idea: an n8n workflow with a Webhook trigger, IF failure, then notify
       the user (HA push, Gmail or similar; ask which), optionally logging
       to a Data Table, plus a 07:00 "dead man's switch" if no report
@@ -405,6 +522,12 @@ Only rules scoped to them by name or tag apply.
       it if it works.
 - [ ] **Move the pinned kernel 6.8 to 6.17** (6.8 is the PVE 8 kernel).
 - [ ] **Power supply 2:** the SEL shows input-power losses in Mar/Apr 2025. Check that both PSUs are plugged into separate live circuits and that redundancy shows OK.
+- [x] **Hands-off mode** (v0.1.25, PR #35, 2026-11-08): the approvals page can
+      auto-approve actions for 30 min-12 h on all servers or one server.
+      Proxmox is excluded unless ticked; it never covers Proxmox reboots
+      (ask_always), rule requests or policy denials. Marked "auto" in recent
+      decisions and audited (`approval_auto_granted`). State is in hub state
+      `auto_approve`. All agents + hub on v0.1.25.
 - [x] **Agents updated to v0.1.24** (2026-11-08). Approvals-page login now lasts
       7 days (`dashboard_session_hours: 168` in /etc/csa-hub/hub.yaml).
 - [ ] **File server, VM 112 `fileserver`** (created 2026-11-08): Ubuntu 24.04.2 from
@@ -420,8 +543,57 @@ Only rules scoped to them by name or tag apply.
       password) and the folder with permissions; it only manages members of
       the "fileshare users" group; deletion only disables Samba (the folder
       is kept). Samba-side password changes are disabled. Outside access
-      via Cloudflare Tunnel. Next: the user installs Ubuntu + joins the
-      agent, then build.
+      via Cloudflare Tunnel.
+      **Built 2026-11-08:** 10.10.1.80 (DHCP, no reservation yet), Ubuntu 24.04,
+      data = XFS on sdb at /srv/share (fstab UUID). Samba shares "My Files"
+      (/srv/share/users/%U) + "Public" (@fsusers, setgid + default ACLs).
+      Nextcloud 35.0.2 at http://10.10.1.80 (Apache/PHP 8.3, MariaDB, Redis,
+      cron), data dir /var/lib/nextcloud-data; external storage "My Files"
+      ($user) + "Public" for Nextcloud group `fileshare`; www-data is in
+      fsusers. Sync: /usr/local/sbin/fs-user (sudo for www-data only) + app
+      apps/fssync. End-to-end tested OK (create, password change, disable,
+      enable, delete; Samba <-> Nextcloud files both ways). Note: occ
+      --password-from-env needs `sudo -u www-data env OC_PASS=...` (sudo
+      strips env). Name: **\\fileserver**. UDM DHCP reservation 10.10.1.80 (client
+      named fileserver) + UDM local DNS A record `fileserver` (resolves as
+      fileserver.localdomain); Samba `netbios name = FILESERVER`, nmbd on,
+      bound to lo + 10.10.1.0/24; wsdd via a custom unit
+      /etc/systemd/system/wsdd.service (the Ubuntu package ships none) on
+      enp6s18. Samba/SMB stays LAN-only (no router forwards; the user wants it
+      that way). The UDM rate-limits logins: space out `unifi` calls.
+      Exception: `EXISTING_OK="stonec"` in fs-user lets the existing system
+      account stonec (the user's Linux admin) be a file-share user (Samba has
+      its own passwords, unix password sync = no, so the Linux login is
+      unaffected); stonec was set up once by hand + added to Nextcloud group
+      fileshare.
+      **Public:** https://nextcloud.stoneyshome.com via Cloudflare tunnel
+      (cloudflared service on the file server, hostname -> HTTP localhost:80;
+      Samba is NOT published). Nextcloud: trusted_domains += the public name +
+      fileserver.localdomain, trusted_proxies 127.0.0.1/::1,
+      overwritecondaddr ^(127.0.0.1|::1)$ (HTTPS overwrite only for tunnel
+      traffic, so http://fileserver still works on the LAN), HSTS via
+      conf nextcloud-security. www-data crontab */5 cron.php (was missing).
+      **PHP 8.4.27** since 2026-11-08 (ppa:ondrej/php; Apache mod php8.4, CLI
+      via update-alternatives; php8.3 still installed for rollback:
+      a2dismod php8.4 && a2enmod php8.3 && update-alternatives --set php
+      /usr/bin/php8.3). Setup checks clean except: Talk HPB (not installed
+      on purpose: peer-to-peer calls need no open ports; HPB would need UDP
+      port forwards; add a hosted TURN if a call fails), mail not
+      set, 2FA not enforced (recommend TOTP for stonec).
+      **Layout changed 2026-11-08 (user's request):** Nextcloud datadirectory
+      is now **/srv/share/.nextcloud** (SAN); oc_storages local:: id updated;
+      the old dir is kept at /var/lib/nextcloud-data.old (80 MB, delete
+      once confirmed). Samba "My Files" = /srv/share/.nextcloud/%U/files =
+      the user's own Nextcloud files (the "My Files" external mount and
+      /srv/share/users were removed). Public unchanged (/srv/share/public,
+      external mount + Samba). filesystem_check_changes=1 (Samba edits show
+      immediately), skeleton/template dirs disabled. Permissions:
+      .nextcloud 0770 + g:fsusers:--x; user home 0750 + u:<user>:--x;
+      files dir ACL u:<user>:rwX + u:www-data:rwX (+ defaults); appdata and
+      internal files 0750/0640 (www-data only). fs-user has a `fixperms`
+      action. Retested: both directions, Public, privacy (other users,
+      appdata, log, data folder all blocked). Users stonec and jessy exist.
+      HTTPS/trusted domain for the public name, first real users.
 - [ ] **CPU-Share / Akash provider:** the app doesn't work on Ubuntu 26.04; parked
       by the user (no snapshot or backup of VM 104 exists).
 - [ ] **Old SAN: Dell EqualLogic PS6000** (raised 2026-11-08, for another day). Its

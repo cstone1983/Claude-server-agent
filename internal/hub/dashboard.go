@@ -58,8 +58,11 @@ func (s *sessions) remove(tok string) {
 }
 
 func (h *Hub) loggedIn(r *http.Request) bool {
-	c, err := r.Cookie(sessionCookie)
-	return err == nil && h.sess.valid(c.Value)
+	if c, err := r.Cookie(sessionCookie); err == nil && h.sess.valid(c.Value) {
+		return true
+	}
+	_, ok := h.trustedDevice(r)
+	return ok
 }
 
 // csrf is Go's standard cross-site request protection: it trusts the
@@ -77,6 +80,7 @@ func (h *Hub) sameOrigin(r *http.Request) bool {
 // requireLogin redirects to /login when there is no session.
 func (h *Hub) requireLogin(w http.ResponseWriter, r *http.Request) bool {
 	if h.loggedIn(r) {
+		h.useDevice(w, r) // renews a remembered device's cookie (no-op otherwise)
 		if r.Method == http.MethodPost && !h.sameOrigin(r) {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return false
@@ -97,6 +101,11 @@ func safeNext(next string) string {
 func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.FormValue("next"))
 	data := map[string]any{"Next": next, "Hours": h.cfg.DashboardSessionHours, "MCP": h.cfg.PublicURL + "/mcp"}
+	if r.Method == http.MethodGet && h.loggedIn(r) {
+		h.useDevice(w, r)
+		http.Redirect(w, r, next, http.StatusSeeOther)
+		return
+	}
 	if r.Method == http.MethodPost {
 		if !h.sameOrigin(r) {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
@@ -110,9 +119,15 @@ func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 		tok := h.sess.create()
 		http.SetCookie(w, &http.Cookie{
 			Name: sessionCookie, Value: tok, Path: "/", MaxAge: int(h.sess.ttl.Seconds()),
-			HttpOnly: true, Secure: strings.HasPrefix(h.cfg.PublicURL, "https://"), SameSite: http.SameSiteStrictMode,
+			// Lax (not Strict): browsers withhold Strict cookies when a link is
+			// opened from another site, so every approval link from the Claude
+			// app looked logged out. Cross-site POSTs are refused by sameOrigin.
+			HttpOnly: true, Secure: strings.HasPrefix(h.cfg.PublicURL, "https://"), SameSite: http.SameSiteLaxMode,
 		})
 		h.audit.Write(audit.Entry{Event: "dashboard_login", Detail: map[string]string{"ip": clientIP(r)}})
+		if r.PostFormValue("remember") == "1" {
+			h.rememberDevice(w, r, "login")
+		}
 		http.Redirect(w, r, next, http.StatusSeeOther)
 		return
 	}
@@ -124,6 +139,7 @@ func (h *Hub) handleLogout(w http.ResponseWriter, r *http.Request) {
 		h.sess.remove(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	h.forgetThisDevice(w, r, "logout")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
@@ -169,7 +185,11 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{}
-	if r.Method == http.MethodPost && strings.HasPrefix(r.PostFormValue("op"), "auto_") {
+	if r.Method == http.MethodPost && r.PostFormValue("op") == "device_forget" {
+		if h.forgetDevice(r.PostFormValue("device_id"), "dashboard:"+clientIP(r)) {
+			data["Done"] = "Device forgotten: it needs the password and code again."
+		}
+	} else if r.Method == http.MethodPost && strings.HasPrefix(r.PostFormValue("op"), "auto_") {
 		via := "dashboard:" + clientIP(r)
 		switch r.PostFormValue("op") {
 		case "auto_on":
@@ -198,6 +218,10 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 			data["Error"] = "Select at least one action."
 		} else if len(ids) > 1 && h.anyAskAlways(ids) && action != "deny" {
 			data["Error"] = "Nothing was approved: a selected request needs its own OK. Approve it on its own, separately from everything else."
+		} else if action != "deny" && h.anyAskAlways(ids) && h.checkCode(r, r.PostFormValue("code")) != nil {
+			// Requests that need their own OK always take a fresh code, even when
+			// logged in or on a remembered device.
+			data["Error"] = "Nothing was approved: enter a current authenticator code to approve this one."
 		} else {
 			done, failed := 0, []string{}
 			for _, id := range ids {
@@ -254,6 +278,10 @@ func (h *Hub) handleApprovals(w http.ResponseWriter, r *http.Request) {
 	})
 	sort.Strings(servers)
 	data["Servers"] = servers
+	data["Devices"] = h.devices()
+	if cur, ok := h.trustedDevice(r); ok {
+		data["ThisDevice"] = cur.ID
+	}
 	h.renderPanel(w, http.StatusOK, dashApprovalsTmpl, data, 10)
 }
 

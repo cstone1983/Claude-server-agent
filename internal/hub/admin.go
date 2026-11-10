@@ -214,6 +214,9 @@ func (h *Hub) adminHandler() http.Handler {
 					out = append(out, sess{t.Name, t.Kind, t.ExpiresAt, t.LastUsed})
 				}
 			}
+			for _, x := range d.Devices {
+				out = append(out, sess{x.Label + " (" + x.ID + ")", "remembered device", x.LastUsed.Add(deviceMaxAge), x.LastUsed})
+			}
 		})
 		writeJSON(w, http.StatusOK, out)
 	})
@@ -226,6 +229,13 @@ func (h *Hub) adminHandler() http.Handler {
 					n++
 				}
 			}
+			return nil
+		})
+		// Dashboard logins and remembered devices end too.
+		h.store.Update(func(d *stateData) error {
+			n += len(d.Sessions) + len(d.Devices)
+			d.Sessions = map[string]time.Time{}
+			d.Devices = map[string]*TrustedDevice{}
 			return nil
 		})
 		h.audit.Write(audit.Entry{Event: "sessions_revoked", Detail: map[string]int{"count": n}})

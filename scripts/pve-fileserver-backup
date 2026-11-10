@@ -1,0 +1,73 @@
+#!/bin/bash
+# pve-fileserver-backup: file-level backup of the file server's SAN data disk
+# (VM 112, /srv/share: Nextcloud data + Public) to the local Proxmox Backup
+# Server, run on the Proxmox host.
+#
+# The 5 TB data disk is excluded from the VM backup (backup=0) because a
+# disk-level backup would read the whole disk. Instead:
+#   1. freeze the guest's file systems (qemu guest agent) for a moment,
+#   2. take an LVM snapshot of the data disk, thaw,
+#   3. mount the snapshot read-only and back up its files with
+#      proxmox-backup-client (metadata change detection: unchanged files are
+#      not re-read),
+#   4. unmount and remove the snapshot.
+# It uses the backup-only token Proxmox already has for storage pbs-main, so
+# no new secret is created or copied anywhere.
+#
+# Runs from pve-fileserver-backup.timer (22:15). Log: /var/log/pve-fileserver-backup.log
+# Status: /var/lib/pve-fileserver-backup.status. Reports to backup-report if present.
+set -euo pipefail
+VMID=112
+VMNAME=fileserver
+VG=eql-fileshare
+LV=vm-112-disk-0
+SNAP=fs-backup-snap
+SNAPSIZE=18G            # copy-on-write space for changes made during the backup
+MNT=/mnt/fs-backup-snap
+BACKUP_ID=fileserver-share
+LOG=/var/log/pve-fileserver-backup.log
+STATUS=/var/lib/pve-fileserver-backup.status
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+report() { if [ -x /usr/local/sbin/backup-report ]; then /usr/local/sbin/backup-report fileserver-files "$1" "$2" || true; fi; }
+fail() { log "FAILED: $*"; echo "FAILED $(date '+%F %T') $*" > "$STATUS"; report error "$*"; exit 1; }
+thaw() { qm guest cmd "$VMID" fsfreeze-thaw >/dev/null 2>&1 || true; }
+cleanup() {
+  thaw
+  if mountpoint -q "$MNT"; then umount "$MNT" || true; fi
+  if lvs "$VG/$SNAP" >/dev/null 2>&1; then lvremove -fy "$VG/$SNAP" >/dev/null || true; fi
+}
+
+exec 9>/run/pve-fileserver-backup.lock
+flock -n 9 || { echo "already running" >&2; exit 0; }
+trap cleanup EXIT
+
+log "=== file server backup started"
+[ "$(qm config "$VMID" | sed -n 's/^name: //p')" = "$VMNAME" ] || fail "VM $VMID is not $VMNAME"
+qm status "$VMID" | grep -q running || fail "VM $VMID is not running"
+qm agent "$VMID" ping >/dev/null 2>&1 || fail "guest agent in VM $VMID does not answer"
+
+# Let the nightly VM backup finish first (up to 2 hours).
+for _ in $(seq 120); do pgrep -x vzdump >/dev/null || break; sleep 60; done
+
+lvs "$VG/$SNAP" >/dev/null 2>&1 && lvremove -fy "$VG/$SNAP" >/dev/null   # leftover from a crash
+qm guest cmd "$VMID" fsfreeze-freeze >/dev/null || fail "could not freeze the guest file systems"
+if ! lvcreate -s -L "$SNAPSIZE" -n "$SNAP" "$VG/$LV" >/dev/null; then thaw; fail "could not create the LVM snapshot"; fi
+thaw
+mkdir -p "$MNT"
+mount -o ro,norecovery,nouuid "/dev/$VG/$SNAP" "$MNT" || fail "could not mount the snapshot"
+
+export PBS_REPOSITORY='pve@pbs!pve@127.0.0.1:main'
+PBS_PASSWORD="$(cat /etc/pve/priv/storage/pbs-main.pw)"
+PBS_FINGERPRINT="$(proxmox-backup-manager cert info | sed -n 's/^Fingerprint (sha256): //p')"
+export PBS_PASSWORD PBS_FINGERPRINT
+start=$SECONDS
+if ! nice -n 10 ionice -c3 proxmox-backup-client backup "share.pxar:$MNT" \
+      --backup-type host --backup-id "$BACKUP_ID" --change-detection-mode=metadata >> "$LOG" 2>&1; then
+  fail "proxmox-backup-client failed (see $LOG)"
+fi
+size=$(du -sh --apparent-size "$MNT" 2>/dev/null | cut -f1)
+msg="file server data backed up ($size in /srv/share, $((SECONDS - start)) s)"
+log "=== done: $msg"
+echo "OK $(date '+%F %T') $msg" > "$STATUS"
+report ok "$msg"

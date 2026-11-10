@@ -1,0 +1,15 @@
+#!/bin/bash
+# backup-report: send a backup job's result to the n8n "Backup Alerts"
+# workflow, which alerts on Telegram for errors/warnings and checks every
+# morning that each nightly job reported OK.
+#
+# Usage: backup-report <source> <ok|warning|error> <message>
+# Config: /etc/backup-report.conf (root-only) with URL=... and TOKEN=...
+set -u
+CONF=/etc/backup-report.conf
+[ -r "$CONF" ] || { echo "backup-report: $CONF missing" >&2; exit 0; }
+# shellcheck disable=SC1090
+. "$CONF"
+src=${1:?source}; status=${2:?status}; msg=${3:-}
+body=$(python3 -c 'import json,sys,socket; print(json.dumps({"source":sys.argv[1],"status":sys.argv[2],"message":sys.argv[3],"host":socket.gethostname()}))' "$src" "$status" "$msg")
+curl -fsS -m 20 --retry 3 -X POST -H 'Content-Type: application/json' -H "X-Backup-Token: $TOKEN" -d "$body" "$URL" >/dev/null

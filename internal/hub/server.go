@@ -205,16 +205,33 @@ func (h *Hub) handleApprovePage(w http.ResponseWriter, r *http.Request) {
 		renderPage(w, http.StatusNotFound, "Not found", "This approval does not exist or has expired.", nil)
 		return
 	}
-	data := map[string]any{"A": snap, "Rule": snap.Suggested.String()}
+	dev, remembered := h.trustedDevice(r)
+	// A remembered device approves without a code, except requests that need
+	// their own OK every time.
+	needCode := !remembered || snap.AskAlways
+	data := map[string]any{"A": snap, "Rule": snap.Suggested.String(), "NeedCode": needCode, "Remembered": remembered, "Device": dev.Label}
 	if r.Method == http.MethodPost {
 		r.ParseForm()
-		if err := h.checkCode(r, r.PostForm.Get("code")); err != nil {
-			data["Error"] = err.Error()
-			renderTemplate(w, http.StatusUnauthorized, approveTmpl, data)
+		if !h.sameOrigin(r) {
+			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
+		via := "web:" + clientIP(r)
+		if needCode {
+			if err := h.checkCode(r, r.PostForm.Get("code")); err != nil {
+				data["Error"] = err.Error()
+				renderTemplate(w, http.StatusUnauthorized, approveTmpl, data)
+				return
+			}
+			if !remembered && r.PostForm.Get("remember") == "1" {
+				h.rememberDevice(w, r, "approval page")
+			}
+		} else {
+			h.useDevice(w, r)
+			via += " (remembered device " + dev.ID + ")"
+		}
 		approve := r.PostForm.Get("decision") == "approve"
-		ap, err := h.Decide(id, approve, r.PostForm.Get("always") == "1", r.PostForm.Get("scope"), "web:"+clientIP(r))
+		ap, err := h.Decide(id, approve, r.PostForm.Get("always") == "1", r.PostForm.Get("scope"), via)
 		if err != nil {
 			data["Error"] = err.Error()
 		}
@@ -228,6 +245,9 @@ func (h *Hub) handleApprovePage(w http.ResponseWriter, r *http.Request) {
 		}
 		renderTemplate(w, http.StatusOK, approveTmpl, data)
 		return
+	}
+	if remembered {
+		h.useDevice(w, r)
 	}
 	renderTemplate(w, http.StatusOK, approveTmpl, data)
 }
