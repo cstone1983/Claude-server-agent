@@ -245,6 +245,27 @@ usage in [README.md](README.md).
 - Open: decide on the `rdc` port forward; a duplicate 10.10.3.100
   reservation; a dead AdGuard entry.
 
+## Thermostat Pi (RPi5, agent "thermostat-pi", IoT 10.10.3.10)
+
+- Basement DHT22 temperature/humidity sensor; the relay (oil furnace) is
+  UNWIRED, the user uses it as a sensor only. HA entity
+  climate.basement_thermostat (MQTT, broker = Mosquitto on HA).
+- Wi-Fi Obi-Wan-IoT since 2026-11-09 (old Obi-Wan profile kept, priority 0).
+- Script /home/stonec/thermostat_client/thermostat.py, `thermostat.service`
+  (user stonec). Rewritten 2026-11-09 (backup thermostat.py.bak-202611091907):
+  MQTT by name (homeassistant.localdomain), credentials in root-only
+  /etc/thermostat.env (drop-in thermostat.service.d/env.conf), auto-reconnect
+  even if the broker is down at start, mode/target saved in state.json
+  (default off), input validation, sensor glitch filter, relay off on stop
+  and when readings go stale, availability topic thermostat/availability
+  (LWT "offline"), humidity on thermostat/humidity. Dead post to the old
+  server 10.10.1.206 removed.
+- The MQTT password (mqtt-user) is weak and was shown once in a session
+  output: change it in the Mosquitto add-on, then in /etc/thermostat.env.
+- Optional HA side: availability_topic thermostat/availability on the climate
+  entity; a humidity sensor from thermostat/humidity. A stale retained topic
+  thermostat/status_text from an older script is still on the broker.
+
 ## Anthony's desktop (VM 101, Ubuntu-Anthony)
 
 - 14.3 GB RAM, 16 vCPUs. Runs the Minecraft server (`minecraft.service`,
