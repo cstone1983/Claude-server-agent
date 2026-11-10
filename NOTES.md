@@ -399,6 +399,34 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **Future project: one home portal + single sign-on** (user's idea,
+      2026-11-10). There are now many separate dashboards, each with its own
+      login: Proxmox, PBS, iDRAC, UniFi, Home Assistant, n8n, Nextcloud, the
+      hub's approvals page, Solar-Calc, AI Recipes, Finance, the EqualLogic SAN.
+      Idea: one start page linking them all (status at a glance), plus one
+      login in front of them. Things to weigh when we get to it:
+      - Portal: a dashboard app (e.g. Homepage, Homarr, Dashy) with live
+        status widgets, or a page served by the hub.
+      - SSO: an identity provider (e.g. Authentik or Authelia) in front of the
+        Traefik on n8n (forward-auth), with OIDC where an app supports it
+        (Proxmox, PBS, Nextcloud, n8n, HA via add-on). Apps without SSO keep
+        their own login behind the proxy.
+      - Fits with the internal HTTPS plan (docs/internal-https.md): the same
+        Traefik and `*.lan.stoneyshome.com` names; do that first.
+      - Keep a break-glass path: every service must still be reachable by IP
+        with its own admin login if the SSO or n8n is down.
+      - Public apps behind Cloudflare could use Cloudflare Access instead of,
+        or in addition to, the internal SSO.
+- [ ] **Agent: keep a finished result across a hub reconnect.** Cloudflare
+      resets the agents' connections now and then (all agents at once, 1-2 s);
+      a command finishing in that window loses its result ("agent disconnected
+      while running the command"). Buffer the result and resend it after
+      reconnecting.
+- [ ] **Retire the old off-site backup.** pve-offsite-backup.timer was
+      disabled 2026-11-10 (it failed nightly: its VMs moved to PBS). After the
+      first PBS off-site copy is verified, also disable the old 23:30 vzdump job
+      (backup-79526ae3-5f24, now only VM 100) and remove both when sure.
+
 - [ ] **Persist pending approvals.** They're held in memory, so a hub restart
       loses them; this happened with the timezone approvals.
 - [ ] **`timedatectl show …`** should be a built-in read. Today only bare
