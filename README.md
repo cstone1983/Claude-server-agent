@@ -160,6 +160,11 @@ you use stays remembered. Exceptions:
 - **Approvals:** every pending action on one page, grouped by command across
   servers, with checkboxes. The buttons are **Approve + always allow** (on all
   servers, or only where each was requested), **Approve once** and **Deny**.
+- **Recent decisions:** the last 15 decided actions. Each row shows whether an
+  allow rule covers it now: **Always allow** turns a past action into a rule
+  (on that server, a tag, or all servers), and **Revoke** deletes the rule so
+  the action needs approval again. Actions that need their own OK every time
+  can't be always-allowed.
 - **Allow rules** (`/rules`): type a command such as `systemctl restart nginx`,
   optionally allow extra arguments, pick servers and click Add. It also lists
   every rule with a Remove button.

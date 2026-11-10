@@ -170,16 +170,9 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 	h.audit.Write(audit.Entry{Event: ev, Server: snap.Server, Tool: snap.Tool, Summary: snap.Summary, ApprovalID: id, Detail: map[string]any{"always": always, "scope": scope, "via": via}})
 
 	if approve && always && !snap.AskAlways {
-		var s string
-		switch {
-		case scope == "" || scope == "server":
-			s = "server:" + snap.Server
-		case scope == "all":
-			s = "all"
-		case len(scope) > 4 && scope[:4] == "tag:":
-			s = scope
-		default:
-			return &snap, fmt.Errorf("invalid scope %q", scope)
+		s, err := ruleScopeFor(snap, scope)
+		if err != nil {
+			return &snap, err
 		}
 		r := snap.Suggested
 		r.Comment = "from approval of: " + truncate(snap.Summary, 120)

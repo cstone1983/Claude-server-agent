@@ -84,9 +84,12 @@
 {{if .D.Recent}}
 <h2 style="margin-top:1.6rem">Recent decisions</h2>
 <div class="card table-wrap"><table>
-<thead><tr><th>When</th><th>Server</th><th>Action</th><th>Decision</th></tr></thead><tbody>
+<thead><tr><th>When</th><th>Server</th><th>Action</th><th>Decision</th><th>Always allow</th></tr></thead><tbody>
 {{range .D.Recent}}<tr><td class="nowrap muted"><time datetime="{{iso .CreatedAt}}">{{iso .CreatedAt}}</time></td><td>{{.Server}}</td><td><code>{{.Summary}}</code></td>
-<td>{{if eq .Status "denied"}}<span class="chip crit">denied</span>{{else if eq .Status "expired"}}<span class="chip">expired</span>{{else}}<span class="chip good">{{.Status}}</span>{{end}}{{if .RuleID}} <span class="chip brand">always allowed</span>{{end}}{{if .Auto}} <span class="chip">auto</span>{{end}}</td></tr>{{end}}
+<td>{{if eq .Status "denied"}}<span class="chip crit">denied</span>{{else if eq .Status "expired"}}<span class="chip">expired</span>{{else}}<span class="chip good">{{.Status}}</span>{{end}}{{if .Auto}} <span class="chip">auto</span>{{end}}</td>
+<td>{{if .RuleID}}<form method="post" class="btn-row" style="margin:0"><input type="hidden" name="op" value="rule_revoke"><input type="hidden" name="rule_id" value="{{.RuleID}}"><span class="chip brand">always allowed · {{.RuleScope}}</span> <button class="btn danger" title="Delete this allow rule: the action needs approval again">Revoke</button></form>
+{{else if .CanAllow}}<form method="post" class="btn-row" style="margin:0"><input type="hidden" name="op" value="history_allow"><input type="hidden" name="approval_id" value="{{.ID}}"><select name="scope" aria-label="Where to allow it"><option value="server">on {{.Server}}</option>{{range .ServerTags}}<option value="tag:{{.}}">on servers tagged {{.}}</option>{{end}}{{if not (hasTag .ServerTags "proxmox")}}<option value="all">on all servers</option>{{end}}</select> <button class="btn">Always allow</button></form>
+{{else if .AskAlways}}<span class="muted small">needs its own OK every time</span>{{else}}<span class="muted small">—</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>
 {{end}}
 {{end}}
