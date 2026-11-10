@@ -71,6 +71,21 @@ usage in [README.md](README.md).
 5. Afterwards, `/` was extended to the full disk.
 6. Its Proxmox snapshot can be deleted once the user is happy.
 
+## Hub login: remembered devices (v0.1.26, 2026-11-10)
+
+- Login/approval pages offer "Remember this device": a long-lived cookie
+  (~400 days, renewed on every use, stored as a hash) that keeps the browser
+  logged in and approves without a code. Ask-always requests (Proxmox reboot)
+  still need a current code, on the approval page and the dashboard.
+- Manage on /approvals -> "Remembered devices" (Forget). Logout forgets the
+  current browser; `sudo csa-hub revoke-sessions` forgets all devices and
+  ends all logins.
+- Why logins "did not last 7 days": the session cookie was SameSite=Strict, so
+  it was not sent when an approval link was opened from the Claude app. Now
+  Lax (cross-site form posts are still refused).
+- Hub updated to v0.1.26 on 2026-11-10; the agents are still v0.1.25 (no
+  agent change in this release).
+
 ## Allow rules in place (hub "always allow")
 
 - **Troubleshooting kit** (all servers):
