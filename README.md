@@ -153,6 +153,8 @@ you use stays remembered. Exceptions:
 
 - Requests that need their own OK every time (rebooting a Proxmox host) still
   need a current authenticator code, on the approval page and the dashboard.
+- **Rename** a device there (e.g. "Chris's phone"); the detected browser and
+  system stay shown underneath.
 - **Forget** a device in the *Remembered devices* list on the approvals page.
   Logging out forgets the browser you log out on, and
   `sudo csa-hub revoke-sessions` forgets every device and ends every login.

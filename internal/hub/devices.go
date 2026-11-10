@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -30,8 +31,11 @@ const (
 
 // TrustedDevice is a remembered browser.
 type TrustedDevice struct {
-	ID        string    `json:"id"` // public id, for listing and forgetting
-	Label     string    `json:"label"`
+	ID    string `json:"id"`    // public id, for listing and forgetting
+	Label string `json:"label"` // detected, e.g. "Chrome on Windows"
+	// Name is the user's own name for the device ("Chris's phone"); empty
+	// means use Label.
+	Name      string    `json:"name,omitempty"`
 	IP        string    `json:"ip"`
 	CreatedAt time.Time `json:"created_at"`
 	LastUsed  time.Time `json:"last_used"`
@@ -97,6 +101,40 @@ func (h *Hub) useDevice(w http.ResponseWriter, r *http.Request) bool {
 	}
 	h.setDeviceCookie(w, c.Value)
 	return true
+}
+
+// DisplayName is the user's name for the device, or the detected label.
+func (d TrustedDevice) DisplayName() string {
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.Label
+}
+
+// maxDeviceName limits device names (they are shown on the dashboard).
+const maxDeviceName = 60
+
+// renameDevice sets a remembered device's name; an empty name goes back to
+// the detected label.
+func (h *Hub) renameDevice(id, name, via string) (bool, error) {
+	name = strings.Join(strings.Fields(name), " ")
+	if len([]rune(name)) > maxDeviceName {
+		return false, errors.New("the name is too long (60 characters at most)")
+	}
+	found := false
+	h.store.Update(func(d *stateData) error {
+		for _, x := range d.Devices {
+			if x.ID == id {
+				x.Name = name
+				found = true
+			}
+		}
+		return nil
+	})
+	if found {
+		h.audit.Write(audit.Entry{Event: "device_renamed", Detail: map[string]string{"id": id, "name": name, "via": via}})
+	}
+	return found, nil
 }
 
 // forgetDevice removes a remembered device by its public id.
