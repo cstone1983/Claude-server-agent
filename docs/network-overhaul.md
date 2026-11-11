@@ -140,7 +140,20 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
-- 2026-11-11 evening 1 DONE (steps 0-3, 5; step 6 CPU-Share->DMZ not done yet):
+- 2026-11-11 step 6 DONE: CPU-Share (VM 104) on DMZ VLAN 20, 10.10.20.104
+  (reservation, vm-net-move OK after 7 s). 104.fw: ipfilter 10.10.20.104
+  only, DHCP rule -> 10.10.20.1. 6 Akash port forwards -> 10.10.20.104.
+  Verified: internet OK, UDM/LAN unreachable from it. k3s: node-ip,
+  advertise-address, tls-san changed in k3s.service + config.yaml; the
+  embedded etcd still had the old peer URL, fixed with a one-off
+  `k3s server --cluster-reset --node-ip=10.10.20.104` (etcd backup
+  /root/k3s-etcd-before-reset-20261110202942.tgz); then the network-policy
+  controller refused to start until the Node object showed the new IP
+  (`--disable=network-policy` does not disable it; the flag is
+  `--disable-network-policy`), so 10.10.1.133/32 was added to ens18
+  temporarily, removed once the node showed 10.10.20.104. Node Ready,
+  14/14 pods Running, Calico re-detected the new IP.
+- 2026-11-11 evening 1 DONE (steps 0-3, 5, 6):
   - Step 1: IP groups "OBJ HA", "OBJ n8n", "OBJ Solar-Calc", "OBJ HA n8n",
     "OBJ HA n8n Solar", "OBJ Laptop", "OBJ Thermostat Pi", "OBJ Shelly"
     (10.10.3.13 Plus, .45 Gen1), "OBJ Sonos" (10.10.3.138), "OBJ TVs on Main".
