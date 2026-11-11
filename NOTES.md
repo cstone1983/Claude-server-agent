@@ -30,8 +30,11 @@ NEW-only counters have run for several hours.**
      old IPs from the OBJ groups.
   2. **Per-VM firewalls - in progress** (Proxmox VM firewall, one
      allow-list per VM). Enforced 2026-11-11: Fiance 111, Recipes 107,
-     Solar-Calc 100, n8n 102. Fileshare 112 in observe. Left: HA 103, the
-     desktops. See To do.
+     Solar-Calc 100, n8n 102, Fileshare 112. HA 103 in OBSERVE since
+     2026-11-11 afternoon (NIC firewall=1, nothing blocked): review the log
+     after a night, then block. Left after that: the desktops. See To do.
+     (SAN set up 2026-11-08 ~13:00-13:40; its own clock is ~9 months behind
+     - shows Feb 2026 - so SAN log times are off. Offer to fix the clock.)
   3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
   4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed (user
@@ -577,9 +580,10 @@ Only rules scoped to them by name or tag apply.
         (net-check); icmp.
       - 100 Solar-Calc: trusted 22,8080; servers 22; n8n -> 8080; icmp.
       - 102 n8n: trusted 22,80,443; servers 22; Solar -> 5433; icmp.
-      In progress: 112 Fileshare (NIC firewall=1 set; observe rules:
+      - 112 Fileshare (NIC firewall=1 set 2026-11-11):
       trusted tcp 22,80,139,445,5357 + udp 137,138,3702; servers 22;
-      n8n -> 80,445).
+      n8n -> 80,445; icmp.
+      In progress: 103 HA, observe only (trusted 8123,22; servers 22; n8n -> 8123; mDNS; UniFi 10001; log the rest).
       Left: 103 HA (NIC needs firewall=1: brief blip; many IoT inbound
       flows: 8123, MQTT 1883, CoIoT, Sonos, HomeKit - longer observe), the
       desktops. CPU-Share already has one (104.fw).
