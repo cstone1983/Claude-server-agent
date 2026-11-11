@@ -62,6 +62,14 @@ NEW-only counters have run for several hours.**
   across restarts; agent result buffering across Cloudflare resets; home
   portal + SSO (To do section).
 - **Thermostat Pi:** IoT 10.10.3.10, reaches HA via homeassistant.localdomain.
+- **Bookmarks (user's wish 2026-11-11):** the user sends a Chrome
+  bookmarks export (.html) when addresses change; only UPDATE the server
+  addresses in it (no reorganizing), and hand back an importable file. The
+  bookmarks bar has a "Servers" folder: Proxmox, Backups (PBS), UniFi,
+  iDRAC, Home Assistant (all https://<name>.lan.stoneyshome.com), n8n,
+  Server Agent Hub, Nextcloud, AI Recipes, Finance, Solar, Space (public
+  https://<name>.stoneyshome.com names). iDRAC moved to
+  https://idrac.lan.stoneyshome.com on 2026-11-11.
 - User preferences: approve via the hub (remembered device); hands-off mode
   is used at times (then ask in chat before risky steps); reboots/updates
   only when the user says; keep notes updated; recommendations rather than

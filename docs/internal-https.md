@@ -54,6 +54,12 @@ addresses. Nothing is opened to the internet.
   blocked. Works from the user's PC. Does NOT work from VMs on this same
   host (e.g. Anthony's desktop on Main: the reply crosses the same bridge
   twice) - they use :8006.
+- 2026-11-11 **idrac.lan.stoneyshome.com works**: user set the iDRAC's
+  DNS iDRAC Name `idrac` + static domain `lan.stoneyshome.com` (its host
+  header check then accepts the name); proxy passes the Host through
+  again; middleware `idrac-root` redirects the bare "/" (which the iDRAC
+  redirects to its IP) to /start.html. Virtual console via the proxy: to be
+  confirmed by the user.
 - Not proxied (already trusted HTTPS via their public Cloudflare names):
   Nextcloud (overwritehost nextcloud.stoneyshome.com - a lan name would
   just redirect), n8n, Recipes, Finance.
