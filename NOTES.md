@@ -6,10 +6,9 @@ usage in [README.md](README.md).
 
 ## Current state and next steps (2026-11-11 night, after the network overhaul)
 
-**Tomorrow: recap with the user what is left (list below), starting with the
-observe-log review. First check last night's backups on the new network:
-22:15 file server (/var/lib/pve-fileserver-backup.status) and 23:00 off-site
-sync (pbs-offsite-sync status/log) - the first runs after the moves.**
+**2026-11-11 04:30: backups after the moves all OK (22:15 file server, 23:00
+off-site 125G in 121 min). Firewall review round 1 done; round 2 after the
+NEW-only counters have run for several hours.**
 
 - **Network overhaul: all moves DONE 2026-11-11** (details and rollback info:
   docs/network-overhaul.md, status lines at the top of "Final runbook").
@@ -23,11 +22,12 @@ sync (pbs-offsite-sync status/log) - the first runs after the moves.**
     do NOT resolve (fix). Proxmox UI: https://10.10.10.15:8006.
   - Proxmox login allow-list ON (8006/22/8007/consoles only from Main + VPN).
 - **Left to do (recap tomorrow), in order:**
-  1. Review the UDM observe logs (OBSERVE ... rules; IoT->Internal had
-     ~2300 hits in the first minute), add narrow allows, then switch the
-     observe rules to BLOCK - keep allow rules (incl. "HA to TVs on Main",
-     added after the observe rule) above the blocks. Remove old IPs from the
-     OBJ groups.
+  1. Firewall review round 2 (round 1 done 2026-11-11 04:30, see
+     docs/network-overhaul.md): OBSERVE rules now count NEW connections
+     only; re-read their counters vs /root/net-overhaul/observe-baseline-*.tsv
+     on n8n, allow what is needed, then switch them to BLOCK (NEW-only! a
+     plain block would also drop replies and cut HA off from IoT). Remove
+     old IPs from the OBJ groups.
   2. **SOON: per-VM firewalls** (Proxmox VM firewall, one allow-list per
      VM; the VMs on Servers can reach each other freely today). See To do.
   3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).

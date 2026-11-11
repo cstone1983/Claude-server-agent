@@ -150,6 +150,27 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
   /root/net-overhaul/, interfaces backup /etc/network/interfaces.bak-20261110215638.
   Verified: SAN session, storages, 9 VMs, desktops on Main, hub. The UI is
   now https://10.10.10.15:8006.
+- 2026-11-11 04:30 OBSERVE REVIEW, round 1. Overnight hits (since ~20:05):
+  IoT->Servers 311k, Servers->Gateway 61k, IoT->Gateway 52k, IoT->Internal
+  32k, Servers->Internal 26k, Cameras ~0. A packet capture on Proxmox's
+  uplink (`tcpdump -i nic0 vlan 10 ...`, files in /root/net-overhaul/cap-*)
+  showed these are almost all REPLY packets of connections the other side
+  started (Kasa :9999, heat pumps :80, Konnected/ESPHome :6053 answering HA):
+  our custom rules (index 10000+) are evaluated before UniFi's own "Allow
+  Return Traffic" (30000+), so every packet counted. **Lesson: the block
+  rules must match NEW connections only (connection_state_type CUSTOM,
+  connection_states ["NEW"]) or they would block replies and cut HA off
+  from the IoT devices.** Done now: every OBSERVE rule switched to NEW-only
+  (still ALLOW + log); "OBSERVE Servers to Internal" recreated so the
+  "HA to TVs on Main" allow (10002) sits above it (10003); mDNS 5353 added
+  to "Servers to Gateway DNS DHCP NTP mDNS". Baseline counts:
+  /root/net-overhaul/observe-baseline-*.tsv on n8n (old rules:
+  policies-before-newonly.json). New real flows seen: HA -> LG TV :3000,
+  HA -> TLC TV :6466 (allowed by the TV rule now), HA -> UDM :53 on
+  10.10.1.1 (allowed: Gateway zone), HA -> UDM :5353 (now allowed).
+  Next: re-read the counters after several hours; anything still counting
+  is a genuine NEW flow -> allow it or accept it being blocked; then switch
+  the OBSERVE rules to BLOCK (keeping NEW-only).
 - 2026-11-11 22:0x Proxmox login allow-list ON: cluster.fw `policy_in: DROP` +
   `[IPSET management]` = 10.10.1.0/24, 192.168.3.0/24 (overrides the
   automatic management set, which would have been the whole Servers /23);
