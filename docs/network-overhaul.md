@@ -106,7 +106,10 @@ Evening 1, in order:
    43/45 native VLAN -> Cameras. User: both cameras live in Protect.
 3. Claude: Lutron bridge: reservation IoT 10.10.3.11, switch port 11 native ->
    IoT; update the HA Lutron integration host. User: test a few lights.
-4. TVs (LG bedroom, TLC Google TV): DECISION first (IoT Wi-Fi is 2.4 GHz only).
+4. TVs: DECIDED 2026-11-11 - they stay on Main for now (skip this step). In
+   evening 2, before HA moves, allow HA -> LG 10.10.1.204 (3000/3001) and
+   TLC Google TV 10.10.1.225 (6466/6467, 8008/8009).
+   (Original step, for later:) TVs (LG bedroom, TLC Google TV): DECISION first (IoT Wi-Fi is 2.4 GHz only).
    Claude tries per-device network override on the UDM; else user re-joins
    each TV to the IoT Wi-Fi with the remote. Claude updates the HA LG host.
    User: test casting from a phone.
@@ -137,6 +140,7 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11: user took a fresh UDM backup; evening 1 about to start (step 0 checks run, nothing changed yet).
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.

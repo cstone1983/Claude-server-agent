@@ -4,6 +4,42 @@ Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
 usage in [README.md](README.md).
 
+## Current state and next steps (2026-11-11, before the network overhaul)
+
+- **Network overhaul: about to start evening 1** (runbook: docs/network-overhaul.md,
+  "Final runbook"). User took a fresh UDM backup 2026-11-11. Step 0 checks
+  (net-check, last night's backups, nothing running) were started; step 1
+  (zones + rules) NOT started yet. Nothing in the overhaul has changed since
+  the prep. **Decision 2026-11-11: TVs stay on Main** (LG bedroom TV 10.10.1.204,
+  TLC Google TV 10.10.1.225); user may move them after the overhaul. So: skip
+  evening-1 step 4, and in evening 2, before HA moves, add a narrow rule
+  HA (Servers) -> those TVs (LG webOS 3000/3001, Android TV remote 6466/6467,
+  cast 8008/8009) in addition to rule 6 (laptop Ollama).
+- **Off-site backup:** first full PBS -> Google Drive copy was at 81.8 GiB of
+  ~120 GB on 2026-11-10 05:00; its speed limit was lifted for that run only
+  (rclone SIGUSR2). 471 chunks were skipped in a UDM DNS outage 02:35-02:39
+  (retried at the end of the run / next night). To do: confirm the run ended
+  OK (/var/lib/pbs-offsite-sync.status), then disable the old 23:30 vzdump job
+  (backup-79526ae3-5f24) and later delete the old per-VM Drive folders; add
+  `--fast-list` to pbs-offsite-sync.
+- **Game server for Anthony (planned, not started):** Pelican panel + Wings +
+  the free "Modpack Manager" plugin (CurseForge/Modrinth one-click modpacks;
+  needs a CurseForge API key; panel installed natively, not the docker panel),
+  on a new VM "game-server" (~6 cores, 16 GB, 100 GB) in the DMZ, after
+  evening 1. Fallback: Pterodactyl (Modrinth Generic egg). Waiting for the
+  user's go. Today Minecraft (Java 1.21, /opt/minecraft on VM 101) is
+  stopped/disabled; UDM forward "Minecraft" WAN 25565 tcp/udp -> 10.10.1.185
+  is still enabled; players used home.stoneyshome.com (Cloudflare A record ->
+  WAN 172.100.91.63, Spectrum, dynamic: no updater found). Whitelist was off.
+- **Hub:** v0.1.29 on n8n and all agents (remembered devices + rename,
+  always-allow/revoke on recent decisions and activity page, Lax cookies).
+  Open hub ideas: persist approvals across restarts; agent result buffering
+  across Cloudflare connection resets; home portal + SSO (To do section).
+- **Thermostat Pi:** on IoT 10.10.3.10, kernel 6.18, new client script.
+- User preferences: approve via the hub (remembered device now); hands-off
+  mode is used at times; reboots/updates only when the user says; keep notes
+  updated; recommendations rather than option lists.
+
 ## What exists
 
 - **csa-hub** runs on the **n8n** VM (10.10.1.86).
