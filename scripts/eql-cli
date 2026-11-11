@@ -33,15 +33,21 @@ def open_port():
     os.set_blocking(fd, False)
     return fd
 
-def read_until(fd, pats, timeout):
-    buf, end = b"", time.time() + timeout
+def read_until(fd, pats, timeout, quiet=None):
+    """Read until a pattern matches, the timeout passes, or (if quiet is set)
+    the console has been silent for `quiet` seconds after sending something.
+    The quiet rule matters: the prompt is not always recognisable at the end."""
+    buf, end, last = b"", time.time() + timeout, time.time()
     while time.time() < end:
+        if quiet and buf and time.time() - last > quiet:
+            return buf, "quiet"
         try:
             chunk = os.read(fd, 4096)
         except BlockingIOError:
             chunk = b""
         if chunk:
             buf += chunk
+            last = time.time()
             if b"Press any key" in buf[-80:]:
                 os.write(fd, b" ")
             for p in pats:
@@ -74,11 +80,11 @@ def main():
     elif hit is None:
         sys.exit("no answer from the SAN console on " + DEV)
     send(fd, "cli-settings paging off")
-    read_until(fd, [PROMPT], 15)
+    read_until(fd, [PROMPT], 15, quiet=3)
     rc = 0
     for c in cmds:
         send(fd, c)
-        out, hit = read_until(fd, [PROMPT], 120)
+        out, hit = read_until(fd, [PROMPT], 120, quiet=4)
         text = out.decode("utf-8", "replace").replace(pw, "<redacted>").replace("\r", "")
         print(f"### {c}\n{text.strip()}\n")
         if hit is None:

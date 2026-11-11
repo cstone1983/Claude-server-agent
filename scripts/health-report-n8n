@@ -1,0 +1,65 @@
+#!/bin/bash
+# health-report-n8n: read-only health summary from the n8n VM (the hub host):
+# the VM itself, its containers, net-check, the *.lan certificate, and the
+# UniFi network (UDM/switch/APs firmware + state, WAN drops, smart-plug modem
+# restarts, port link-speed drops/PoE power cycles, Wi-Fi satisfaction).
+# Usage: health-report [daily|weekly]   (window for log events: 24 h or 7 days)
+# One line per check: "OK|WARN|ALERT|INFO <area>: <text>". Changes nothing.
+# Installed as /usr/local/sbin/health-report on n8n.
+export LC_ALL=C
+mode=${1:-daily}; [ "$mode" = weekly ] && win=$((7*86400)) || win=86400
+now=$(date +%s)
+say() { echo "$1 $2: $3"; }
+
+# --- the n8n VM
+n=$(apt list --upgradable 2>/dev/null | grep -c upgradable)
+[ "$n" -gt 0 ] && say WARN updates "n8n VM: $n package update(s)" || say OK updates "n8n VM: no package updates"
+[ -f /var/run/reboot-required ] && say WARN system "n8n VM: reboot required"
+r=$(df --output=pcent / | tail -1 | tr -dc 0-9); [ "$r" -ge 85 ] && say WARN storage "n8n VM root $r% used" || say OK storage "n8n VM root $r% used"
+f=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+[ -n "$f" ] && say WARN system "n8n VM failed services: $f"
+bad=$(docker ps -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -vE ' Up ' | grep -vE '^(solar-pg-lan) ' | tr '\n' ';')
+unh=$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -i unhealthy | tr '\n' ';')
+[ -n "$bad$unh" ] && say WARN containers "${bad}${unh}" || say OK containers "all containers up"
+
+# --- reachability
+nc=$(/usr/local/bin/net-check 2>&1); nf=$(echo "$nc" | tail -1 | awk '{print $1}')
+[ "$nf" = 0 ] && say OK network "net-check: all paths OK" || say ALERT network "net-check: $(echo "$nc" | grep FAIL | tr '\n' ';')"
+
+# --- certificates (*.lan wildcard served by Traefik here; Proxmox's own cert is
+#     checked by the Proxmox report - n8n may not reach it, by design)
+end=$(echo | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername unifi.lan.stoneyshome.com 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+if [ -n "$end" ]; then
+  d=$(( ($(date -d "$end" +%s) - now) / 86400 ))
+  [ "$d" -lt 20 ] && say WARN certs "*.lan wildcard certificate expires in $d days" || say OK certs "*.lan wildcard certificate valid $d more days"
+else
+  say WARN certs "could not read the *.lan certificate from Traefik"
+fi
+
+# --- UniFi
+dev=$(unifi GET net:stat/device 2>/dev/null)
+if ! echo "$dev" | jq -e .data >/dev/null 2>&1; then
+  rm -f /root/.cache/unifi/cookies.txt /root/.cache/unifi/csrf
+  dev=$(unifi GET net:stat/device 2>/dev/null)
+fi
+if echo "$dev" | jq -e .data >/dev/null 2>&1; then
+  echo "$dev" | jq -r '.data[] | select(.state!=1) | "ALERT unifi: \(.name) is not connected (state \(.state))"'
+  up=$(echo "$dev" | jq -r '[.data[] | select(.upgradable==true) | "\(.name) \(.version)->\(.upgrade_to_firmware // "new")"] | join(", ")')
+  [ -n "$up" ] && say WARN firmware "UniFi updates available: $up" || say OK firmware "UniFi devices up to date"
+  echo "$dev" | jq -r '.data[] | select(.type=="uap") | .name as $n | (.radio_table_stats // [])[] | select((.satisfaction // 100) >= 0 and (.satisfaction // 100) < 70 and (.num_sta // 0) > 0) | "WARN wifi: \($n) \(.radio) satisfaction \(.satisfaction)% (\(.num_sta) clients, channel \(.channel))"'
+  echo "$dev" | jq -r '.data[] | select(.type=="usw") | .port_table[] | select(.up==true and ((.rx_errors//0)+(.tx_errors//0)) > 500) | "WARN cabling: switch port \(.port_idx) \(.name): \((.rx_errors//0)+(.tx_errors//0)) errors at \(.speed) Mb/s"'
+  from=$(( (now - win) * 1000 )); to=$(( now * 1000 ))
+  ev=$(for p in 0 1 2 3; do unifi POST v2:system-log/all "{\"timestampFrom\":$from,\"timestampTo\":$to,\"pageNumber\":$p,\"pageSize\":500}" 2>/dev/null; done | jq -r '.data[]? | "\(.key)|\(.parameters.PORT.name // .parameters.DEVICE_WITH_PORT.name // "")"' 2>/dev/null)
+  span=$([ "$mode" = weekly ] && echo "7 days" || echo "24 h")
+  wf=$(echo "$ev" | grep -c '^NETWORK_WAN_FAILED_2|')
+  mr=$(echo "$ev" | grep -c '^SMART_POWER_MODEM_RESTARTED|')
+  [ "$wf" -gt 0 ] && say WARN internet "$wf internet drop(s) in $span (modem auto-restarts by the smart plug: $mr)" || say OK internet "no internet drops in $span"
+  low=$(echo "$ev" | awk -F'|' '$1=="NEGOTIATED_LOW_UPLINK_PORT_SPEED" {c[$2]++} END {for (p in c) printf "port %s (%dx) ", p, c[p]}')
+  [ -n "$low" ] && say WARN cabling "links dropping to low speed in $span: $low"
+  pc=$(echo "$ev" | awk -F'|' '$1=="POWER_SUPERVISOR_POWER_CYCLE_TRIGGERED" {c[$2]++} END {for (p in c) printf "%s (%dx) ", p, c[p]}')
+  [ -n "$pc" ] && say WARN unifi "switch auto power-cycled stuck PoE devices in $span: $pc"
+  wan=$(unifi GET net:stat/health 2>/dev/null | jq -r '.data[] | select(.subsystem=="wan") | "\(.uptime_stats.WAN.availability // "?")% availability, \(.uptime_stats.WAN.latency_average // "?") ms"')
+  [ -n "$wan" ] && say INFO internet "WAN: $wan"
+else
+  say WARN unifi "UniFi Network API not answering (app down or updating?)"
+fi
