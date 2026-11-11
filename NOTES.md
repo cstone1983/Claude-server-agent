@@ -55,6 +55,13 @@ NEW-only counters have run for several hours.**
      IP (SSH/PuTTY, SMB) and web names -> the Traefik proxy on n8n. (The user
      tried SSH to n8n.stoneyshome.com - that is the public Cloudflare name,
      web only.)
+- **WAN drops (found 2026-11-11):** every internet drop since Oct 17 starts
+  with SMART_POWER_MODEM_RESTARTED: the USP-Plug (modem outlet, "auto power
+  cycle" ON) restarts the modem. The plug is Wi-Fi meshed (was Porch LR,
+  now Basement AP -59 dBm). User: keep auto restart, lock the plug's uplink
+  to the Basement AP (to do once the UDM Network app is back after the
+  2026-11-11 UDM update). Switch also auto power-cycles stuck PoE devices
+  (Upstairs AP port 5 today, U7 port 48 before).
 - **Wi-Fi review + tuning 2026-11-11** (backups of the old settings in
   /root/net-overhaul/review/*.before-wifi-tuning.json on n8n):
   - Fixed channels: 2.4 GHz Upstairs 1 / Basement 11 / Porch LR 6 /
@@ -124,6 +131,16 @@ NEW-only counters have run for several hours.**
 - **UniFi local admin**: `/root/.config/unifi/.env` on n8n (`unifi` helper).
 - **Backup alert token**: `/etc/backup-report.conf` on Proxmox.
 - **Thermostat MQTT**: `/etc/thermostat.env` on the Pi.
+- **Server notifications (Telegram bot "Stoneys servers")**: n8n credential
+  "Stoneys servers" (id dBIuMpWGXYcBrEnX, user's chat id 6897458189);
+  workflow "Server Notifications (Telegram)" (id Unagh3QcCttjPfnq): callable
+  from other workflows (text, level, source) or via a keyed POST webhook.
+  Webhook path + key in `/root/.config/server-notify/env` on n8n (root-only);
+  helper `/usr/local/bin/server-notify <ok|info|warn|alert> <source> <text|->`
+  (scripts/server-notify). Plan: daily quick check 05:00 Sun-Fri (message only
+  on major problems), weekly deep dive Saturday 08:00 (always a report), both
+  as scheduled fresh sessions; move server alerts (backup reports) here too.
+
 - **SSH into Home Assistant** (Terminal & SSH add-on, port 22): key
   `/root/.ssh/ha_ssh` on n8n (root-only); the add-on accepts it only
   `from="10.10.11.102"`. Use: `ssh -i /root/.ssh/ha_ssh
