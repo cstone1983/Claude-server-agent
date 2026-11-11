@@ -48,6 +48,23 @@ NEW-only counters have run for several hours.**
      IP (SSH/PuTTY, SMB) and web names -> the Traefik proxy on n8n. (The user
      tried SSH to n8n.stoneyshome.com - that is the public Cloudflare name,
      web only.)
+- **Wi-Fi review + tuning 2026-11-11** (backups of the old settings in
+  /root/net-overhaul/review/*.before-wifi-tuning.json on n8n):
+  - Fixed channels: 2.4 GHz Upstairs 1 / Basement 11 / Porch LR 6 /
+    Garage LR 11 / U7 Ultra 6; 5 GHz Basement 100 (40 MHz), Porch LR 116,
+    Garage LR 132, U7 Ultra 36 (80 MHz), Upstairs AUTO (fixed DFS 52 made it
+    drop its config and need re-adopting; it recovered by itself).
+    2.4 GHz power medium on Upstairs + Basement. Old: all auto, two APs on
+    5 GHz 149 next to 189 neighbour networks, Upstairs+Basement both on 1.
+  - SSID Obi-Wan: min rate 6 Mb/s (2.4) / 12 Mb/s (5), BSS transition on,
+    WPA2/WPA3 transition, PMF optional. IoT + Guest unchanged.
+  - IoT devices took 5-20 min to rejoin after the channel change (HA
+    unavailable 698 -> 757 -> recovering). Re-check; power-cycle laggards.
+  - Physical faults (user): switch port 48 (U7 Ultra) and port 42 (Garage
+    LR) link at 100 Mb/s - cable/jack; port 48 had ~2000 rx errors.
+  - Also found: nightly UDM speed test fails ("Error"); the guest network
+    is open with a click-through portal (no password) - user wants a better
+    guest portal (decide: password or voucher).
 - **Backups:** old 23:30 vzdump job DISABLED 2026-11-11. Nightly: 21:30 PBS
   (all 9 VMs; 2026-11-11 run OK), 22:15 file server files, 23:00 off-site
   sync to Google Drive (first full copy done 2026-11-10).
