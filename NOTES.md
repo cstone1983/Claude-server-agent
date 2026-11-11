@@ -64,8 +64,11 @@ NEW-only counters have run for several hours.**
 - **Thermostat Pi:** IoT 10.10.3.10, reaches HA via homeassistant.localdomain.
 - **Bookmarks (user's wish 2026-11-11):** the user sends a Chrome
   bookmarks export (.html) when addresses change; only UPDATE the server
-  addresses in it (no reorganizing), and hand back an importable file. The
-  bookmarks bar has a "Servers" folder: Proxmox, Backups (PBS), UniFi,
+  addresses in it (no reorganizing), and hand back an importable file.
+  **New server addresses always go into the "Servers" folder.** Bar layout
+  (2026-11-11): Lincoln Financial, Special Fund Account, then the
+  "Servers" folder; everything else is under Other bookmarks. The
+  "Servers" folder holds: Proxmox, Backups (PBS), UniFi,
   iDRAC, Home Assistant (all https://<name>.lan.stoneyshome.com), n8n,
   Server Agent Hub, Nextcloud, AI Recipes, Finance, Solar, Space (public
   https://<name>.stoneyshome.com names). iDRAC moved to
