@@ -5,6 +5,38 @@ under internal names `<name>.lan.stoneyshome.com`. Done AFTER the network
 overhaul (docs/network-overhaul.md), so each piece is set up once on the final
 addresses. Nothing is opened to the internet.
 
+## Status
+
+- 2026-11-11 machine names `<host>.lan.stoneyshome.com` on the UDM (proxmox,
+  idrac, n8n, homeassistant, solar, recipes, finance, fileserver, autopilot,
+  cpushare -> each server's own IP). The UDM needs ~10 s before a new record
+  answers. (`proxmox.localdomain`/`idrac.localdomain` never resolved; the
+  .lan names do.)
+- 2026-11-11 Cloudflare token "lan certificates" (DNS Edit, stoneyshome.com
+  only, zone id 24f93d39a2b743de4e883fdf812d9030) in /root/cf-dns-token on
+  Proxmox and n8n. NOTE: the first ~30 characters were printed once by
+  `pvenode acme plugin list` (it shows plugin data) - roll the token and
+  update both files + the Proxmox plugin (`pvenode acme plugin set
+  cloudflare --data <file>`); never run `plugin list` with data again.
+- 2026-11-11 **Proxmox**: ACME accounts `lan-staging` and `lan` (production,
+  contact stonec@gmail.com - user OK'd), plugin `cloudflare` (dns, cf,
+  CF_Token + CF_Zone_ID, validation delay 30 s), node domain
+  proxmox.lan.stoneyshome.com. Certificate issued by Let's Encrypt, valid to
+  2027-02-09, renewed by Proxmox's daily job. Verified trusted from Main.
+- 2026-11-11 **Traefik on n8n** (compose backup docker-compose.yml.bak-*,
+  acme.json backup in /root/net-overhaul): resolver `cfdns` (DNS-01,
+  Cloudflare, resolvers 1.1.1.1, storage /letsencrypt/acme-lan.json, token
+  via CF_DNS_API_TOKEN_FILE=/run/secrets/cf_dns_token mounted read-only from
+  /root/cf-dns-token), file provider ./traefik-dynamic (lan.yml), insecure
+  dashboard off. Wildcard lan.stoneyshome.com + *.lan.stoneyshome.com issued
+  (production, to 2027-02-09; staging store kept as acme-lan-staging.json.old).
+  Route 1: unifi.lan.stoneyshome.com -> https://10.10.1.1 (skip verify);
+  DNS unifi.lan -> 10.10.11.102. Verified trusted from Main.
+- Found: the old `mytlschallenge` resolver keeps failing to renew
+  n8n.stoneyshome.com (TLS-ALPN can't work behind Cloudflare). Harmless (the
+  public site uses the tunnel), but noisy: move the n8n router to `cfdns`
+  when the n8n container may be restarted.
+
 ## How it works
 
 - Names: the UDM answers `*.lan.stoneyshome.com` inside the network (split
