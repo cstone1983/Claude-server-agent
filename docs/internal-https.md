@@ -32,6 +32,27 @@ addresses. Nothing is opened to the internet.
   (production, to 2027-02-09; staging store kept as acme-lan-staging.json.old).
   Route 1: unifi.lan.stoneyshome.com -> https://10.10.1.1 (skip verify);
   DNS unifi.lan -> 10.10.11.102. Verified trusted from Main.
+- 2026-11-11 routes added: pbs.lan -> https://10.10.10.15:8007 (Proxmox
+  host.fw: IN ACCEPT -source 10.10.11.102 -dport 8007), idrac.lan ->
+  https://10.10.10.10 (passHostHeader false; the iDRAC still redirects to
+  https://10.10.10.10/start.html - fix: user sets iDRAC "DNS iDRAC Name"
+  idrac + static domain lan.stoneyshome.com, then passHostHeader back to
+  true), ha.lan -> http://10.10.11.103:8123. DNS idrac/pbs/ha/unifi.lan ->
+  10.10.11.102 (the proxy); for SSH to the iDRAC use 10.10.10.10.
+- **HA 2026.10 keeps its HTTP settings in .storage/http, not in
+  configuration.yaml** ("yaml_migration_done": true; the YAML http: block
+  that Homeway added is ignored). Change them in Settings -> System ->
+  Network -> HTTP server (saves, restarts, then must be CONFIRMED within ~5
+  min or HA reverts). Read them with ws command `http/config`. Trusted
+  proxies now: 172.30.32.0/23, 127.0.0.1/32, ::1/128, 10.10.11.102/32.
+  ha.lan verified (200, trusted cert) and the user uses it.
+- Not proxied (already trusted HTTPS via their public Cloudflare names):
+  Nextcloud (overwritehost nextcloud.stoneyshome.com - a lan name would
+  just redirect), n8n, Recipes, Finance.
+- Clients that use their own encrypted DNS (Chrome "Use secure DNS" with a
+  fixed provider, Android Private DNS, iCloud Private Relay) get NXDOMAIN for
+  *.lan names: set them to "OS default"/automatic. The user's PC was on
+  Chrome -> Cloudflare 1.1.1.1; fixed.
 - Found: the old `mytlschallenge` resolver keeps failing to renew
   n8n.stoneyshome.com (TLS-ALPN can't work behind Cloudflare). Harmless (the
   public site uses the tunnel), but noisy: move the n8n router to `cfdns`

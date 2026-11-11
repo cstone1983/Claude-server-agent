@@ -35,7 +35,13 @@ NEW-only counters have run for several hours.**
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed and
      the second controller is out; tidy the 16 migrated legacy UDM policies.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
-  6. **Internal HTTPS (user: probably tomorrow)** - docs/internal-https.md.
+  6. **Internal HTTPS - mostly DONE 2026-11-11** (docs/internal-https.md):
+     proxmox/unifi/pbs/ha .lan.stoneyshome.com work with trusted certs.
+     Open: iDRAC name setting (user) then idrac.lan; roll the Cloudflare
+     token (first ~30 chars were printed once); move the public n8n
+     router to the cfdns resolver; remove the HA SSH add-on's password;
+     UDM encrypted DNS upstream + rule "DNS only via the UDM" (with the
+     firewall round 2). Original plan text:
      Needs from the user: a Cloudflare API token (Edit zone DNS,
      stoneyshome.com only) in a root-only file on n8n. Use two kinds of
      names: machine names `<host>.lan.stoneyshome.com` -> the server's own
@@ -77,6 +83,12 @@ NEW-only counters have run for several hours.**
 - **UniFi local admin**: `/root/.config/unifi/.env` on n8n (`unifi` helper).
 - **Backup alert token**: `/etc/backup-report.conf` on Proxmox.
 - **Thermostat MQTT**: `/etc/thermostat.env` on the Pi.
+- **SSH into Home Assistant** (Terminal & SSH add-on, port 22): key
+  `/root/.ssh/ha_ssh` on n8n (root-only); the add-on accepts it only
+  `from="10.10.11.102"`. Use: `ssh -i /root/.ssh/ha_ssh
+  root@homeassistant.lan.stoneyshome.com` (via the hub on n8n). The add-on
+  ALSO still has password login with a weak password that was shown in a
+  tool output on 2026-11-11 - to be removed (ask the user first).
 
 ## What exists
 
