@@ -48,12 +48,14 @@ addresses. Nothing is opened to the internet.
   ha.lan verified (200, trusted cert) and the user uses it.
 - 2026-11-11 **https://proxmox.lan.stoneyshome.com without :8006**: on the
   Proxmox host, systemd unit `pve-https-redirect.service` adds
-  `iptables -t nat -A PREROUTING -d 10.10.10.15/32 -p tcp --dport 443 -j
-  REDIRECT --to-ports 8006` at boot (stop = rule removed). The firewall
-  allow-list (8006 from Main + VPN) still applies; VMs on Servers stay
-  blocked. Works from the user's PC. Does NOT work from VMs on this same
-  host (e.g. Anthony's desktop on Main: the reply crosses the same bridge
-  twice) - they use :8006.
+  `iptables -t nat -I PREROUTING 1 -d 10.10.10.15/32 -p tcp --dport 443 -j
+  DNAT --to-destination 10.10.10.15:8006` at boot (stop = rule removed). The
+  firewall allow-list (8006 from Main + VPN) still applies; VMs on Servers
+  stay blocked. First version used `REDIRECT --to-ports 8006`, which failed
+  from VMs on this same host (Anthony's desktop): with bridge netfilter on
+  (pve-firewall turns it on for VM firewalls) REDIRECT picks the address of
+  the incoming interface, and vmbr0 has none. Changed to the explicit DNAT
+  the same day; works from the user's PC and from Anthony's desktop.
 - 2026-11-11 **idrac.lan.stoneyshome.com works**: user set the iDRAC's
   DNS iDRAC Name `idrac` + static domain `lan.stoneyshome.com` (its host
   header check then accepts the name); proxy passes the Host through

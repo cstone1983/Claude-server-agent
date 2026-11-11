@@ -28,8 +28,10 @@ NEW-only counters have run for several hours.**
      on n8n, allow what is needed, then switch them to BLOCK (NEW-only! a
      plain block would also drop replies and cut HA off from IoT). Remove
      old IPs from the OBJ groups.
-  2. **SOON: per-VM firewalls** (Proxmox VM firewall, one allow-list per
-     VM; the VMs on Servers can reach each other freely today). See To do.
+  2. **Per-VM firewalls - in progress** (Proxmox VM firewall, one
+     allow-list per VM). Enforced 2026-11-11: Fiance 111, Recipes 107,
+     Solar-Calc 100, n8n 102. Fileshare 112 in observe. Left: HA 103, the
+     desktops. See To do.
   3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
   4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed (user
@@ -556,14 +558,33 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
-- [ ] **SOON - Per-VM firewalls (user's request 2026-11-11).** The UDM only
-      filters BETWEEN VLANs; the VMs on Servers can reach each other freely.
-      Plan: Proxmox VM firewalls (filtered at the bridge, so they work inside
-      one VLAN and can't be turned off from inside a compromised VM), one
-      allow-list per VM: inventory listening ports per VM, decide who needs
-      each, log-first (policy ACCEPT + log) for a day, then DROP. Start with
-      the internet-facing ones (n8n/hub, Recipes, Fiance, Nextcloud).
-      Optional extra inside each VM: ufw. CPU-Share already has one (104.fw).
+- [ ] **Per-VM firewalls (user's request 2026-11-11) - in progress.** The
+      UDM only filters BETWEEN VLANs; Proxmox VM firewalls (filtered at the
+      bridge, can't be turned off from inside a VM) add one allow-list per
+      VM. User's rules: SSH (22) from Main + VPN (ipset `trusted`) and from
+      all servers (ipset `servers`); everything else only what is needed;
+      Proxmox host stays Main + VPN only. Method per VM: write
+      `/etc/pve/firewall/<vmid>.fw` with policy ACCEPT + a final
+      `IN ACCEPT -log info` (observe), watch `/var/log/pve-firewall.log`
+      2-3 min, then policy DROP + `log_level_in: nolog`, verify from n8n,
+      from Main (Ubuntu-Anthony) and from inside the VM (outbound, tunnel).
+      Agents and all public names go through Cloudflare (outbound), so the
+      VM firewalls never affect them; HA's n8n webhooks use
+      n8n.stoneyshome.com (Cloudflare) too.
+      Done (enforced + verified):
+      - 111 Fiance: trusted 22; servers 22; icmp.
+      - 107 Recipes: trusted 22,80,3000,24678; servers 22; n8n -> 80
+        (net-check); icmp.
+      - 100 Solar-Calc: trusted 22,8080; servers 22; n8n -> 8080; icmp.
+      - 102 n8n: trusted 22,80,443; servers 22; Solar -> 5433; icmp.
+      In progress: 112 Fileshare (NIC firewall=1 set; observe rules:
+      trusted tcp 22,80,139,445,5357 + udp 137,138,3702; servers 22;
+      n8n -> 80,445).
+      Left: 103 HA (NIC needs firewall=1: brief blip; many IoT inbound
+      flows: 8123, MQTT 1883, CoIoT, Sonos, HomeKit - longer observe), the
+      desktops. CPU-Share already has one (104.fw).
+      Found while verifying: proxmox.lan without :8006 (443 REDIRECT) did
+      not work from VMs on the host; changed to an explicit DNAT, works now.
 - [ ] **Network overhaul: enforce the blocks** after reviewing the observe
       logs (IoT, Cameras, Servers, DMZ); keep allow rules above the blocks
       (the "HA to TVs on Main" rule was added after the observe rule). Then
