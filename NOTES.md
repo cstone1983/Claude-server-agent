@@ -77,8 +77,9 @@ NEW-only counters have run for several hours.**
   - Wi-Fi follow-up: 9 devices not back after the tuning: the 2 TVs, 2
     tablets, laptop, watch (Obi-Wan - suspect the WPA2/WPA3 transition) and
     Porch Kasa bulbs/plug/pool lights (suspect Porch LR 2.4 GHz ch 6).
-    Proposed revert: Obi-Wan back to WPA2 / PMF off, Porch LR 2.4 back to
-    ch 11 (awaiting the user's OK). HA SSH password login DISABLED
+    User 2026-11-11: NO revert - the TVs were simply off and the laptop is
+    connected; watch the others (tablets, watch, porch Kasa) and revert only
+    if they stay off. HA SSH password login DISABLED
     2026-11-11 (key only).
   - Physical faults (user): switch port 48 (U7 Ultra) and port 42 (Garage
     LR) link at 100 Mb/s - cable/jack; port 48 had ~2000 rx errors.
