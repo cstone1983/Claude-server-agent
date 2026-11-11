@@ -4,47 +4,57 @@ Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
 usage in [README.md](README.md).
 
-## Current state and next steps (2026-11-11, before the network overhaul)
+## Current state and next steps (2026-11-11 night, after the network overhaul)
 
-- **Network overhaul: about to start evening 1** (runbook: docs/network-overhaul.md,
-  "Final runbook"). User took a fresh UDM backup 2026-11-11. Step 0 checks
-  (net-check 12/12 OK, no backup running at 19:53 on 2026-11-10 Proxmox time)
-  done; step 1
-  (zones + rules) NOT started yet. Nothing in the overhaul has changed since
-  the prep. **Decision 2026-11-11: TVs stay on Main** (LG bedroom TV 10.10.1.204,
-  TLC Google TV 10.10.1.225); user may move them after the overhaul. So: skip
-  evening-1 step 4, and in evening 2, before HA moves, add a narrow rule
-  HA (Servers) -> those TVs (LG webOS 3000/3001, Android TV remote 6466/6467,
-  cast 8008/8009) in addition to rule 6 (laptop Ollama).
-  Timing: nightly VM backup 21:30, file server 22:15, off-site 23:00 - do the
-  Proxmox bridge step (blips all VMs) before 21:30 or after the backups.
-- **Off-site backup: first full copy DONE** - "OK 2026-11-10 10:39 PBS
-  datastore (120G) synced to Google Drive in 1037 min" (speed limit was lifted
-  for that run only via rclone SIGUSR2; the 471 chunks skipped in the UDM DNS
-  outage 02:35-02:39 were picked up by the retry). Next: disable the old 23:30 vzdump job
-  (backup-79526ae3-5f24) and later delete the old per-VM Drive folders; add
-  `--fast-list` to pbs-offsite-sync.
+**Tomorrow: recap with the user what is left (list below), starting with the
+observe-log review.**
+
+- **Network overhaul: all moves DONE 2026-11-11** (details and rollback info:
+  docs/network-overhaul.md, status lines at the top of "Final runbook").
+  - Servers VLAN 10 (10.10.10.0/23): hardware in 10.10.10.x (Proxmox host
+    10.10.10.15, iDRAC 10.10.10.10), VMs at 10.10.11.<VMID> (n8n .102, HA
+    .103, Solar .100, Recipes .107, Finance .111, fileserver .112, Autopilot
+    .110 - stopped). DMZ: CPU-Share 10.10.20.104. Storage VLAN 40: SAN
+    10.10.40.10/.11, Proxmox 10.10.40.100. Cameras 10.10.4.10/.11, Lutron
+    10.10.3.11. Main keeps the desktops (101 .185, 106 .254), TVs, phones.
+  - DNS `<name>.localdomain` for every server; `proxmox` and `idrac` records
+    do NOT resolve (fix). Proxmox UI: https://10.10.10.15:8006.
+  - Proxmox login allow-list ON (8006/22/8007/consoles only from Main + VPN).
+- **Left to do (recap tomorrow), in order:**
+  1. Review the UDM observe logs (OBSERVE ... rules; IoT->Internal had
+     ~2300 hits in the first minute), add narrow allows, then switch the
+     observe rules to BLOCK - keep allow rules (incl. "HA to TVs on Main",
+     added after the observe rule) above the blocks. Remove old IPs from the
+     OBJ groups.
+  2. **SOON: per-VM firewalls** (Proxmox VM firewall, one allow-list per
+     VM; the VMs on Servers can reach each other freely today). See To do.
+  3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
+  4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
+     move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed and
+     the second controller is out; tidy the 16 migrated legacy UDM policies.
+  5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
+- **Backups:** old 23:30 vzdump job DISABLED 2026-11-11. Nightly: 21:30 PBS
+  (all 9 VMs; 2026-11-11 run OK), 22:15 file server files, 23:00 off-site
+  sync to Google Drive (first full copy done 2026-11-10).
 - **Game server for Anthony (planned, not started):** Pelican panel + Wings +
   the free "Modpack Manager" plugin (CurseForge/Modrinth one-click modpacks;
-  needs a CurseForge API key; panel installed natively, not the docker panel),
-  on a new VM "game-server" (~6 cores, 16 GB, 100 GB) in the DMZ, after
-  evening 1. Fallback: Pterodactyl (Modrinth Generic egg). Waiting for the
-  user's go. Today Minecraft (Java 1.21, /opt/minecraft on VM 101) is
-  stopped/disabled; UDM forward "Minecraft" WAN 25565 tcp/udp -> 10.10.1.185
-  is still enabled; players used home.stoneyshome.com (Cloudflare A record ->
-  WAN 172.100.91.63, Spectrum, dynamic: no updater found). Whitelist was off.
-- **Hub:** v0.1.29 on n8n and all agents (remembered devices + rename,
-  always-allow/revoke on recent decisions and activity page, Lax cookies).
-  Open hub ideas: persist approvals across restarts; agent result buffering
-  across Cloudflare connection resets; home portal + SSO (To do section).
-- **Thermostat Pi:** on IoT 10.10.3.10, kernel 6.18, new client script.
-- User preferences: approve via the hub (remembered device now); hands-off
-  mode is used at times; reboots/updates only when the user says; keep notes
-  updated; recommendations rather than option lists.
+  needs a CurseForge API key; panel installed natively), on a new VM
+  "game-server" (~6 cores, 16 GB, 100 GB) in the DMZ. Fallback: Pterodactyl.
+  Waiting for the user's go. Minecraft on VM 101 stopped/disabled; UDM
+  forward "Minecraft" WAN 25565 -> 10.10.1.185 still enabled;
+  home.stoneyshome.com -> WAN 172.100.91.63 (dynamic, no updater).
+- **Hub:** v0.1.29 on n8n and all agents. Open hub ideas: persist approvals
+  across restarts; agent result buffering across Cloudflare resets; home
+  portal + SSO (To do section).
+- **Thermostat Pi:** IoT 10.10.3.10, reaches HA via homeassistant.localdomain.
+- User preferences: approve via the hub (remembered device); hands-off mode
+  is used at times (then ask in chat before risky steps); reboots/updates
+  only when the user says; keep notes updated; recommendations rather than
+  option lists.
 
 ## What exists
 
-- **csa-hub** runs on the **n8n** VM (10.10.1.86).
+- **csa-hub** runs on the **n8n** VM (10.10.11.102 since 2026-11-11; was 10.10.1.86).
   - It listens on `127.0.0.1:7420`.
   - It's published through the existing Cloudflare tunnel `n8n_tunnel` as
     the route `agents.stoneyshome.com` → `http://localhost:7420`.
@@ -448,7 +458,7 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
-- [ ] **Per-VM firewalls (user's question 2026-11-11).** The UDM only
+- [ ] **SOON - Per-VM firewalls (user's request 2026-11-11).** The UDM only
       filters BETWEEN VLANs; the VMs on Servers can reach each other freely.
       Plan: Proxmox VM firewalls (filtered at the bridge, so they work inside
       one VLAN and can't be turned off from inside a compromised VM), one
