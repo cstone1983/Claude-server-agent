@@ -33,8 +33,12 @@ NEW-only counters have run for several hours.**
      Solar-Calc 100, n8n 102, Fileshare 112. HA 103 in OBSERVE since
      2026-11-11 afternoon (NIC firewall=1, nothing blocked): review the log
      after a night, then block. Left after that: the desktops. See To do.
-     (SAN set up 2026-11-08 ~13:00-13:40; its own clock is ~9 months behind
-     - shows Feb 2026 - so SAN log times are off. Offer to fix the clock.)
+     (SAN set up 2026-11-08 ~13:00-13:40. Its clock was ~9 months behind -
+     SAN log entries before 2026-11-11 17:00 show Feb 2026 dates; set to
+     the correct time + America/New_York 2026-11-11. No NTP: the Storage
+     VLAN is VLAN-only with no gateway, so the SAN's "Def-Gateway
+     10.10.1.1" is meaningless and was left. Option: NTP from Proxmox
+     (chrony on 10.10.40.100). Clock will drift; check it in the weekly.)
   3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
   4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed (user
@@ -43,9 +47,11 @@ NEW-only counters have run for several hours.**
      SAN 2026-11-11: user inserted the second control module (slot 0 =
      secondary/standby, same FW V7.0.4, cache battery "low voltage" while
      charging - recheck) and cabled it to switch port 26 -> set native
-     Storage VLAN 40 (port 31 = active controller eth3). Also a disk in
-     slot 8: "foreign" (old label), SMART ok - needs `member select eql1
-     disk select 8 clear-label` (wipes that disk) to join; ASK the user.
+     Storage VLAN 40 (port 31 = active controller eth3). Disk in slot 8
+     (old "foreign" label from another array): user OK'd, label cleared
+     2026-11-11 17:00 -> now a hot SPARE (2 spares: slots 8 + 15; RAID 6
+     set unchanged at 14 disks, 10.47 TB). Recheck later whether the array
+     grows the set on its own.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
   6. **Internal HTTPS - DONE 2026-11-11** (docs/internal-https.md):
      proxmox (no port needed), unifi, pbs, ha, idrac .lan.stoneyshome.com

@@ -66,6 +66,8 @@ def main():
         sys.exit(__doc__)
     pw = open(PASSFILE).read().strip()
     fd = open_port()
+    os.write(fd, b"\x03\r")  # Ctrl-C first: cancels a half-typed command or a pager
+    buf, hit = read_until(fd, [LOGIN, PROMPT], 3)
     os.write(fd, b"\r")
     buf, hit = read_until(fd, [LOGIN, PROMPT], 10)
     if hit is LOGIN:
@@ -92,6 +94,11 @@ def main():
     if os.environ.get("EQL_STAY"):  # leave the console logged in (for picocom)
         os.close(fd)
         sys.exit(rc)
+    # A command like "member select eql1 disk select 8" leaves the CLI in a
+    # sub-menu ("eqlgroup(member_eql1 disk_8)>"); back out before logging out.
+    for _ in range(3):
+        send(fd, "exit")
+        read_until(fd, [PROMPT], 3, quiet=1)
     send(fd, "logout")
     _, hit = read_until(fd, [b"(y/n)"], 5)
     if hit:
