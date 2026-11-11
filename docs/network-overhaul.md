@@ -140,7 +140,29 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
-- 2026-11-11: user took a fresh UDM backup; evening 1 about to start (step 0 checks run, nothing changed yet).
+- 2026-11-11 evening 1 DONE (steps 0-3, 5; step 6 CPU-Share->DMZ not done yet):
+  - Step 1: IP groups "OBJ HA", "OBJ n8n", "OBJ Solar-Calc", "OBJ HA n8n",
+    "OBJ HA n8n Solar", "OBJ Laptop", "OBJ Thermostat Pi", "OBJ Shelly"
+    (10.10.3.13 Plus, .45 Gen1), "OBJ Sonos" (10.10.3.138), "OBJ TVs on Main".
+    Zones Servers/IoT/Cameras created; Servers, IoT, Cameras networks in their
+    zones, DMZ network in Dmz. 21 allow rules + 8 "OBSERVE ... (to block)"
+    rules (ALLOW + logging; flip to BLOCK after review). Rule ids and the
+    pre-change UDM config dump: /root/net-overhaul/ on n8n (created_policies.json,
+    policies.json, groups.json, users.json, devices.json, sw_port_overrides.*).
+    API notes: a custom zone's defaults block everything to/from other internal
+    zones (incl. Internal->IoT) - allows must exist before a network moves in;
+    zone PUT needs only {_id,name,network_ids}; create_allow_respond must be
+    false when the destination is Gateway or External.
+  - Step 2: cameras G5 Driveway 10.10.4.10 (port 43), G5 Porch 10.10.4.11
+    (port 45), ports native Cameras / tagged block_all; Protect connected.
+  - Step 3: Lutron bridge 10.10.3.11 (port 11 native IoT). No PoE, and
+    "forward: disabled" is ignored by the API, so the link was flapped by
+    setting the port to 10 Mb/s for 15 s. HA's lutron_caseta entry updated
+    its host by itself (zeroconf). User confirmed lights + cameras work.
+  - Step 5: vmbr0 VLAN-aware (bridge-vids 2-4094) via pve-net-apply, OK
+    after 0 s; backup /etc/network/interfaces.bak-20261110202232.
+  - First minute: OBSERVE IoT to Internal ~2300 hits - review before enforcing.
+- 2026-11-11: user took a fresh UDM backup before starting.
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.
