@@ -32,8 +32,15 @@ NEW-only counters have run for several hours.**
      VM; the VMs on Servers can reach each other freely today). See To do.
   3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
   4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
-     move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed and
-     the second controller is out; tidy the 16 migrated legacy UDM policies.
+     move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed (user
+     may leave it out to save power when racked); tidy the 16 migrated
+     legacy UDM policies.
+     SAN 2026-11-11: user inserted the second control module (slot 0 =
+     secondary/standby, same FW V7.0.4, cache battery "low voltage" while
+     charging - recheck) and cabled it to switch port 26 -> set native
+     Storage VLAN 40 (port 31 = active controller eth3). Also a disk in
+     slot 8: "foreign" (old label), SMART ok - needs `member select eql1
+     disk select 8 clear-label` (wipes that disk) to join; ASK the user.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
   6. **Internal HTTPS - DONE 2026-11-11** (docs/internal-https.md):
      proxmox (no port needed), unifi, pbs, ha, idrac .lan.stoneyshome.com
@@ -60,6 +67,12 @@ NEW-only counters have run for several hours.**
     WPA2/WPA3 transition, PMF optional. IoT + Guest unchanged.
   - IoT devices took 5-20 min to rejoin after the channel change (HA
     unavailable 698 -> 757 -> recovering). Re-check; power-cycle laggards.
+  - Wi-Fi follow-up: 9 devices not back after the tuning: the 2 TVs, 2
+    tablets, laptop, watch (Obi-Wan - suspect the WPA2/WPA3 transition) and
+    Porch Kasa bulbs/plug/pool lights (suspect Porch LR 2.4 GHz ch 6).
+    Proposed revert: Obi-Wan back to WPA2 / PMF off, Porch LR 2.4 back to
+    ch 11 (awaiting the user's OK). HA SSH password login DISABLED
+    2026-11-11 (key only).
   - Physical faults (user): switch port 48 (U7 Ultra) and port 42 (Garage
     LR) link at 100 Mb/s - cable/jack; port 48 had ~2000 rx errors.
   - Also found: nightly UDM speed test fails ("Error"); the guest network
