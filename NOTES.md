@@ -709,7 +709,7 @@ Only rules scoped to them by name or tag apply.
       (about 400 MB/s); needs a storage switch or VLAN plus multipath. **Set up 2026-11-08:** password recovery (Ctrl-P → `EQL>` prompt,
       `setenv RESETPASSWORD 1`, `reload`), then `reset` (DeleteAllMyDataNow),
       then `setup`. Group `eqlgroup` at **10.10.1.31**, member `eql1` on
-      **eth3 10.10.1.30** (switch port 26 on USW Pro 48; eth0 has no link).
+      **eth3 10.10.1.30** (switch port 31 on USW Pro 48; eth0 has no link). **Moved 2026-11-11 to Storage VLAN 40: group 10.10.40.10, eth3 10.10.40.11, eth0 10.10.40.12; Proxmox 10.10.40.100 (vmbr0.40).** CLI over serial: `/usr/local/sbin/eql-cli` on Proxmox (password in root-only /root/.config/eql/pass).
       The grpadmin password is the user's (in their password manager; the
       temp file was shredded). Firmware V7.0.4; GUI is a Java applet.
       Disks: 15 × 1 TB SATA 7200 (Hitachi HUA722010CLA330 / Seagate

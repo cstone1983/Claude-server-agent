@@ -140,6 +140,29 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11 Phase 7 step 3 DONE (SAN to Storage VLAN 40), ~21:47-21:53,
+  file server offline ~6 min (user OK'd):
+  - Proxmox: `vmbr0.40` 10.10.40.100/24, no gateway (pve-net-apply; backup
+    /etc/network/interfaces.bak-20261110214718). Also `vmbr0.10`
+    10.10.10.15/23 added by the user in the GUI (no gateway yet) - the host
+    still has 10.10.1.15 + gateway 10.10.1.1 on vmbr0 (step 4 not done).
+  - EqualLogic over serial (`/usr/local/sbin/eql-cli`, password in root-only
+    /root/.config/eql/pass; or picocom on /dev/ttyUSB0 after
+    `EQL_STAY=1 eql-cli show`): group IP `grpparams group-ipaddress
+    10.10.40.10`, eth3 10.10.40.11/24, eth0 (no link) 10.10.40.12/24 - the SAN
+    refuses a member IP change unless one member port stays in the group IP's
+    subnet, so eth0 got a 40.x address first. Member def-gateway still
+    10.10.1.1 (unused). Volume `fileshare` access is by Proxmox's IQN, any
+    IP, so no ACL change.
+  - The SAN is on switch **port 31** (not 26 as an older note said): port 31
+    native Storage, tagged block_all. Undo: sw_port_overrides.before-san.json.
+  - Proxmox: storage.cfg `portal 10.10.40.10` (pvesm cannot change portal;
+    edited the file, backup /root/net-overhaul/storage.cfg.before-san); old
+    iSCSI node record deleted, session [2] to 10.10.40.10 (log: "standard
+    frame length"), LVM eql-fileshare active, VM 112 started, /srv/share
+    (XFS) mounted, Samba/Nextcloud OK, file backup run by hand OK.
+  - The policy denies scripts containing "shutdown": use
+    `qm shutdown <id>` as a plain command.
 - 2026-11-11 Phase 7 step 2 DONE early: iDRAC on Servers, 10.10.10.10 /
   255.255.254.0, gateway + DNS 10.10.10.1 (user set IP + DNS in the iDRAC UI;
   the gateway was missed at first and set from the Proxmox host with

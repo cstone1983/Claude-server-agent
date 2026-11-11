@@ -8,6 +8,7 @@ one CLI command, prints the output, logs out.
 
     eql-cli "show member eql1" "volume show"
     EQL_USER=grpadmin EQL_DEV=/dev/ttyUSB0 eql-cli ...
+    EQL_STAY=1 eql-cli "show"   # log in and stay logged in (then use picocom)
 
 Serial survives IP changes, which is why IP changes go through here and not SSH.
 """
@@ -18,6 +19,8 @@ USER = os.environ.get("EQL_USER", "grpadmin")
 PASSFILE = "/root/.config/eql/pass"
 # The prompt (e.g. "eqlgroup> ") can follow \r, \n or a banner; match it at the end.
 PROMPT = re.compile(rb"[\w.-]+(\([^)]*\))?>\s*$")
+# A bare login prompt at the end (not "Last login: ..." in the banner).
+LOGIN = re.compile(rb"(^|[\r\n])login: ?$")
 
 def open_port():
     fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
@@ -58,14 +61,14 @@ def main():
     pw = open(PASSFILE).read().strip()
     fd = open_port()
     os.write(fd, b"\r")
-    buf, hit = read_until(fd, [b"login:", PROMPT], 10)
-    if hit == b"login:":
+    buf, hit = read_until(fd, [LOGIN, PROMPT], 10)
+    if hit is LOGIN:
         send(fd, USER)
         buf, hit = read_until(fd, [b"assword:"], 10)
         if not hit:
             sys.exit("no password prompt")
         send(fd, pw)
-        buf, hit = read_until(fd, [PROMPT, b"Login incorrect", b"login:"], 30)
+        buf, hit = read_until(fd, [PROMPT, b"Login incorrect", LOGIN], 30)
         if hit is not PROMPT:
             sys.exit("login failed; SAN said: " + repr(buf.decode("utf-8", "replace").replace(pw, "<redacted>")[-300:]))
     elif hit is None:
@@ -80,8 +83,14 @@ def main():
         print(f"### {c}\n{text.strip()}\n")
         if hit is None:
             print("(no prompt after 120 s)"); rc = 1; break
+    if os.environ.get("EQL_STAY"):  # leave the console logged in (for picocom)
+        os.close(fd)
+        sys.exit(rc)
     send(fd, "logout")
-    time.sleep(1)
+    _, hit = read_until(fd, [b"(y/n)"], 5)
+    if hit:
+        send(fd, "y")
+    read_until(fd, [LOGIN], 5)
     os.close(fd)
     sys.exit(rc)
 
