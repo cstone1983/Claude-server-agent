@@ -20,6 +20,16 @@ addresses. Nothing is opened to the internet.
 
 ## Decisions
 
+- **Two kinds of names** (2026-11-11, the user wants these names for SSH
+  too): machine names `<host>.lan.stoneyshome.com` (proxmox, n8n,
+  homeassistant, fileserver, finance, recipes, solar, cpushare, idrac)
+  point at each server's own IP - for SSH/PuTTY, SMB and anything not
+  proxied. Web names (e.g. `ha.`, `files.`, `n8n-ui.` ... `.lan.stoneyshome.com`)
+  point at the Traefik proxy and carry the wildcard certificate. Proxmox's
+  own ACME cert uses its machine name directly (no proxy). A browser on a
+  machine name of a proxied service would hit the service's own (untrusted)
+  cert - use the web name in browsers.
+
 - **Proxy** (user's decision 2026-11-09): the existing **Traefik on the n8n
   VM** (compose in /home/stonec/n8n-compose; today it serves only
   n8n.stoneyshome.com, entrypoints :80/:443, docker provider, a TLS-challenge

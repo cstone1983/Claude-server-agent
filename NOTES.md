@@ -33,6 +33,13 @@ observe-log review.**
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed and
      the second controller is out; tidy the 16 migrated legacy UDM policies.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
+  6. **Internal HTTPS (user: probably tomorrow)** - docs/internal-https.md.
+     Needs from the user: a Cloudflare API token (Edit zone DNS,
+     stoneyshome.com only) in a root-only file on n8n. Use two kinds of
+     names: machine names `<host>.lan.stoneyshome.com` -> the server's own
+     IP (SSH/PuTTY, SMB) and web names -> the Traefik proxy on n8n. (The user
+     tried SSH to n8n.stoneyshome.com - that is the public Cloudflare name,
+     web only.)
 - **Backups:** old 23:30 vzdump job DISABLED 2026-11-11. Nightly: 21:30 PBS
   (all 9 VMs; 2026-11-11 run OK), 22:15 file server files, 23:00 off-site
   sync to Google Drive (first full copy done 2026-11-10).
