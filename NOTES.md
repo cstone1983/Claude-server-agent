@@ -61,6 +61,23 @@ NEW-only counters have run for several hours.**
   only when the user says; keep notes updated; recommendations rather than
   option lists.
 
+## Secrets and where they live (never in chat or in this repo)
+
+- **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
+  user; permission: DNS Edit on zone stoneyshome.com only; no expiration;
+  no IP filter). Stored root-only (0600) as **`/root/cf-dns-token`** on
+  **Proxmox** and on **n8n**. Used for Let's Encrypt DNS-01 certificates
+  (`*.lan.stoneyshome.com`: Traefik on n8n, Proxmox ACME). Reuse it for any
+  other service that needs a certificate or Cloudflare DNS changes: copy the
+  file as root (e.g. `install -m 600`), never print it. Revoke/rotate in
+  Cloudflare -> My Profile -> API Tokens, then rewrite both files (and the
+  Proxmox ACME plugin, which keeps its own copy).
+- **EqualLogic SAN grpadmin password**: `/root/.config/eql/pass` on Proxmox
+  (used by `/usr/local/sbin/eql-cli`); the user's password manager.
+- **UniFi local admin**: `/root/.config/unifi/.env` on n8n (`unifi` helper).
+- **Backup alert token**: `/etc/backup-report.conf` on Proxmox.
+- **Thermostat MQTT**: `/etc/thermostat.env` on the Pi.
+
 ## What exists
 
 - **csa-hub** runs on the **n8n** VM (10.10.11.102 since 2026-11-11; was 10.10.1.86).
