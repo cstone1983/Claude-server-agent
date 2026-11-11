@@ -12,7 +12,7 @@ TARGETS=(
   "fileserver SMB     fileserver.localdomain 445"
   "fileserver web     fileserver.localdomain 80"
   "Recipes web        recipes.localdomain 80"
-  "Proxmox UI         10.10.1.15 8006"
+  "Proxmox UI         10.10.10.15 8006"
   "solar Postgres     127.0.0.1 5432"
   "solar PG relay     127.0.0.1 5433"
   "internet           1.1.1.1 443"

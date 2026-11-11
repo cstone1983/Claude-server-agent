@@ -140,6 +140,17 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11 21:56 Phase 7 step 4 DONE: the Proxmox host's management is on
+  Servers - vmbr0 `inet manual` (no address; still the bridge for the VMs),
+  vmbr0.10 10.10.10.15/23 gateway 10.10.10.1, vmbr0.40 10.10.40.100/24.
+  pve-net-apply OK after 0 s (its health check now reads the gateway after
+  the change). /etc/hosts `10.10.10.15 starwars.local starwars`, resolv.conf
+  nameserver 10.10.10.1, /etc/issue, UDM reservation + DNS `proxmox` ->
+  10.10.10.15, net-check target. Backups of hosts/resolv.conf in
+  /root/net-overhaul/, interfaces backup /etc/network/interfaces.bak-20261110215638.
+  Verified: SAN session, storages, 9 VMs, desktops on Main, hub. The UI is
+  now https://10.10.10.15:8006. NOT yet done: the Proxmox login allow-list
+  (VMs on Servers can reach 8006/22 directly) and the iDRAC IP Blocking.
 - 2026-11-11 Phase 7 step 3 DONE (SAN to Storage VLAN 40), ~21:47-21:53,
   file server offline ~6 min (user OK'd):
   - Proxmox: `vmbr0.40` 10.10.40.100/24, no gateway (pve-net-apply; backup

@@ -17,10 +17,13 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && { DRY=1; shift; }
 NEW=${1:?usage: pve-net-apply [--dry-run] <new-interfaces-file> [timeout-s]}
 TIMEOUT=${2:-120}
 CUR=/etc/network/interfaces LOG=/var/log/pve-net-apply.log RES=/run/pve-net-apply.result
-GW=$(ip route show default | awk '{print $3; exit}')
+GW=$(ip route show default | awk '{print $3; exit}')   # before the change (for the log)
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+# The gateway is read again on every check, so a change that moves the default
+# gateway (e.g. to another VLAN) is judged by the NEW gateway.
 healthy() {
-  ping -c1 -W2 "$GW" >/dev/null 2>&1 &&
+  local gw; gw=$(ip route show default | awk '{print $3; exit}')
+  [ -n "$gw" ] && ping -c1 -W2 "$gw" >/dev/null 2>&1 &&
   curl -s -o /dev/null -m 10 https://agents.stoneyshome.com/
 }
 
