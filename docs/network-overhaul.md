@@ -149,8 +149,20 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
   10.10.10.15, net-check target. Backups of hosts/resolv.conf in
   /root/net-overhaul/, interfaces backup /etc/network/interfaces.bak-20261110215638.
   Verified: SAN session, storages, 9 VMs, desktops on Main, hub. The UI is
-  now https://10.10.10.15:8006. NOT yet done: the Proxmox login allow-list
-  (VMs on Servers can reach 8006/22 directly) and the iDRAC IP Blocking.
+  now https://10.10.10.15:8006.
+- 2026-11-11 22:0x Proxmox login allow-list ON: cluster.fw `policy_in: DROP` +
+  `[IPSET management]` = 10.10.1.0/24, 192.168.3.0/24 (overrides the
+  automatic management set, which would have been the whole Servers /23);
+  host.fw enable 1, IN ACCEPT from +management on 8006, 22, 8007, 5900:5999,
+  3128; ICMP from anywhere. Tested: n8n (Servers) blocked on 8006/22, ping
+  OK; Anthony's desktop (Main) gets 8006/22; SAN, PBS, hub unaffected.
+  Rollback: set `enable: 0` in /etc/pve/nodes/starwars/host.fw (or from the
+  iDRAC console); backups /root/net-overhaul/{cluster,host}.fw.bak.
+  `pve-firewall status` keeps saying "pending changes" though the rules are
+  live (iptables checked). Still open: iDRAC IP Blocking (user, later).
+- 2026-11-11 old 23:30 vzdump job (backup-79526ae3-5f24, local storage
+  "backups") DISABLED; the 21:30 PBS job + 23:00 off-site sync are the
+  backups now. Tonight's 21:30 run: OK.
 - 2026-11-11 Phase 7 step 3 DONE (SAN to Storage VLAN 40), ~21:47-21:53,
   file server offline ~6 min (user OK'd):
   - Proxmox: `vmbr0.40` 10.10.40.100/24, no gateway (pve-net-apply; backup

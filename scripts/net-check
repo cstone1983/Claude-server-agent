@@ -12,7 +12,6 @@ TARGETS=(
   "fileserver SMB     fileserver.localdomain 445"
   "fileserver web     fileserver.localdomain 80"
   "Recipes web        recipes.localdomain 80"
-  "Proxmox UI         10.10.10.15 8006"
   "solar Postgres     127.0.0.1 5432"
   "solar PG relay     127.0.0.1 5433"
   "internet           1.1.1.1 443"
@@ -24,6 +23,9 @@ for t in "${TARGETS[@]}"; do
   read -r -a f <<< "$t"; port=${f[-1]}; host=${f[-2]}; name=${t%%"$host"*}
   if tcp "$host" "$port"; then echo "ok    $name$host:$port"; else echo "FAIL  $name$host:$port"; fail=$((fail+1)); fi
 done
+# Proxmox only lets Main/VPN reach 8006/22 (its allow-list), so from here: ping only.
+if ping -c1 -W2 10.10.10.15 >/dev/null 2>&1; then echo "ok    Proxmox host (ping) 10.10.10.15"
+else echo "FAIL  Proxmox host (ping) 10.10.10.15"; fail=$((fail+1)); fi
 if getent hosts fileserver.localdomain >/dev/null; then echo "ok    DNS name fileserver.localdomain -> $(getent hosts fileserver.localdomain | cut -d' ' -f1)"
 else echo "FAIL  DNS name fileserver.localdomain"; fail=$((fail+1)); fi
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://agents.stoneyshome.com/ || true)
