@@ -293,8 +293,8 @@ ports on the servers and the SAN being brought into use):
 | Range | Use |
 |---|---|
 | .2-.9 | network gear management, if it ever moves off Main |
-| .10-.19 | out-of-band consoles: iDRAC of the R630 .10, next server .11, ... |
-| .20-.29 | hypervisor hosts, management address: R630 (Proxmox) .20, next host .21, ... |
+| .10-.14 | out-of-band consoles: iDRAC of the R630 .10, next server .11, ... |
+| .15-.29 | hypervisor hosts, management address: R630 (Proxmox) .15, next host .16, ... (same last number as on Main) |
 | .30-.49 | extra host interfaces that need their own address (backup/migration ports, a second management port) |
 | .50-.199 | other infrastructure: PBS if it ever runs separately, appliances, NAS, more hosts' extra ports, spare |
 | .200-.249 | DHCP pool (temporary / new devices) |
@@ -473,7 +473,7 @@ while the hub is down.
 | 103 Home Assistant | .116 -> 10.10.11.103 | n8n "Homelab Agent" workflow (.116:8123) and the n8n credentials "Home Assistant account", "HA Token", "HA Token 2" (-> `homeassistant`); RPi5 thermostat MQTT broker address; Shelly Gen1 CoIoT peer; HA's own internal URL; Ollama (laptop) rule 6 |
 | 102 n8n / hub | .86 -> 10.10.11.102 | Cloudflare n8n route (localhost first, pre-flight 4); Solar-Calc `database.json`/`.env` and `SettingsPanel.jsx` (.86:5432 -> `n8n`); the `solar-pg-lan` container is published on `10.10.1.86:5432` -> rebind to the new IP (or 0.0.0.0, the source `range=` still limits it); n8n credentials "SSH Password account" and "SSH n8n" (host .86 -> `n8n` or 127.0.0.1); the `unifi` helper keeps using 10.10.1.1 (the UDM answers on every network's gateway) |
 | 104 CPU-Share | .133 -> 10.10.20.104 (DMZ, Phase 4) | 6 Akash port forwards; Proxmox VM firewall `/etc/pve/firewall/104.fw` (10.10.1.133, 10.10.1.0/24); k3s config/service, ufw and Akash inventory on the VM |
-| Proxmox host | .15 -> 10.10.10.20 (Phase 7) | see "Proxmox, iDRAC and Storage" |
+| Proxmox host | .15 -> 10.10.10.15 (Phase 7) | see "Proxmox, iDRAC and Storage" |
 
 ### Devices before Home Assistant moves
 
@@ -503,7 +503,9 @@ unavailable integrations; one Telegram test message from n8n.
 
 Decision 2026-11-09: no separate management VLAN. The Proxmox host and the
 iDRAC join the Servers VLAN in the infrastructure range (Proxmox
-10.10.10.20, iDRAC 10.10.10.10). The SAN gets a separate
+10.10.10.15, iDRAC 10.10.10.10 - decided 2026-11-11: they keep the same
+last number as on Main, 10.10.1.15 / 10.10.1.10; exactly the same IPs are
+not possible on another VLAN). The SAN gets a separate
 non-routed storage VLAN (40, 10.10.40.0/24), so iSCSI never crosses the UDM.
 
 Because traffic inside one VLAN never passes the UDM, the VMs (several of them
@@ -532,10 +534,10 @@ Order (one window, iDRAC console open as the fallback):
    serial console as fallback), point `storage.cfg`/iSCSI at
    10.10.40.10, re-login the session. File server (VM 112) stopped during this step: its data disk is on the SAN.
 4. Proxmox host: move its address from vmbr0 to a VLAN 10 interface on the
-   VLAN-aware bridge (10.10.10.20, gateway 10.10.10.1); update `/etc/hosts`,
+   VLAN-aware bridge (10.10.10.15, gateway 10.10.10.1); update `/etc/hosts`,
    `/etc/issue`, the DNS name `proxmox` and the net-check targets. VMs are not
    affected (their VLAN tags do not change). Rollback: iDRAC console, restore
    `/etc/network/interfaces` from the copy taken first, `ifreload -a`.
 5. Verify: hub shows the Proxmox agent online, PBS jobs and the off-site sync
    run, backup reports reach n8n, Proxmox UI and iDRAC open from a PC and do
-   NOT open from a VM (e.g. `curl -k https://10.10.10.20:8006` from n8n fails).
+   NOT open from a VM (e.g. `curl -k https://10.10.10.15:8006` from n8n fails).
