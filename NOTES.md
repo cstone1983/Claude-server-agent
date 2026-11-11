@@ -8,18 +8,20 @@ usage in [README.md](README.md).
 
 - **Network overhaul: about to start evening 1** (runbook: docs/network-overhaul.md,
   "Final runbook"). User took a fresh UDM backup 2026-11-11. Step 0 checks
-  (net-check, last night's backups, nothing running) were started; step 1
+  (net-check 12/12 OK, no backup running at 19:53 on 2026-11-10 Proxmox time)
+  done; step 1
   (zones + rules) NOT started yet. Nothing in the overhaul has changed since
   the prep. **Decision 2026-11-11: TVs stay on Main** (LG bedroom TV 10.10.1.204,
   TLC Google TV 10.10.1.225); user may move them after the overhaul. So: skip
   evening-1 step 4, and in evening 2, before HA moves, add a narrow rule
   HA (Servers) -> those TVs (LG webOS 3000/3001, Android TV remote 6466/6467,
   cast 8008/8009) in addition to rule 6 (laptop Ollama).
-- **Off-site backup:** first full PBS -> Google Drive copy was at 81.8 GiB of
-  ~120 GB on 2026-11-10 05:00; its speed limit was lifted for that run only
-  (rclone SIGUSR2). 471 chunks were skipped in a UDM DNS outage 02:35-02:39
-  (retried at the end of the run / next night). To do: confirm the run ended
-  OK (/var/lib/pbs-offsite-sync.status), then disable the old 23:30 vzdump job
+  Timing: nightly VM backup 21:30, file server 22:15, off-site 23:00 - do the
+  Proxmox bridge step (blips all VMs) before 21:30 or after the backups.
+- **Off-site backup: first full copy DONE** - "OK 2026-11-10 10:39 PBS
+  datastore (120G) synced to Google Drive in 1037 min" (speed limit was lifted
+  for that run only via rclone SIGUSR2; the 471 chunks skipped in the UDM DNS
+  outage 02:35-02:39 were picked up by the retry). Next: disable the old 23:30 vzdump job
   (backup-79526ae3-5f24) and later delete the old per-VM Drive folders; add
   `--fast-list` to pbs-offsite-sync.
 - **Game server for Anthony (planned, not started):** Pelican panel + Wings +
