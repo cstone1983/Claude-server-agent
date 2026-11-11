@@ -7,7 +7,9 @@ usage in [README.md](README.md).
 ## Current state and next steps (2026-11-11 night, after the network overhaul)
 
 **Tomorrow: recap with the user what is left (list below), starting with the
-observe-log review.**
+observe-log review. First check last night's backups on the new network:
+22:15 file server (/var/lib/pve-fileserver-backup.status) and 23:00 off-site
+sync (pbs-offsite-sync status/log) - the first runs after the moves.**
 
 - **Network overhaul: all moves DONE 2026-11-11** (details and rollback info:
   docs/network-overhaul.md, status lines at the top of "Final runbook").
