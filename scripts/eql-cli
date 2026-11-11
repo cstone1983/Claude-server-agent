@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""eql-cli: run commands on the EqualLogic SAN over its serial console.
+
+Runs on the Proxmox host (USB-serial adapter + null-modem cable into the SAN's
+active control module). Logs in as grpadmin with the password from the
+root-only file /root/.config/eql/pass (never printed), runs each argument as
+one CLI command, prints the output, logs out.
+
+    eql-cli "show member eql1" "volume show"
+    EQL_USER=grpadmin EQL_DEV=/dev/ttyUSB0 eql-cli ...
+
+Serial survives IP changes, which is why IP changes go through here and not SSH.
+"""
+import os, sys, termios, time, tty, re
+
+DEV = os.environ.get("EQL_DEV", "/dev/ttyUSB0")
+USER = os.environ.get("EQL_USER", "grpadmin")
+PASSFILE = "/root/.config/eql/pass"
+# The prompt (e.g. "eqlgroup> ") can follow \r, \n or a banner; match it at the end.
+PROMPT = re.compile(rb"[\w.-]+(\([^)]*\))?>\s*$")
+
+def open_port():
+    fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
+    tty.setraw(fd)
+    a = termios.tcgetattr(fd)
+    a[4] = a[5] = termios.B9600
+    a[2] &= ~(termios.PARENB | termios.CSTOPB | termios.CRTSCTS)
+    a[2] |= termios.CS8 | termios.CLOCAL | termios.CREAD
+    termios.tcsetattr(fd, termios.TCSANOW, a)
+    os.set_blocking(fd, False)
+    return fd
+
+def read_until(fd, pats, timeout):
+    buf, end = b"", time.time() + timeout
+    while time.time() < end:
+        try:
+            chunk = os.read(fd, 4096)
+        except BlockingIOError:
+            chunk = b""
+        if chunk:
+            buf += chunk
+            if b"Press any key" in buf[-80:]:
+                os.write(fd, b" ")
+            for p in pats:
+                if (p.search(buf) if hasattr(p, "search") else p in buf[-200:]):
+                    return buf, p
+        else:
+            time.sleep(0.1)
+    return buf, None
+
+def send(fd, s):
+    os.write(fd, s.encode() + b"\r")
+
+def main():
+    cmds = sys.argv[1:]
+    if not cmds:
+        sys.exit(__doc__)
+    pw = open(PASSFILE).read().strip()
+    fd = open_port()
+    os.write(fd, b"\r")
+    buf, hit = read_until(fd, [b"login:", PROMPT], 10)
+    if hit == b"login:":
+        send(fd, USER)
+        buf, hit = read_until(fd, [b"assword:"], 10)
+        if not hit:
+            sys.exit("no password prompt")
+        send(fd, pw)
+        buf, hit = read_until(fd, [PROMPT, b"Login incorrect", b"login:"], 30)
+        if hit is not PROMPT:
+            sys.exit("login failed; SAN said: " + repr(buf.decode("utf-8", "replace").replace(pw, "<redacted>")[-300:]))
+    elif hit is None:
+        sys.exit("no answer from the SAN console on " + DEV)
+    send(fd, "cli-settings paging off")
+    read_until(fd, [PROMPT], 15)
+    rc = 0
+    for c in cmds:
+        send(fd, c)
+        out, hit = read_until(fd, [PROMPT], 120)
+        text = out.decode("utf-8", "replace").replace(pw, "<redacted>").replace("\r", "")
+        print(f"### {c}\n{text.strip()}\n")
+        if hit is None:
+            print("(no prompt after 120 s)"); rc = 1; break
+    send(fd, "logout")
+    time.sleep(1)
+    os.close(fd)
+    sys.exit(rc)
+
+if __name__ == "__main__":
+    main()
