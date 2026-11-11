@@ -1,0 +1,23 @@
+#!/bin/bash
+# vm-health: read-only health summary of one Linux server/VM (updates, reboot,
+# disks, failed services, containers). Same script on every server with the
+# agent; the scheduled checks run it on "all". One line per check:
+# "OK|WARN|ALERT <area>: <text>" prefixed with the host name. Changes nothing.
+# Installed as /usr/local/sbin/vm-health.
+export LC_ALL=C
+h=$(hostname -s)
+say() { echo "$1 $h $2: $3"; }
+
+n=$(apt list --upgradable 2>/dev/null | grep -c upgradable)
+sec=$(apt list --upgradable 2>/dev/null | grep -c -- '-security')
+if [ "$n" -gt 0 ]; then say WARN updates "$n package update(s)$([ "$sec" -gt 0 ] && echo ", $sec security")"; else say OK updates "no package updates"; fi
+[ -f /var/run/reboot-required ] && say WARN system "reboot required ($(cat /var/run/reboot-required.pkgs 2>/dev/null | head -3 | tr '\n' ' '))"
+df -P -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs 2>/dev/null | awk 'NR>1 {gsub("%","",$5); if ($5>=95) l="ALERT"; else if ($5>=85) l="WARN"; else next; print l" '"$h"' storage: "$6" "$5"% used"}'
+say OK storage "root $(df --output=pcent / | tail -1 | tr -d ' ') used"
+f=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+[ -n "$f" ] && say WARN system "failed services: $f"
+if command -v docker >/dev/null 2>&1; then
+  bad=$(docker ps -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -E 'Exited|Restarting|unhealthy|Dead' | grep -v 'Exited (0)' | tr '\n' ';')
+  [ -n "$bad" ] && say WARN containers "$bad"
+fi
+say OK system "up $(( $(cut -d. -f1 /proc/uptime) / 86400 ))d, load $(cut -d' ' -f1 /proc/loadavg)"
