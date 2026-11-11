@@ -46,6 +46,14 @@ addresses. Nothing is opened to the internet.
   min or HA reverts). Read them with ws command `http/config`. Trusted
   proxies now: 172.30.32.0/23, 127.0.0.1/32, ::1/128, 10.10.11.102/32.
   ha.lan verified (200, trusted cert) and the user uses it.
+- 2026-11-11 **https://proxmox.lan.stoneyshome.com without :8006**: on the
+  Proxmox host, systemd unit `pve-https-redirect.service` adds
+  `iptables -t nat -A PREROUTING -d 10.10.10.15/32 -p tcp --dport 443 -j
+  REDIRECT --to-ports 8006` at boot (stop = rule removed). The firewall
+  allow-list (8006 from Main + VPN) still applies; VMs on Servers stay
+  blocked. Works from the user's PC. Does NOT work from VMs on this same
+  host (e.g. Anthony's desktop on Main: the reply crosses the same bridge
+  twice) - they use :8006.
 - Not proxied (already trusted HTTPS via their public Cloudflare names):
   Nextcloud (overwritehost nextcloud.stoneyshome.com - a lan name would
   just redirect), n8n, Recipes, Finance.
