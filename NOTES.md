@@ -448,6 +448,14 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **Per-VM firewalls (user's question 2026-11-11).** The UDM only
+      filters BETWEEN VLANs; the VMs on Servers can reach each other freely.
+      Plan: Proxmox VM firewalls (filtered at the bridge, so they work inside
+      one VLAN and can't be turned off from inside a compromised VM), one
+      allow-list per VM: inventory listening ports per VM, decide who needs
+      each, log-first (policy ACCEPT + log) for a day, then DROP. Start with
+      the internet-facing ones (n8n/hub, Recipes, Fiance, Nextcloud).
+      Optional extra inside each VM: ufw. CPU-Share already has one (104.fw).
 - [ ] **Network overhaul: enforce the blocks** after reviewing the observe
       logs (IoT, Cameras, Servers, DMZ); keep allow rules above the blocks
       (the "HA to TVs on Main" rule was added after the observe rule). Then
