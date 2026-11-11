@@ -140,6 +140,15 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11 Phase 7 step 2 DONE early: iDRAC on Servers, 10.10.10.10 /
+  255.255.254.0, gateway + DNS 10.10.10.1 (user set IP + DNS in the iDRAC UI;
+  the gateway was missed at first and set from the Proxmox host with
+  `ipmitool lan set 1 defgw ipaddr 10.10.10.1` / `netmask 255.255.254.0` -
+  ipmitool is now installed on Proxmox for exactly this). Switch port 19
+  native Servers, tagged block_all (undo: sw_port_overrides.before-idrac.json
+  on n8n). https://10.10.10.10 answers. Still open: iDRAC IP Blocking
+  (10.10.1.0/24) - until then the VMs on Servers can reach its login; the
+  `idrac` DNS record points at 10.10.10.10 but does not resolve.
 - 2026-11-11 EVENING 2 DONE the same night (20:39-21:05, before the 21:30
   backup). All VMs on Servers VLAN 10, verified, net-check 14/14, HA back to
   its baseline (698 unavailable). Helper `/root/net-overhaul/vmres.sh` on
