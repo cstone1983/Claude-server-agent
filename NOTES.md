@@ -448,6 +448,18 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **Network overhaul: enforce the blocks** after reviewing the observe
+      logs (IoT, Cameras, Servers, DMZ); keep allow rules above the blocks
+      (the "HA to TVs on Main" rule was added after the observe rule). Then
+      remove the old IPs from the OBJ groups. All VMs moved 2026-11-11.
+- [ ] **Collabora (Nextcloud office) not working** - the built-in CODE
+      server stays "starting"; discovery has returned 503 every hour since
+      at least 2026-11-10 (before the network move). wopi_url is now
+      http://fileserver.localdomain/apps/richdocumentscode/proxy.php?req=.
+- [ ] **UDM DNS records `proxmox` and `idrac` don't resolve** (the others
+      do). Recreate or check for a name clash.
+- [ ] **Change the Solar read-only DB password** (`solar_ro`): it was
+      printed in a tool output during the move (LAN-only, read-only user).
 - [ ] **Future project: one home portal + single sign-on** (user's idea,
       2026-11-10). There are now many separate dashboards, each with its own
       login: Proxmox, PBS, iDRAC, UniFi, Home Assistant, n8n, Nextcloud, the

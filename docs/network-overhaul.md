@@ -140,6 +140,39 @@ DMZ), removes old IPs from the objects, cleans stale reservations.
 
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11 EVENING 2 DONE the same night (20:39-21:05, before the 21:30
+  backup). All VMs on Servers VLAN 10, verified, net-check 14/14, HA back to
+  its baseline (698 unavailable). Helper `/root/net-overhaul/vmres.sh` on
+  n8n (reserve <mac> <ip> <name> / dns <key> <ip>); each VM's reservation
+  was changed right before its move (a VM still on Main with a Servers
+  reservation would get a random Main IP at its next renewal).
+  - 107 Recipies 10.10.11.107, 111 Fiance 10.10.11.111 (OK after 7 s each).
+  - 100 Solar-Calc 10.10.11.100: new relay container `solar-pg-lan5433` on
+    n8n (0.0.0.0:5433, range=10.10.11.100/32); Solar-Calc
+    ~/.solar-calc/config/database.json -> n8n.localdomain:5433 (backup kept),
+    container restarted; old `solar-pg-lan` removed (its config saved in
+    /root/net-overhaul/solar-pg-lan.old.txt); n8n "Solar Bill Intake" Get
+    Queue -> http://10.10.11.100:8080 (published).
+  - 110 Autopilot (stopped): reservation 10.10.11.110 + tag only.
+  - 103 HA 10.10.11.103: HAOS did not renew DHCP on the link pulse; the
+    script's guest-agent renew got it there after 129 s. Rule "HA to TVs on
+    Main" (3000/3001, 6466/6467, 8008/8009) added - it sits AFTER the
+    Servers->Internal observe rule (index 10002): when enforcing, make sure
+    the allows stay above the block. Thermostat Pi follows the DNS name
+    (env file), reconnected by itself. Shelly Gen1 has no CoIoT peer set.
+  - 102 n8n/hub 10.10.11.102: hub back after 7 s. Nothing on n8n was bound to
+    the old IP. Backup alerts use the public n8n URL.
+  - 112 fileserver 10.10.11.112: Samba `interfaces = lo 10.10.10.0/23`
+    (smb.conf backup kept), Nextcloud trusted_domains + 10.10.11.112,
+    richdocuments wopi_url -> http://fileserver.localdomain/... . Collabora
+    (built-in CODE) was already failing before the move (hourly 503 in the
+    Nextcloud log all day) - separate fix.
+  - DNS: all records updated (cpushare -> 10.10.20.104). `proxmox` and
+    `idrac` records do NOT resolve at all (not new) - fix separately.
+  - n8n caches DNS briefly: `resolvectl flush-caches` after a DNS change.
+  - net-check now uses the DNS names (Proxmox by IP until its record works).
+  - Still to do: enforce the blocks after the log review; remove the old IPs
+    from the OBJ groups; Proxmox/iDRAC/SAN (Phase 7).
 - 2026-11-11 step 6 DONE: CPU-Share (VM 104) on DMZ VLAN 20, 10.10.20.104
   (reservation, vm-net-move OK after 7 s). 104.fw: ipfilter 10.10.20.104
   only, DHCP rule -> 10.10.20.1. 6 Akash port forwards -> 10.10.20.104.
