@@ -137,9 +137,10 @@ NEW-only counters have run for several hours.**
   from other workflows (text, level, source) or via a keyed POST webhook.
   Webhook path + key in `/root/.config/server-notify/env` on n8n (root-only);
   helper `/usr/local/bin/server-notify <ok|info|warn|alert> <source> <text|->`
-  (scripts/server-notify). Plan: daily quick check 05:00 Sun-Fri (message only
-  on major problems), weekly deep dive Saturday 08:00 (always a report), both
-  as scheduled fresh sessions; move server alerts (backup reports) here too.
+  (scripts/server-notify). Scheduled checks: docs/server-checks.md (prompts,
+  pre-approved hub rules, scripts). The user creates the two tasks in the
+  Claude app (tasks created by Claude can't carry connectors). Still to do:
+  move other server alerts (backup reports) to this bot.
 
 - **SSH into Home Assistant** (Terminal & SSH add-on, port 22): key
   `/root/.ssh/ha_ssh` on n8n (root-only); the add-on accepts it only
