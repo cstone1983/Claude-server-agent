@@ -35,9 +35,9 @@ NEW-only counters have run for several hours.**
      move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed and
      the second controller is out; tidy the 16 migrated legacy UDM policies.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
-  6. **Internal HTTPS - mostly DONE 2026-11-11** (docs/internal-https.md):
-     proxmox/unifi/pbs/ha .lan.stoneyshome.com work with trusted certs.
-     Open: iDRAC name setting (user) then idrac.lan; roll the Cloudflare
+  6. **Internal HTTPS - DONE 2026-11-11** (docs/internal-https.md):
+     proxmox (no port needed), unifi, pbs, ha, idrac .lan.stoneyshome.com
+     all work with trusted certs. Open: roll the Cloudflare
      token (first ~30 chars were printed once); move the public n8n
      router to the cfdns resolver; remove the HA SSH add-on's password;
      UDM encrypted DNS upstream + rule "DNS only via the UDM" (with the

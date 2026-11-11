@@ -58,8 +58,7 @@ addresses. Nothing is opened to the internet.
   DNS iDRAC Name `idrac` + static domain `lan.stoneyshome.com` (its host
   header check then accepts the name); proxy passes the Host through
   again; middleware `idrac-root` redirects the bare "/" (which the iDRAC
-  redirects to its IP) to /start.html. Virtual console via the proxy: to be
-  confirmed by the user.
+  redirects to its IP) to /start.html. User confirmed it works securely.
 - Not proxied (already trusted HTTPS via their public Cloudflare names):
   Nextcloud (overwritehost nextcloud.stoneyshome.com - a lan name would
   just redirect), n8n, Recipes, Finance.
