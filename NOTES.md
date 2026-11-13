@@ -50,8 +50,14 @@ NEW-only counters have run for several hours.**
      Storage VLAN 40 (port 31 = active controller eth3). Disk in slot 8
      (old "foreign" label from another array): user OK'd, label cleared
      2026-11-11 17:00 -> now a hot SPARE (2 spares: slots 8 + 15; RAID 6
-     set unchanged at 14 disks, 10.47 TB). Recheck later whether the array
-     grows the set on its own.
+     set unchanged at 14 disks, 10.47 TB). UPDATE 2026-11-13: the array DID grow on its own
+     (11-11 17:00, 14 -> 15 disks RAID 6, using slot 15 + disk 8). 11-12
+     18:03 the SAN predicted disk 8 would fail, copied it to slot 15
+     (done 20:55) and marked DISK 8 FAILED; expansion finished 11-13 04:32,
+     then parity verify. Now: 15 disks RAID 6, 11.34 TB, 0 SPARES (SAN
+     warns "More spare drives are expected"), data fine, no I/O errors.
+     To do (user): pull disk 8 (bad drive; it also flapped on 11-08) and
+     insert a replacement 1 TB SATA -> becomes the spare.
   5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
   6. **Internal HTTPS - DONE 2026-11-11** (docs/internal-https.md):
      proxmox (no port needed), unifi, pbs, ha, idrac .lan.stoneyshome.com
