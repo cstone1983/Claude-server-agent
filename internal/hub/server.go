@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -33,6 +34,7 @@ type Hub struct {
 	releases *releaseWatcher
 	sess     *sessions
 	metrics  *metricsStore
+	replica  *replica
 	// testSend replaces sending to an agent in tests.
 	testSend func(*agentConn, proto.Envelope) error
 }
@@ -46,7 +48,7 @@ func New(cfg *Config) (*Hub, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Hub{
+	h := &Hub{
 		cfg: cfg, store: st, audit: al,
 		reg:      &registry{conns: map[string]*agentConn{}},
 		appr:     &approvals{m: map[string]*Approval{}},
@@ -55,7 +57,19 @@ func New(cfg *Config) (*Hub, error) {
 		releases: newReleaseWatcher(),
 		metrics:  &metricsStore{m: map[string]*serverMetrics{}},
 		sess:     &sessions{store: st, ttl: time.Duration(cfg.DashboardSessionHours) * time.Hour},
-	}, nil
+	}
+	rep, err := newReplica(h, cfg.Replica)
+	if err != nil {
+		return nil, err
+	}
+	h.replica = rep
+	if len(cfg.Replica.TrustedProxies) > 0 {
+		trustedProxies = map[string]bool{}
+		for _, ip := range cfg.Replica.TrustedProxies {
+			trustedProxies[strings.TrimSpace(ip)] = true
+		}
+	}
+	return h, nil
 }
 
 const instructions = `This connector controls the user's Linux servers through Claude Server Agent.
@@ -107,7 +121,7 @@ func (h *Hub) hostGuard(next http.Handler) http.Handler {
 		if x, _, err := net.SplitHostPort(host); err == nil {
 			hn = x
 		}
-		if host != public && hn != "localhost" && hn != "127.0.0.1" && hn != "::1" && hn != "[::1]" {
+		if host != public && hn != "localhost" && hn != "127.0.0.1" && hn != "::1" && hn != "[::1]" && !(net.ParseIP(strings.Trim(hn, "[]")) != nil && lanHostAllowed(r.URL.Path)) {
 			http.Error(w, "unknown host", http.StatusMisdirectedRequest)
 			return
 		}
@@ -185,9 +199,9 @@ func (h *Hub) Handler() http.Handler {
 	})
 	mux.Handle("/api/", bearer(api))
 
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok\n") })
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, h.replica.healthText()) })
 	mux.HandleFunc("/", h.handleOverview)
-	return h.hostGuard(securityHeaders(mux))
+	return h.hostGuard(h.replicaGate(securityHeaders(mux)))
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -273,6 +287,18 @@ func (h *Hub) Serve(ctx context.Context) error {
 	}
 	admin := &http.Server{Handler: h.adminHandler(), ReadHeaderTimeout: 10 * time.Second}
 
+	var extra []net.Listener
+	for _, addr := range h.cfg.ListenAlso {
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			ln.Close()
+			return fmt.Errorf("listen_also %s: %w", addr, err)
+		}
+		extra = append(extra, l)
+	}
+	if h.replica.standby() {
+		go h.replica.run(ctx)
+	}
 	go h.releases.run(ctx)
 	go h.collectMetrics(ctx)
 	go func() {
@@ -288,10 +314,13 @@ func (h *Hub) Serve(ctx context.Context) error {
 			}
 		}
 	}()
-	errc := make(chan error, 2)
+	errc := make(chan error, 2+len(extra))
 	go func() { errc <- srv.Serve(ln) }()
+	for _, l := range extra {
+		go func(l net.Listener) { errc <- srv.Serve(l) }(l)
+	}
 	go func() { errc <- admin.Serve(adminLn) }()
-	slog.Info("hub listening", "addr", h.cfg.Listen, "public_url", h.cfg.PublicURL, "admin_socket", h.cfg.AdminSocket)
+	slog.Info("hub listening", "addr", h.cfg.Listen, "also", h.cfg.ListenAlso, "public_url", h.cfg.PublicURL, "admin_socket", h.cfg.AdminSocket, "replica_role", h.cfg.Replica.Role)
 	h.audit.Write(audit.Entry{Event: "hub_started", Detail: map[string]string{"version": version.String()}})
 	select {
 	case <-ctx.Done():

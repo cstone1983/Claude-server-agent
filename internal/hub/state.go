@@ -112,6 +112,9 @@ type stateData struct {
 	Devices map[string]*TrustedDevice `json:"trusted_devices,omitempty"`
 	// AutoApprove is hands-off mode (nil or expired = off).
 	AutoApprove *AutoApprove `json:"auto_approve,omitempty"`
+	// AutoApproveChanged is when hands-off mode was last turned on or off,
+	// so a primary/standby merge keeps the latest choice.
+	AutoApproveChanged time.Time `json:"auto_approve_changed,omitempty"`
 }
 
 // Store is the hub's persistent state, saved as JSON. Secrets are stored
@@ -135,6 +138,37 @@ func OpenStore(dir string) (*Store, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
+	s.fillMaps()
+	return s, nil
+}
+
+// Update runs fn under the lock and persists the result.
+func (s *Store) Update(fn func(d *stateData) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fn(&s.d); err != nil {
+		return err
+	}
+	return s.saveLocked()
+}
+
+// Snapshot returns the state as JSON.
+func (s *Store) SnapshotJSON() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return json.Marshal(s.d)
+}
+
+// Replace swaps in a whole state (a standby copying its primary).
+func (s *Store) Replace(d stateData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.d = d
+	s.fillMaps()
+	return s.saveLocked()
+}
+
+func (s *Store) fillMaps() {
 	if s.d.Agents == nil {
 		s.d.Agents = map[string]*AgentRec{}
 	}
@@ -153,17 +187,6 @@ func OpenStore(dir string) (*Store, error) {
 	if s.d.Devices == nil {
 		s.d.Devices = map[string]*TrustedDevice{}
 	}
-	return s, nil
-}
-
-// Update runs fn under the lock and persists the result.
-func (s *Store) Update(fn func(d *stateData) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := fn(&s.d); err != nil {
-		return err
-	}
-	return s.saveLocked()
 }
 
 // View runs fn under the lock without saving.

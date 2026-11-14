@@ -112,7 +112,7 @@ func (h *Hub) setAutoApprove(d time.Duration, scope string, includeCareful bool,
 	}
 	now := time.Now().UTC()
 	aa := &AutoApprove{Until: now.Add(d), Scope: scope, IncludeCareful: includeCareful, SetAt: now, SetBy: via}
-	if err := h.store.Update(func(sd *stateData) error { sd.AutoApprove = aa; return nil }); err != nil {
+	if err := h.store.Update(func(sd *stateData) error { sd.AutoApprove, sd.AutoApproveChanged = aa, now; return nil }); err != nil {
 		return 0, err
 	}
 	h.audit.Write(audit.Entry{Event: "auto_approve_on", Summary: aa.label(), Detail: map[string]any{"until": aa.Until, "scope": scope, "include_proxmox": includeCareful, "via": via}})
@@ -139,6 +139,7 @@ func (h *Hub) clearAutoApprove(via string) {
 	h.store.Update(func(sd *stateData) error {
 		was = sd.AutoApprove.active(time.Now())
 		sd.AutoApprove = nil
+		sd.AutoApproveChanged = time.Now().UTC()
 		return nil
 	})
 	if was {

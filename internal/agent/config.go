@@ -18,10 +18,14 @@ import (
 const DefaultConfigPath = "/etc/csa/agent.yaml"
 
 type Config struct {
-	HubURL  string   `yaml:"hub_url"`
-	AgentID string   `yaml:"agent_id"`
-	Name    string   `yaml:"name"`
-	Tags    []string `yaml:"tags,omitempty"`
+	HubURL string `yaml:"hub_url"`
+	// FallbackHubURLs are tried in order when hub_url cannot be reached, e.g.
+	// the hub's and a standby hub's LAN addresses. The agent returns to
+	// hub_url as soon as it answers again.
+	FallbackHubURLs []string `yaml:"fallback_hub_urls,omitempty"`
+	AgentID         string   `yaml:"agent_id"`
+	Name            string   `yaml:"name"`
+	Tags            []string `yaml:"tags,omitempty"`
 
 	KeyFile      string `yaml:"key_file"`
 	PolicyFile   string `yaml:"policy_file"`
@@ -69,6 +73,9 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, errors.New("agent is not enrolled: run `csa-agent enroll` first")
 	}
 	c.HubURL = strings.TrimRight(c.HubURL, "/")
+	for i, u := range c.FallbackHubURLs {
+		c.FallbackHubURLs[i] = strings.TrimRight(strings.TrimSpace(u), "/")
+	}
 	return &c, nil
 }
 

@@ -80,6 +80,8 @@ func TestEndToEnd(t *testing.T) {
 	if _, err := agent.Enroll(other, srv.URL, tok2, "web02", nil, false); err != nil {
 		t.Fatalf("token should still be usable after a name conflict: %v", err)
 	}
+	// The main hub URL is down: the agent must use its fallback.
+	acfg.HubURL, acfg.FallbackHubURLs = "http://127.0.0.1:1", []string{srv.URL}
 	ag, err := agent.New(acfg)
 	if err != nil {
 		t.Fatal(err)
