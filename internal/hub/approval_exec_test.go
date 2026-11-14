@@ -25,15 +25,12 @@ func TestApprovedActionOutlivesCaller(t *testing.T) {
 	// A fake agent connection: count calls and answer after a delay.
 	var calls atomic.Int32
 	release := make(chan struct{})
-	h.reg.conns["a1"] = &agentConn{id: "a1", pending: map[string]chan *proto.Result{}, closed: make(chan struct{})}
+	h.reg.conns["a1"] = &agentConn{id: "a1", closed: make(chan struct{})}
 	h.testSend = func(c *agentConn, env proto.Envelope) error {
 		calls.Add(1)
 		go func() {
 			<-release
-			c.mu.Lock()
-			ch := c.pending[env.ID]
-			c.mu.Unlock()
-			ch <- &proto.Result{OK: true, Text: "upgrade done"}
+			h.reg.deliver(env.ID, &proto.Result{OK: true, Text: "upgrade done"})
 		}()
 		return nil
 	}

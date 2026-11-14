@@ -35,6 +35,58 @@ type Agent struct {
 	policy *policy.Policy
 	exec   *Executor
 	audit  *audit.Log
+	out    outbox
+}
+
+// outbox keeps results until they have been sent to the hub. A call keeps
+// running when the connection drops; its result is sent on the next
+// connection (the hub waits for it for a few minutes).
+type outbox struct {
+	mu    sync.Mutex
+	send  func(proto.Envelope) error // current connection, nil when offline
+	items map[string]outItem
+}
+
+type outItem struct {
+	env proto.Envelope
+	at  time.Time
+}
+
+const outboxKeep = 15 * time.Minute
+
+func (o *outbox) put(env proto.Envelope) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.send != nil && o.send(env) == nil {
+		return
+	}
+	if o.items == nil {
+		o.items = map[string]outItem{}
+	}
+	o.items[env.ID] = outItem{env: env, at: time.Now()}
+	slog.Warn("hub not reachable; result kept until reconnect", "call", env.ID)
+}
+
+// attach makes send the current connection and flushes kept results.
+func (o *outbox) attach(send func(proto.Envelope) error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.send = send
+	if send == nil {
+		return
+	}
+	for id, it := range o.items {
+		if time.Since(it.at) > outboxKeep {
+			delete(o.items, id)
+			continue
+		}
+		if send(it.env) != nil {
+			o.send = nil
+			return
+		}
+		delete(o.items, id)
+		slog.Info("re-sent result after reconnect", "call", id)
+	}
 }
 
 func New(cfg *Config) (*Agent, error) {
@@ -128,6 +180,9 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		return err
 	}
 
+	a.out.attach(send)
+	defer a.out.attach(nil)
+
 	connCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -146,11 +201,11 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 			if env.Call == nil {
 				continue
 			}
+			// Run with the agent's context, not the connection's: a dropped
+			// connection must not kill a running command.
 			go func(id string, call *proto.Call) {
-				res := a.exec.Handle(connCtx, call)
-				if err := send(proto.Envelope{Type: proto.TypeResult, ID: id, Result: res}); err != nil {
-					slog.Error("sending result", "err", err)
-				}
+				res := a.exec.Handle(ctx, call)
+				a.out.put(proto.Envelope{Type: proto.TypeResult, ID: id, Result: res})
 			}(env.ID, env.Call)
 		case proto.TypeSetRules:
 			if err := a.policy.SetHubRules(env.Rules); err != nil {
