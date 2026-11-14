@@ -39,6 +39,9 @@ dedicated chat for this project.** State at hold: VM 113 created and started
 - First speed test (11 s JFK sample, 8 vCPU, default settings): small.en
   4.6 s but dropped words; large-v3-turbo ~20 s (too slow - tune: int8,
   threads, VAD, more cores); qwen2.5:3b cleanup 2.4 s, very good.
+- Getting the key onto a phone: `sudo voice-key-qr` on voice shows the base
+  URL and the key as QR codes in the terminal (qrencode). Later: pairing code
+  + per-device keys in our own app.
 - To do: Whisper tuning, 113.fw firewall (observe -> block), voice.lan via
   Traefik, health checks.
 
