@@ -20,6 +20,28 @@ dedicated chat for this project.** State at hold: VM 113 created and started
   on one base URL. Per-VM firewall 113.fw, nightly backup, health checks, speed
   test. Same Whisper can serve HA Assist (Wyoming) later.
 
+## Build log (this chat builds the server; the app is built in the voice-keyboard repo)
+- 2026-11-14 Ubuntu 24.04.5, HWE kernel 7.0, root LV extended to 62 GB,
+  qemu-guest-agent, ISO detached. Docker 29.9 (official repo).
+- /opt/voice/docker-compose.yml: speaches (ghcr.io/speaches-ai/speaches:latest-cpu,
+  127.0.0.1:8000, cache /opt/voice/hf-cache owned by uid 1000!), ollama
+  (127.0.0.1:11434, /opt/voice/ollama), gateway (nginx, :8080).
+- Gateway /opt/voice/gateway/voice.conf: one Bearer key for everything except
+  /health; /v1/audio/* + /v1/models -> speaches, /v1/chat/* -> ollama. Key in
+  /root/.config/voice/api-key (root-only; nginx include key.conf mode 600).
+  Lesson: an nginx `if` inside `location /` does NOT cover nested locations -
+  the check must be at server level (verified 401 without key, 2026-11-14).
+- cloudflared 2026.11.0 as a service (tunnel "Voice"), route
+  voice.stoneyshome.com -> http://localhost:8080. Tunnel token was posted in
+  chat: rotate it in Cloudflare.
+- Models: Whisper deepdml/faster-whisper-large-v3-turbo-ct2 and
+  Systran/faster-distil-whisper-small.en; Ollama qwen2.5:7b and qwen2.5:3b.
+- First speed test (11 s JFK sample, 8 vCPU, default settings): small.en
+  4.6 s but dropped words; large-v3-turbo ~20 s (too slow - tune: int8,
+  threads, VAD, more cores); qwen2.5:3b cleanup 2.4 s, very good.
+- To do: Whisper tuning, 113.fw firewall (observe -> block), voice.lan via
+  Traefik, health checks.
+
 ## Phone: keyboard research (2026-11-14)
 - **Top pick: Dictate** (net.devemperor.dictate, Play ~US$3.49, Apache-2.0,
   github.com/DevEmperor/Dictate): full FlorisBoard-based keyboard; "own server"

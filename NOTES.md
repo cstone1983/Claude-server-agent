@@ -573,6 +573,11 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] cloudflared updated to 2026.11.0 on all 6 servers that run it
+      (2026-11-14). HA's "Cloudflared" add-on is installed but STOPPED (HA
+      remote access uses Homeway) and has an update: update or remove it.
+      HA has 9 add-on updates waiting. Rotate the voice tunnel token.
+
 - [ ] **Self-hosted voice dictation - ON HOLD, own chat later** (user,
       2026-11-14). VM 113 "voice" created (8 cores host CPU, 16 GB, 64 GB,
       10.10.11.113 reserved, voice.lan DNS), sitting in the Ubuntu installer.
