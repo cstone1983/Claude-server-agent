@@ -9,6 +9,8 @@ dedicated chat for this project.** State at hold: VM 113 created and started
 - 8 cores (cpu type `host` for AVX2), 16 GB RAM, 64 GB on VM ZFS (discard),
   vmbr0 VLAN 10 firewall=1, agent on, onboot. Ubuntu Server 24.04.2 (user
   installs from local:iso/ubuntu-24.04.2-live-server-amd64.iso).
+- Backup: added to the nightly PBS job (21:30, pbs-main) 2026-11-14; the
+  off-site Google Drive copy syncs the whole datastore, so it is covered too.
 - UDM: fixed IP 10.10.11.113 for bc:24:11:a3:10:6e (client "voice"); DNS
   `voice` + `voice.lan.stoneyshome.com` -> 10.10.11.113.
 - Plan: Docker with **speaches** (faster-whisper, OpenAI-compatible
