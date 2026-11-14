@@ -25,6 +25,13 @@ chat (VM 113 "voice"); app side in the voice-keyboard repo's chat.
   removed. Works inside (split DNS via n8n) and via Cloudflare.
 - Setup QR (`sudo voice-key-qr` = `voice-user qr k1`) now also carries
   "user" and "device" (display only).
+- Name picker (user, 2026-11-15): key k1 is a HOUSEHOLD key (user "*" in
+  keys.tsv): it may act as any user on the list; the app gets the names from
+  GET vk/users and sends the selected one as header X-VK-As (must be on the
+  list, else 400). Personal keys ignore X-VK-As. Names-only list for the
+  service: /opt/voice/vk-learn/users.tsv (voice-user writes it; compose mounts
+  the vk-learn DIRECTORY). Later: Google sign-in or personal keys before
+  sharing outside the family (anyone with the household key can pick any name).
 - To do: health-check line for voice-learn; nightly style summary
   (cleanup_style) later.
 
