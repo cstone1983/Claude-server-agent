@@ -53,6 +53,12 @@ dedicated chat for this project.** State at hold: VM 113 created and started
   (too slow on CPU, no GPU possible). Chosen: speech
   Systran/faster-whisper-small.en, cleanup qwen2.5:3b (~2.5 s). Chunked
   upload in the app (docs/keyboard-chunked-prompt.md) hides most of it.
+- Per-request cost (measured 2026-11-14): small.en 3 s clip 2.7 s, 5.5 s
+  clip 3.2 s, 11 s clip 4.1 s (about 2.5 s fixed + 0.15 s per audio second);
+  turbo ~14 s for ANY length (fixed 30 s window, big encoder). So: chunked
+  upload yes with small.en but long chunks (8-15 s); turbo never; a
+  WebSocket/streaming endpoint would not help on CPU (cost is the window,
+  not HTTP). Told the app chat.
 - Setup QR "app" format now also carries stt_model + chat_model (the app
   pre-fills them). /v1/models lists only the Whisper models (speaches); the
   cleanup model must come from the QR or be typed. Possible later: merge
