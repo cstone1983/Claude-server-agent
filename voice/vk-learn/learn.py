@@ -97,6 +97,28 @@ def clean(s, limit):
 
 EDGE_PUNCT = " \t\n,.;:!?\"'()[]{}…“”‘’"
 
+# Everyday English words: fixes between these (this/the, there/their, to/too)
+# depend on context, so they are stored but never become blind rules or
+# vocabulary hints. Names and unusual words still do.
+COMMON = set("""
+a about above after again against all also am an and any are as at be because been before being below
+between both but by can could did do does doing down during each few for from further had has have
+having he her here hers herself him himself his how i if in into is it its itself just me more most my
+myself no nor not now of off on once only or other our ours ourselves out over own same she should so
+some such than that the their theirs them themselves then there these they this those through to too
+under until up very was we were what when where which while who whom why will with would you your
+yours yourself yourselves yes ok okay oh hi hey well like get got go going gone come came make made
+know think see look want need one two three four five six seven eight nine ten first last new old good
+great right left back still even way thing things time today tomorrow yesterday tonight let lets let's
+im i'm it's its don't dont can't cant won't wont didn't didnt isn't isnt that's thats there's theres
+you're youre they're theyre we're were i'll ill you'll youll we'll i've ive you've we've i'd id
+""".split())
+
+
+def all_common(text):
+    words = [w.lower() for w in WORD.findall(text)]
+    return bool(words) and all(w in COMMON for w in words)
+
 
 def strip_shared_punct(before, after):
     """'Jesse,' -> 'Jessy,' becomes 'Jesse' -> 'Jessy': punctuation around the
@@ -113,13 +135,15 @@ def learn_edit(c, user, before, after):
         return False                       # number/time formatting, not vocabulary
     if len(before.split()) > 6 or len(after.split()) > 6:
         return False                       # too big to be a single correction
+    if all_common(before) and all_common(after):
+        return False                       # grammar-style fix of everyday words: needs context, no blind rule
     t = now()
     c.execute("INSERT INTO replacements(user, src, dst, count, last_seen) VALUES(?,?,?,1,?) "
               "ON CONFLICT(user, src, dst) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
               (user, before, after, t))
     before_words = {w.lower() for w in WORD.findall(before)}
     for w in WORD.findall(after):
-        if len(w) >= 2 and w.lower() not in before_words:
+        if len(w) >= 2 and w.lower() not in before_words and w.lower() not in COMMON:
             c.execute("INSERT INTO vocabulary(user, word, count, last_seen) VALUES(?,?,1,?) "
                       "ON CONFLICT(user, word) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
                       (user, w, t))
