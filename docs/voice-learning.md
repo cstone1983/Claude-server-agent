@@ -246,3 +246,14 @@ SERVER SIDE BUILT 2026-11-15 (user: "go for all of it"):
 - GET vk/stats -> per-day dictations, words, corrected words, accuracy %, audio.
 - learned also lists avoid words ("a<id>", deletable) and styles; export and
   forget-everything cover all of it.
+
+## Live preview (streaming) - evaluated 2026-11-15, ON HOLD (user)
+Benchmark on 15 of the user's clips (voice VM, /opt/voice/bench, ~300 MB, can be
+deleted): sherpa-onnx streaming Zipformer en-2023-06-26, 2 threads: real-time
+factor 0.11, live lag ~0.5 s, ~11% of 2 cores, but rough accuracy (~25-35% WER,
+lowercase, no punctuation; the test cut the last 0.5 s of each clip). Whisper
+small.en: ~3-4 s per clip, accurate. Conclusion: only useful as a hybrid (live
+greyed preview from Zipformer, final text from Whisper + cleanup); it does not
+shorten stop-to-final. speaches' realtime/WebSocket mode would re-run Whisper
+repeatedly (>=2.5 s each on CPU): not worth it. Revisit after the app's speed
+fixes if the wait still feels long.
