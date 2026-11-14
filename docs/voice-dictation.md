@@ -42,3 +42,22 @@ Dictate. Notes for when we pick it up:
   commands from the keyboard), personal vocabulary synced from the server,
   streaming partial results.
 - Decide after a few weeks of using Dictate: build only for what it lacks.
+
+### Learning feature (user, 2026-11-14)
+The keyboard gets better the more it is used; everything stays on our server.
+- Capture corrections: after dictated text is inserted, notice what the user
+  edits (original vs. final text) and send the pair to the server.
+- Step 1, cheap and immediate:
+  - personal vocabulary (names, places, project words) fed to Whisper as its
+    hint/prompt;
+  - automatic replacement rules for repeated mishears;
+  - a "my style" profile + recent examples given to the cleanup model (tone,
+    punctuation, emoji habits, sign-offs), per app if wanted.
+- Step 2, later: fine-tune the cleanup model (small LoRA on Ollama-compatible
+  models) on accumulated corrections; optionally fine-tune Whisper on the
+  user's own voice clips (needs stored audio, opt-in).
+- Guard rails: opt-in, never learn from password/secure fields, a "forget"
+  button, per-app exclusions, data in one place that is backed up and easy to
+  wipe.
+- Dictate already has custom words + replacements (manual); the learning loop
+  (automatic) is the main reason to build our own app.
