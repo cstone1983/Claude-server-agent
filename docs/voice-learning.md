@@ -10,6 +10,24 @@ chat (VM 113 "voice"); app side in the voice-keyboard repo's chat.
 3. Keep raw corrections and stored messages for 1 year (365 days); learned
    vocabulary and fix rules stay until deleted.
 
+## Status (2026-11-15): SERVER SIDE BUILT AND TESTED
+- `voice-user` (/usr/local/sbin, source voice/voice-user): users.tsv + keys.tsv in
+  /root/.config/voice (root-only); `sync` writes the gateway map
+  /opt/voice/gateway/key.conf IN PLACE (single-file bind mount!) with
+  $voice_user / $voice_device / $voice_key_id / $voice_auth_ok and reloads nginx.
+  Existing key migrated: user chris, device Fold7, id k1.
+- `vk-learn` (container voice-learn, python:3.12-alpine, source
+  voice/vk-learn/learn.py, DB /opt/voice/learn/learn.db, retention 365 d):
+  gateway route /v1/vk/ sets X-VK-User/X-VK-Device from the key (client
+  values overwritten - verified a spoofed X-VK-User is ignored).
+- Tested through the gateway: me, corrections (2x same fix -> rule),
+  messages, profile, learned, delete, export, forget-everything. Test data
+  removed. Works inside (split DNS via n8n) and via Cloudflare.
+- Setup QR (`sudo voice-key-qr` = `voice-user qr k1`) now also carries
+  "user" and "device" (display only).
+- To do: health-check line for voice-learn; nightly style summary
+  (cleanup_style) later.
+
 ## Goal
 The dictation gets better from the user's own corrections, automatically,
 with everything stored only on the user's server.
@@ -131,8 +149,10 @@ Send:
 - POST {base}vk/corrections with
   {"device","app","lang","stt_model","edits":[...],"ts"}; queue and retry
   offline; drop after 7 days.
-- Style learning is a SEPARATE opt-in: POST {base}vk/style with the final
-  text, app package and category (chat/email/other).
+- Message storing ("Learn my writing style") is a SEPARATE opt-in: POST
+  {base}vk/messages {"app","category":"chat|email|other","text","lang"}
+  with the final sent text (the user wants this on and building up early).
+  Stored 1 year on the server.
 
 Use:
 - GET {base}vk/profile?app=<package> on keyboard start and at most hourly
