@@ -287,19 +287,22 @@ def profile(c, user, app=None, category=None):
 
 def stats(c, user, days=30):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    # Accuracy per dictation: what was inserted (cleaned) vs. what the user finally
+    # sent (final). Only dictations with a known final text count.
     per = {}
-    for r in c.execute("SELECT substr(created,1,10) d, count(*) n, sum(audio_ms) ms, "
-                       "group_concat(cleaned, char(1)) txt FROM dictations WHERE user=? AND created>=? GROUP BY d",
-                       (user, since)):
-        per[r["d"]] = {"day": r["d"], "dictations": r["n"], "audio_s": round((r["ms"] or 0) / 1000),
-                       "words": sum(len(words(t)) for t in (r["txt"] or "").split("\x01")), "corrected_words": 0,
-                       "corrections": 0}
-    for r in c.execute("SELECT substr(created,1,10) d, before, after FROM corrections WHERE user=? AND created>=?",
-                       (user, since)):
+    for r in c.execute("SELECT substr(created,1,10) d, cleaned, final, audio_ms FROM dictations "
+                       "WHERE user=? AND created>=?", (user, since)):
         d = per.setdefault(r["d"], {"day": r["d"], "dictations": 0, "audio_s": 0, "words": 0,
                                     "corrected_words": 0, "corrections": 0})
-        d["corrections"] += 1
-        d["corrected_words"] += max(corrected_words(r["before"], r["after"]), 1 if r["before"] else 0)
+        d["dictations"] += 1
+        d["audio_s"] += round((r["audio_ms"] or 0) / 1000)
+        if r["final"]:
+            d["words"] += len(words(r["cleaned"]))
+            d["corrected_words"] += corrected_words(r["cleaned"], r["final"])
+    for r in c.execute("SELECT substr(created,1,10) d, count(*) n FROM corrections WHERE user=? AND created>=? "
+                       "GROUP BY d", (user, since)):
+        per.setdefault(r["d"], {"day": r["d"], "dictations": 0, "audio_s": 0, "words": 0,
+                                "corrected_words": 0, "corrections": 0})["corrections"] = r["n"]
     out = []
     for d in sorted(per):
         x = per[d]
