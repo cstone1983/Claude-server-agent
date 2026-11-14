@@ -9,7 +9,10 @@ rules). Raw corrections and messages are kept RETENTION_DAYS (1 year).
 Python standard library only; data in SQLite at /data/learn.db.
 
 Endpoints (all JSON; paths relative to /v1/vk/):
-  GET    me                 -> {"user","device"}
+  GET    users              -> {"users":[{"user","name"}]}  (names for the app's picker)
+  GET    me                 -> {"user","name","device","household"}
+  A "household" key (mapped to user "*") may act as any listed user: the app
+  sends the selected one as header X-VK-As. A personal key is always its own user.
   POST   corrections        {"device","app","lang","stt_model","edits":[{"before","after","context"}],"ts"}
   POST   messages           {"app","category","text","lang"}        (alias: POST style)
   GET    profile?app=<pkg>  -> {"version","vocabulary","replacements","whisper_prompt",
@@ -26,12 +29,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 DB = os.environ.get("VK_DB", "/data/learn.db")
+USERS_FILE = os.environ.get("VK_USERS", "/config/users.tsv")   # user \t display name (no keys)
 RETENTION_DAYS = int(os.environ.get("VK_RETENTION_DAYS", "365"))
 PROMOTE_AFTER = 2          # identical correction seen this often -> automatic fix rule
 MAX_EDITS, MAX_LEN, MAX_MSG = 20, 200, 4000
 VOCAB_CAP, PROMPT_CHARS = 100, 600
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9'’.-]*[A-Za-z0-9]|[A-Za-z]")
 lock = threading.Lock()
+
+
+def users():
+    out = []
+    try:
+        for line in open(USERS_FILE):
+            parts = line.rstrip("\n").split("\t")
+            if parts and parts[0] and not parts[0].startswith("#"):
+                out.append({"user": parts[0], "name": parts[1] if len(parts) > 1 and parts[1] else parts[0]})
+    except FileNotFoundError:
+        pass
+    return out
 
 
 def now():
@@ -156,8 +172,20 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def ident(self):
+        """User from the key (set by the gateway). A household key ("*") acts as the
+        user picked in the app (X-VK-As), which must be on the server's list."""
         user = (self.headers.get("X-VK-User") or "").strip()
-        return user, (self.headers.get("X-VK-Device") or "").strip()
+        device = (self.headers.get("X-VK-Device") or "").strip()
+        self.household = user == "*"
+        if self.household:
+            want = (self.headers.get("X-VK-As") or "").strip().lower()
+            user = want if any(u["user"] == want for u in users()) else ""
+        return user, device
+
+    def no_user(self):
+        if getattr(self, "household", False):
+            return self.reply(400, {"error": "select a user: send header X-VK-As with a name from GET vk/users"})
+        return self.reply(401, {"error": "no user"})
 
     def body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -179,11 +207,15 @@ class H(BaseHTTPRequestHandler):
         if path == "health":
             return self.reply(200, {"ok": True})
         user, device = self.ident()
+        if path == "users" and (user or self.household):
+            return self.reply(200, {"users": users()})
         if not user:
-            return self.reply(401, {"error": "no user"})
+            return self.no_user()
         with db() as c:
             if path == "me":
-                return self.reply(200, {"user": user, "device": device})
+                name = next((u["name"] for u in users() if u["user"] == user), user)
+                return self.reply(200, {"user": user, "name": name, "device": device,
+                                        "household": self.household})
             if path == "profile":
                 return self.reply(200, profile(c, user, (q.get("app") or [None])[0]))
             if path == "learned":
@@ -204,7 +236,7 @@ class H(BaseHTTPRequestHandler):
         path, _ = self.route()
         user, device = self.ident()
         if not user:
-            return self.reply(401, {"error": "no user"})
+            return self.no_user()
         try:
             b = self.body()
         except Exception:
@@ -244,7 +276,7 @@ class H(BaseHTTPRequestHandler):
         path, _ = self.route()
         user, _d = self.ident()
         if not user:
-            return self.reply(401, {"error": "no user"})
+            return self.no_user()
         with lock, db() as c:
             if path == "data":
                 counts = {t: c.execute(f"DELETE FROM {t} WHERE user=?", (user,)).rowcount
