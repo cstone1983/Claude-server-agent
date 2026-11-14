@@ -3,6 +3,13 @@
 Prepared 2026-11-14 for the next session. Server side is built in this repo's
 chat (VM 113 "voice"); app side in the voice-keyboard repo's chat.
 
+## Decisions (user, 2026-11-15)
+1. Users: only "chris" for now (current key becomes chris / Fold7).
+2. Store final messages from the start (style learning and a message
+   database built up early) - still an opt-in switch in the app.
+3. Keep raw corrections and stored messages for 1 year (365 days); learned
+   vocabulary and fix rules stay until deleted.
+
 ## Goal
 The dictation gets better from the user's own corrections, automatically,
 with everything stored only on the user's server.
