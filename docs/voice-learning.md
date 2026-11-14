@@ -196,3 +196,20 @@ Replace the household key + name picker with "Sign in with Google":
   returned to the app; app stores it (Keystore) and drops the picker.
 - Server to build: the endpoint, allow-list file (root-only), key issuing and
   revoking, then turn the household key k1 personal or revoke it.
+
+## Next learning step: context-aware (planned 2026-11-15)
+Today's rules are blind word swaps ("Jesse" -> "Jessy" everywhere). Plan, once
+1-2 weeks of real corrections/messages exist:
+- Conflict detection: if stored final messages also KEEP the original spelling
+  (e.g. both "Jesse" and "Jessy" are real names), don't promote a blind rule.
+- Context-gated rules: use the stored context words of each correction; a rule
+  fires only when the surrounding words resemble the past fixes.
+- Let the cleanup model decide ambiguous names: profile gains
+  "names_in_context" (both spellings + example sentences) for the cleanup
+  prompt.
+- Spoken punctuation ("comma", "period", "new line") is NOT a learning task:
+  fixed conversion in the app (being built by the app chat, 2026-11-15),
+  plus a backup line in the cleanup prompt.
+- Server fixes already done 2026-11-15: punctuation around corrected words is
+  stripped (Jesse, -> Jessy, stored as Jesse -> Jessy); a bogus rule from the
+  cleanup "text" bug was removed.
