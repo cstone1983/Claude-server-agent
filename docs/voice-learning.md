@@ -216,3 +216,17 @@ Today's rules are blind word swaps ("Jesse" -> "Jessy" everywhere). Plan, once
 - Server fixes already done 2026-11-15: punctuation around corrected words is
   stripped (Jesse, -> Jessy, stored as Jesse -> Jessy); a bogus rule from the
   cleanup "text" bug was removed.
+
+## Learning from how the user speaks (user's goal, 2026-11-15)
+Beyond corrections, layered:
+1. Writing style from stored final messages: nightly job summarizes
+   (local model) into profile.cleanup_style, per app category. Server only.
+2. Speaking habits: app sends per dictation {raw whisper text, cleaned text,
+   final sent text, app, lang, timings}; server learns phrase habits, spoken
+   commands ("smiley face", "sign it Chris"), what the user undoes from cleanup,
+   low-confidence words -> Whisper hints. Needs app change.
+3. Voice adaptation (opt-in): keep audio clips + final corrected text as
+   training pairs; after a few hours, fine-tune faster-whisper small.en on the
+   user's voice (overnight on CPU). Needs audio storage + delete button.
+4. Metrics: daily accuracy (corrected words per dictation) to show progress.
+Suggested order: 1+4 (server now), 2 (app+server), 3 later.
