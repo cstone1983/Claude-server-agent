@@ -573,6 +573,10 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **Idea: our own Android keyboard app** (user, 2026-11-14) for the
+      self-hosted voice dictation (VM 113 "voice"). Try Dictate first; fork
+      Dictate/FlorisBoard for what it lacks. See docs/voice-dictation.md.
+
 - [ ] **Per-VM firewalls (user's request 2026-11-11) - in progress.** The
       UDM only filters BETWEEN VLANs; Proxmox VM firewalls (filtered at the
       bridge, can't be turned off from inside a VM) add one allow-list per

@@ -28,3 +28,17 @@ to install Ubuntu + the agent.
 - Not chosen: Polished Recognition (single prompt), Whisper to Input (no
   cleanup), VocaPhone (own protocol only), FUTO (on-device only), HeliBoard mic
   (launches a voice IME; behaviour unconfirmed).
+
+## Idea: our own keyboard app (user, 2026-11-14)
+User may want to build our own Android keyboard for this setup instead of
+Dictate. Notes for when we pick it up:
+- Starting points (open source, could fork rather than start from zero):
+  Dictate (Apache-2.0, FlorisBoard-based, already speaks OpenAI-compatible
+  transcription + rewording), FlorisBoard (Apache-2.0 keyboard base),
+  HeliBoard (GPL-3.0, AOSP-based).
+- Things only our own app could do: talk to voice.stoneyshome.com with our
+  key built in, per-app cleanup styles (casual in messages, formal in email),
+  hooks into Home Assistant / n8n (e.g. "note this" -> Nextcloud, voice
+  commands from the keyboard), personal vocabulary synced from the server,
+  streaming partial results.
+- Decide after a few weeks of using Dictate: build only for what it lacks.
