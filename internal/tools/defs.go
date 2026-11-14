@@ -188,7 +188,7 @@ const approvalNote = " Read-only actions run immediately; actions matching the s
 var All = []Def{
 	{
 		Name: "list_servers", Title: "List servers", HubOnly: true, ReadOnly: true,
-		Description: "List all servers connected to this hub, with online status, tags, OS and last-seen time. Call this first to learn server names.",
+		Description: "List all servers connected to this hub, with online status, tags, OS, last-seen time and a health line (uptime, load, memory, fullest disk, pending updates, REBOOT PENDING, failed units; from the last minute). Call this first to learn server names.",
 	},
 	{
 		Name: "check_approval", Title: "Check approval", HubOnly: true,
