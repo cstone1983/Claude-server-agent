@@ -11,11 +11,14 @@ RUN apk add --no-cache bash curl jq ca-certificates coreutils \
  && curl -fsSL -o checksums.txt "https://github.com/cstone1983/Claude-server-agent/releases/latest/download/checksums.txt" \
  && grep " csa_linux_${A}.tar.gz\$" checksums.txt | sed "s/csa_linux_${A}.tar.gz/csa.tgz/" | sha256sum -c - \
  && tar -xzf csa.tgz && install -m 0755 csa-agent /usr/local/bin/csa-agent \
- && curl -fsSL -o /usr/local/bin/ha "https://github.com/home-assistant/cli/releases/latest/download/ha_${BUILD_ARCH}" \
- && chmod 0755 /usr/local/bin/ha \
+ && curl -fsSL -o /usr/local/bin/ha.bin "https://github.com/home-assistant/cli/releases/latest/download/ha_${BUILD_ARCH}" \
+ && chmod 0755 /usr/local/bin/ha.bin \
  && cd / && rm -rf /tmp/csa
 
+# The agent starts commands with a clean environment, so "ha" is a wrapper that
+# loads the add-on's Supervisor token from s6's container environment.
+COPY ha-wrapper.sh /usr/local/bin/ha
 COPY run.sh /run.sh
 COPY policy.yaml /policy.default.yaml
-RUN chmod 0755 /run.sh
+RUN chmod 0755 /run.sh /usr/local/bin/ha
 CMD ["/run.sh"]
