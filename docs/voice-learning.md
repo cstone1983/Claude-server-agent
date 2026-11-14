@@ -24,16 +24,41 @@ with everything stored only on the user's server.
    `prompt` field, fix rules run on the transcription, style examples go into
    the cleanup system prompt.
 
+## Per-person profiles (user's request, 2026-11-14)
+Learning belongs to a **person**, not to an install or a phone, so a reinstall
+or a new phone keeps everything learned.
+- Server keeps **users** (e.g. `chris`), each with one or more **API keys**
+  (one per device, so a lost phone's key can be revoked without affecting the
+  others). All learning data (corrections, vocabulary, rules, style) is stored
+  per **user**.
+- The gateway maps the key to the user (nginx `map` of key -> username,
+  generated from a root-only keys file) and passes it to the services as a
+  header `X-VK-User`; a client-sent `X-VK-User` is always overwritten, so the
+  identity only ever comes from the key. Unknown key -> 401 as today.
+- The app never chooses the user: the key decides. After a reinstall the user
+  scans their setup QR again (same key, or a fresh key for the same user) and
+  gets their profile back. `GET /v1/vk/me` returns `{"user":"chris",
+  "display_name":"Chris","device":"Fold7"}` so the app can show "Signed in as
+  Chris".
+- Setup QR gains `"user"` (display only) - the key is what counts.
+- Admin on the server: `sudo voice-user add <name>`, `sudo voice-user key
+  <name> [--device Fold7]` (prints the setup QR in the terminal),
+  `sudo voice-user revoke <key-id>`, `sudo voice-user list`.
+- Other family members can get their own user, so each person's vocabulary and
+  style stay separate.
+- The current single key becomes user "chris", device "Fold7" at migration.
+
 ## Server design (to build)
 - New small service `vk-learn` (Python, FastAPI or plain stdlib) in
   /opt/voice/docker-compose.yml, listening only inside the compose network.
   Gateway routes `/v1/vk/` to it (same Bearer key as everything else).
 - Storage: SQLite at /opt/voice/learn/learn.db (on the VM disk, so in the
-  nightly PBS backup). No audio stored.
+  nightly PBS backup), every row keyed by user (from `X-VK-User`). No audio
+  stored.
 - Endpoints (JSON):
   - `POST /v1/vk/corrections` - body:
     ```json
-    {"device":"<random id per install>","app":"<package name>","lang":"en",
+    {"device":"<install id, info only>","app":"<package name>","lang":"en",
      "stt_model":"...","edits":[{"before":"Jesse","after":"Jessy",
      "context":"meet ___ at 8:30"}],"ts":"2026-11-15T10:00:00Z"}
     ```
@@ -89,6 +114,11 @@ Capture (in the keyboard):
    no-personalized-learning flag, IME_FLAG_NO_PERSONALIZED_LEARNING), or apps
    on the user's exclusion list. Never read or send text outside the
    dictated span (except the small context).
+
+Identity: learning is per PERSON, decided by the API key (the server maps
+key -> user). Don't invent a user id in the app. After setup/reinstall call
+GET {base}vk/me and show "Signed in as <display_name>". The setup QR may
+contain "user" (display only).
 
 Send:
 - POST {base}vk/corrections with
