@@ -281,8 +281,10 @@ def profile(c, user, app=None, category=None):
             "SELECT text FROM messages WHERE user=? ORDER BY created DESC LIMIT 3", (user,))]
     return {"version": meta["version"] if meta else 0, "vocabulary": vocab, "replacements": reps,
             "whisper_prompt": (prompt + ".") if prompt else "",
-            "cleanup_style": style["style"] if style else (meta["cleanup_style"] if meta else ""),
-            "cleanup_avoid": avoid, "category": category or "", "style_examples": examples}
+            "cleanup_style": safe_style(style["style"]) if style else "",
+            # style_examples kept for compatibility but always empty: full example
+            # messages in the cleanup prompt got copied into new dictations.
+            "cleanup_avoid": avoid, "category": category or "", "style_examples": []}
 
 
 def stats(c, user, days=30):
@@ -321,13 +323,23 @@ def stats(c, user, days=30):
 
 # ---------- writing style (nightly) ----------
 STYLE_PROMPT = """You are given recent messages written by one person (dictated, then sent).
-Describe HOW this person writes - never WHAT they write about - as at most 6 short bullet points
-that a text-cleanup assistant can follow when tidying their dictation:
-tone and formality, sentence length, how they open and close messages, emoji use, favourite
-filler-free phrasings or expressions.
-Rules: never mention topics, projects, technologies, products, apps, people, places or any
-specific words from the messages. Do not describe their interests. Do not give punctuation or
+Describe HOW this person writes - never WHAT they write about - as at most 5 short bullet points
+of general traits that a text-cleanup assistant can respect when tidying their dictation:
+tone and formality, sentence length, emoji use, how formal or casual openings and closings are.
+Rules: describe general traits only. NEVER quote or list any words, phrases or expressions from
+the messages, and never give example sentences. Never mention topics, projects, technologies,
+products, apps, people or places. Do not describe their interests. Do not give punctuation or
 grammar advice that would make the text less correct. Reply with the bullet points only."""
+
+# A style line must describe a trait, never carry wording the cleanup could copy
+# into a message (that happened: quoted favourite phrases got appended).
+STYLE_LINE_BAD = re.compile(r"[\"“”‘’']|e\.g\.|for example|such as|phras|expression|like to say|words like",
+                            re.IGNORECASE)
+
+
+def safe_style(text):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return "\n".join([l for l in lines if not STYLE_LINE_BAD.search(l)][:5])
 
 
 def ask_ollama(prompt, text, timeout=600):
@@ -360,7 +372,7 @@ def rebuild_styles(only_user=None):
     for u, cat, msgs in targets:
         try:
             style = ask_ollama(STYLE_PROMPT, "\n---\n".join(m[:500] for m in msgs))
-            style = "\n".join([l for l in style.splitlines() if l.strip()][:6])   # hard cap: 6 points
+            style = safe_style(style)            # traits only, max 5, no quoted wording
         except Exception as e:
             print(f"style {u}/{cat} failed: {e}", flush=True)
             continue
