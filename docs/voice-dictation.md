@@ -69,9 +69,12 @@ dedicated chat for this project.** State at hold: VM 113 created and started
   remove after the user confirms. Lesson: edit lan.yml via a temp file + YAML
   check, then mv (a str.replace on "  middlewares:" hit the idrac router).
 - Setup QR "app" format now also carries stt_model + chat_model (the app
-  pre-fills them). /v1/models lists only the Whisper models (speaches); the
-  cleanup model must come from the QR or be typed. Possible later: merge
-  Ollama's list into /v1/models.
+  pre-fills them). /v1/models now lists BOTH (2026-11-14): small service
+  `models-merge` (python:3.12-alpine, /opt/voice/models-merge/merge.py) merges
+  speaches + Ollama lists and tags each entry "task": "transcription" | "chat";
+  gateway routes /v1/models to it. (Before, the app's cleanup picker only saw
+  speech models and sent a speech model name to Ollama -> 404.) Removed the
+  inaccurate distil-small.en model.
 - To do: 113.fw firewall (observe -> block), voice.lan via
   Traefik, health checks.
 
