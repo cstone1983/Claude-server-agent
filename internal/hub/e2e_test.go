@@ -88,6 +88,13 @@ func TestEndToEnd(t *testing.T) {
 	}
 	go ag.Run(ctx)
 	waitFor(t, func() bool { return h.reg.online(acfg.AgentID) })
+	// At the end, stop the agent and let the hub finish writing its state
+	// before the temp dir is removed.
+	defer func() {
+		cancel()
+		waitFor(t, func() bool { return !h.reg.online(acfg.AgentID) })
+		time.Sleep(200 * time.Millisecond)
+	}()
 
 	// --- OAuth: discovery, registration, login with password + TOTP, PKCE ---
 	resp, _ := http.Post(srv.URL+"/mcp", "application/json", strings.NewReader("{}"))
