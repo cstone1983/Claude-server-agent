@@ -573,6 +573,25 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [x] **Home Assistant via the hub (2026-11-14):** HA add-on "Claude Server Agent"
+      (repo ha-addon/csa_agent, HA repo URL ...Claude-server-agent#ccr-59230fbc-jw6beu,
+      slug 3571fe5c_csa_agent) - server "home-assistant" (tag ha) in the hub. Uses the
+      `ha` CLI (Supervisor API, role admin) through a wrapper that loads the add-on's
+      Supervisor token; HA config is at /homeassistant inside the add-on. Read-only
+      `ha ... info/list` free, everything else approval, host shutdown denied.
+      HA core API from the agent: curl http://supervisor/core/api/... with the token
+      from /run/s6/container_environment/SUPERVISOR_TOKEN (never print it).
+- [x] HA updated 2026-11-14: Core 2026.11.1, OS 18.4, all add-ons, 10 HACS, ha-mcp,
+      Shelly + Sonoff firmware sent. VM 103 now 4 cores / 24 GB / 100 GB disk (data
+      partition grew on reboot: 97.7 GB, 70 GB free).
+      LESSON: update HA Core BEFORE HACS integrations. Airstage v1.10.0 on Core
+      2026.10.1 failed to load ('__attr_temperature_unit') -> all 7 heat pumps
+      unavailable 11:23-11:33 until Core 2026.11.1 was installed.
+      HA has no log file; use `ha core logs` from the agent. Unavailable for 48h+
+      before the updates (not caused by them): climate.air_conditioner and two
+      Eight Sleep sides (ashley, S).
+      HAOS 18.4 `ha os update` no longer reboots by itself: "Reboot ... to finish".
+
 - [ ] **CPU-Share (VM 104) tuned for mining (2026-11-15, user's request).**
       Was: cpu x86-64-v3, 4 virtual sockets x 6, NUMA off. Now: cpu host,
       2 sockets x 15 cores = 30 vCPUs matching the 2 real CPUs, NUMA on with
