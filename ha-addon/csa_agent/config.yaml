@@ -1,0 +1,31 @@
+name: Claude Server Agent
+version: "0.1.29-1"
+slug: csa_agent
+description: Connects Home Assistant to your Claude Server Agent hub, with the same approvals as your other servers.
+url: https://github.com/cstone1983/Claude-server-agent
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: services
+boot: auto
+# Supervisor API access for the `ha` CLI (updates, backups, add-ons, Core, OS).
+# Every change still needs approval through the hub; see policy.yaml.
+hassio_api: true
+hassio_role: admin
+homeassistant_api: true
+map:
+  - homeassistant_config:rw
+  - share:rw
+  - backup:ro
+  - ssl:ro
+options:
+  hub_url: https://agents.stoneyshome.com
+  join_token: ""
+  name: home-assistant
+  tags: ha
+schema:
+  hub_url: url
+  join_token: password?
+  name: str
+  tags: str?

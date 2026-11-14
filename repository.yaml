@@ -1,0 +1,5 @@
+# Home Assistant add-on repository (add this repo's URL in HA: Settings -> Add-ons
+# -> Add-on store -> three dots -> Repositories).
+name: Claude Server Agent add-ons
+url: https://github.com/cstone1983/Claude-server-agent
+maintainer: Claude Server Agent
