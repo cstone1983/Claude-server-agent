@@ -67,12 +67,13 @@ The keyboard gets better the more it is used; everything stays on our server.
 ### First-run "training session" (user, 2026-11-14)
 ~5 minutes together when the user first sets it up, to give it a solid base.
 1. Read-aloud script (~2-3 min), generated for this household, not generic:
-   family names (Chris, Ashley, Anthony, Jessy, Terri), places, server and
+   family member names (read at run time from Home Assistant `person.*`
+   entities - never stored in this public repo), places, server and
    device names (Proxmox, n8n, Obi-Wan, Lutron, ...), HA room/device names,
    numbers/dates/times, addresses and phone-number formats, plus sentences
    with tricky punctuation ("new line", lists, questions).
 2. Free talk (~2 min): answer a few prompts naturally ("describe your day",
-   "text Ashley that you're running late") to capture real phrasing and style.
+   "text <a family member> that you're running late") to capture real phrasing and style.
 3. Server compares Whisper output to the script ->
    - words it got wrong become vocabulary hints + fix rules immediately;
    - picks the best model size for this voice (accuracy vs. speed, measured);
