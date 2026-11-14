@@ -230,3 +230,19 @@ Beyond corrections, layered:
    user's voice (overnight on CPU). Needs audio storage + delete button.
 4. Metrics: daily accuracy (corrected words per dictation) to show progress.
 Suggested order: 1+4 (server now), 2 (app+server), 3 later.
+SERVER SIDE BUILT 2026-11-15 (user: "go for all of it"):
+- POST vk/dictations {id, app, category, lang, stt_model, raw, cleaned, final,
+  audio_ms, low_confidence[], timings{}} -> learns cleanup_avoid (words cleanup
+  adds that the user removes, active at 2x) and name-like low-confidence words
+  the user keeps (vocabulary).
+- Nightly 08:00 UTC (03:00 ET): qwen2.5:7b summarizes stored messages into a
+  per-category style (chat/email/other/all, min 5 msgs; how, never what; max 6
+  points); POST vk/style/rebuild runs it now. profile returns cleanup_style for
+  the app's category plus cleanup_avoid.
+- POST vk/audio?dictation=<id> (audio body, max 20 MB) stores opt-in clips in
+  /opt/voice/learn/audio/<user>/; DELETE vk/audio removes them; retention 1 year.
+  Training pipeline voice/vk-learn/train-voice.sh + README-training.md (UNTESTED,
+  run once stats.audio.fine_tune_ready = 2 h of clips).
+- GET vk/stats -> per-day dictations, words, corrected words, accuracy %, audio.
+- learned also lists avoid words ("a<id>", deletable) and styles; export and
+  forget-everything cover all of it.
