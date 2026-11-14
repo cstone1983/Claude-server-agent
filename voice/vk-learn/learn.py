@@ -318,10 +318,13 @@ def stats(c, user, days=30):
 
 # ---------- writing style (nightly) ----------
 STYLE_PROMPT = """You are given recent messages written by one person (dictated, then sent).
-Describe HOW this person writes, as 3-6 short bullet points a text-cleanup assistant can follow:
-tone/formality, sentence length, punctuation and capitalization habits, emoji use, typical greetings
-or sign-offs, words or phrases they like. Do NOT quote private details, names of other people,
-addresses, numbers or topics. Only describe the style. Reply with the bullet points only."""
+Describe HOW this person writes - never WHAT they write about - as at most 6 short bullet points
+that a text-cleanup assistant can follow when tidying their dictation:
+tone and formality, sentence length, how they open and close messages, emoji use, favourite
+filler-free phrasings or expressions.
+Rules: never mention topics, projects, technologies, products, apps, people, places or any
+specific words from the messages. Do not describe their interests. Do not give punctuation or
+grammar advice that would make the text less correct. Reply with the bullet points only."""
 
 
 def ask_ollama(prompt, text, timeout=600):
@@ -354,6 +357,7 @@ def rebuild_styles(only_user=None):
     for u, cat, msgs in targets:
         try:
             style = ask_ollama(STYLE_PROMPT, "\n---\n".join(m[:500] for m in msgs))
+            style = "\n".join([l for l in style.splitlines() if l.strip()][:6])   # hard cap: 6 points
         except Exception as e:
             print(f"style {u}/{cat} failed: {e}", flush=True)
             continue
