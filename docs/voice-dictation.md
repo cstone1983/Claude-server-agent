@@ -59,6 +59,13 @@ dedicated chat for this project.** State at hold: VM 113 created and started
   upload yes with small.en but long chunks (8-15 s); turbo never; a
   WebSocket/streaming endpoint would not help on CPU (cost is the window,
   not HTTP). Told the app chat.
+- Models stay in memory (2026-11-14): WHISPER__TTL=-1, OLLAMA_KEEP_ALIVE=-1;
+  /usr/local/sbin/voice-warmup + voice-warmup.service (enabled) loads small.en
+  and qwen2.5:3b after every boot. Only those two are loaded (~3.5 GB RAM).
+  WARNING: speaches' unload endpoint `DELETE /api/ps/<model>` hung and
+  deadlocked ALL transcriptions until `docker compose restart speaches` -
+  never use it; restart speaches instead. Also: `pkill -f <script path>`
+  inside a hub run_shell kills the hub's own shell.
 - Split DNS (2026-11-14): UDM local record voice.stoneyshome.com -> 10.10.11.102
   (Traefik on n8n, router "voice-public-inside", own Let's Encrypt cert via
   cfdns) -> voice gateway 10.10.11.113:8080. At home the same address stays
