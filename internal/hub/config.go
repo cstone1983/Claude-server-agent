@@ -76,6 +76,8 @@ type NotifyConfig struct {
 	NtfyToken string `yaml:"ntfy_token,omitempty"`
 	// WebhookURL receives a JSON POST for every approval request (n8n, Home Assistant, ...).
 	WebhookURL string `yaml:"webhook_url,omitempty"`
+	// Telegram sends approval requests (with buttons) and alerts.
+	Telegram TelegramConfig `yaml:"telegram,omitempty"`
 }
 
 func (c *Config) applyDefaults() {

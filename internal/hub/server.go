@@ -35,6 +35,7 @@ type Hub struct {
 	sess     *sessions
 	metrics  *metricsStore
 	replica  *replica
+	tg       *telegram
 	// testSend replaces sending to an agent in tests.
 	testSend func(*agentConn, proto.Envelope) error
 }
@@ -63,6 +64,9 @@ func New(cfg *Config) (*Hub, error) {
 		return nil, err
 	}
 	h.replica = rep
+	if h.tg, err = newTelegram(h, cfg.Notify.Telegram); err != nil {
+		return nil, err
+	}
 	if len(cfg.Replica.TrustedProxies) > 0 {
 		trustedProxies = map[string]bool{}
 		for _, ip := range cfg.Replica.TrustedProxies {
@@ -298,6 +302,9 @@ func (h *Hub) Serve(ctx context.Context) error {
 	}
 	if h.replica.standby() {
 		go h.replica.run(ctx)
+	}
+	if h.tg != nil {
+		go h.tg.run(ctx)
 	}
 	go h.releases.run(ctx)
 	go h.collectMetrics(ctx)
