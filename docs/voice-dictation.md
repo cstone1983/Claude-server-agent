@@ -59,6 +59,15 @@ dedicated chat for this project.** State at hold: VM 113 created and started
   upload yes with small.en but long chunks (8-15 s); turbo never; a
   WebSocket/streaming endpoint would not help on CPU (cost is the window,
   not HTTP). Told the app chat.
+- Split DNS (2026-11-14): UDM local record voice.stoneyshome.com -> 10.10.11.102
+  (Traefik on n8n, router "voice-public-inside", own Let's Encrypt cert via
+  cfdns) -> voice gateway 10.10.11.113:8080. At home the same address stays
+  inside and works during internet outages; away it resolves publicly to the
+  Cloudflare tunnel. LAN has no IPv6, so the public AAAA answers fail fast and
+  clients use IPv4 (inside). Phone Private DNS must stay Off/Automatic.
+  voice-api.lan.stoneyshome.com (Traefik router + UDM record) is now redundant:
+  remove after the user confirms. Lesson: edit lan.yml via a temp file + YAML
+  check, then mv (a str.replace on "  middlewares:" hit the idrac router).
 - Setup QR "app" format now also carries stt_model + chat_model (the app
   pre-fills them). /v1/models lists only the Whisper models (speaches); the
   cleanup model must come from the QR or be typed. Possible later: merge
