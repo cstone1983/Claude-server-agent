@@ -32,12 +32,10 @@ const (
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
 
 type agentConn struct {
-	id      string
-	ws      *websocket.Conn
-	wmu     sync.Mutex
-	mu      sync.Mutex
-	pending map[string]chan *proto.Result
-	closed  chan struct{}
+	id     string
+	ws     *websocket.Conn
+	wmu    sync.Mutex
+	closed chan struct{}
 }
 
 func (c *agentConn) send(env proto.Envelope) error {
@@ -50,6 +48,41 @@ func (c *agentConn) send(env proto.Envelope) error {
 type registry struct {
 	mu    sync.Mutex
 	conns map[string]*agentConn // by agent ID
+	// pending holds calls waiting for a result, by call ID. It belongs to the
+	// registry, not to one connection, so a result the agent re-sends after a
+	// reconnect still reaches the caller.
+	pending map[string]chan *proto.Result
+}
+
+func (r *registry) addPending(id string) chan *proto.Result {
+	ch := make(chan *proto.Result, 1)
+	r.mu.Lock()
+	if r.pending == nil {
+		r.pending = map[string]chan *proto.Result{}
+	}
+	r.pending[id] = ch
+	r.mu.Unlock()
+	return ch
+}
+
+func (r *registry) dropPending(id string) {
+	r.mu.Lock()
+	delete(r.pending, id)
+	r.mu.Unlock()
+}
+
+// deliver hands a result to its waiting caller; results nobody waits for
+// (already delivered, or the hub restarted) are ignored.
+func (r *registry) deliver(id string, res *proto.Result) bool {
+	r.mu.Lock()
+	ch := r.pending[id]
+	delete(r.pending, id)
+	r.mu.Unlock()
+	if ch == nil || res == nil {
+		return false
+	}
+	ch <- res
+	return true
 }
 
 func (r *registry) get(id string) *agentConn {
@@ -201,7 +234,7 @@ func (h *Hub) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(16 << 20)
-	c := &agentConn{id: id, ws: ws, pending: map[string]chan *proto.Result{}, closed: make(chan struct{})}
+	c := &agentConn{id: id, ws: ws, closed: make(chan struct{})}
 
 	h.reg.mu.Lock()
 	if old := h.reg.conns[id]; old != nil {
@@ -262,13 +295,7 @@ func (h *Hub) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 				go h.sampleOne(context.Background(), id)
 			}
 		case proto.TypeResult:
-			c.mu.Lock()
-			ch := c.pending[env.ID]
-			delete(c.pending, env.ID)
-			c.mu.Unlock()
-			if ch != nil && env.Result != nil {
-				ch <- env.Result
-			}
+			h.reg.deliver(env.ID, env.Result)
 		}
 	}
 }
@@ -301,15 +328,8 @@ func (h *Hub) callAgent(ctx context.Context, agentID string, call *proto.Call) (
 		return nil, errOffline
 	}
 	id := randomID("c_")
-	ch := make(chan *proto.Result, 1)
-	c.mu.Lock()
-	c.pending[id] = ch
-	c.mu.Unlock()
-	defer func() {
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.mu.Unlock()
-	}()
+	ch := h.reg.addPending(id)
+	defer h.reg.dropPending(id)
 	send := c.send
 	if h.testSend != nil {
 		send = func(env proto.Envelope) error { return h.testSend(c, env) }
@@ -317,18 +337,36 @@ func (h *Hub) callAgent(ctx context.Context, agentID string, call *proto.Call) (
 	if err := send(proto.Envelope{Type: proto.TypeCall, ID: id, Call: call}); err != nil {
 		return nil, fmt.Errorf("%w: %v", errNotSent, err)
 	}
-	timeout := time.Duration(h.cfg.CallTimeoutSec) * time.Second
+	timeout := time.NewTimer(time.Duration(h.cfg.CallTimeoutSec) * time.Second)
+	defer timeout.Stop()
 	select {
 	case res := <-ch:
 		return res, nil
 	case <-c.closed:
-		return nil, errors.New("agent disconnected while running the command (it may still have run)")
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(timeout):
+	case <-timeout.C:
+		return nil, errors.New("timed out waiting for the agent")
+	}
+	// The connection dropped. The agent keeps running the command and re-sends
+	// the result when it reconnects, so wait a while for that.
+	grace := time.NewTimer(reconnectGrace)
+	defer grace.Stop()
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-grace.C:
+		return nil, errors.New("agent disconnected while running the command and did not come back in time (it may still have run)")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timeout.C:
 		return nil, errors.New("timed out waiting for the agent")
 	}
 }
+
+// reconnectGrace is how long a call waits for its agent to reconnect and
+// re-send the result after the connection dropped mid-call.
+var reconnectGrace = 3 * time.Minute
 
 // rulesFor returns the hub rules that apply to an agent.
 func (h *Hub) rulesFor(a *AgentRec) []policy.Rule {

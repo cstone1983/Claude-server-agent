@@ -44,6 +44,34 @@ type Config struct {
 	AllowedRedirectHosts []string `yaml:"allowed_redirect_hosts"`
 
 	Notify NotifyConfig `yaml:"notify"`
+
+	// ListenAlso are extra listen addresses, e.g. the LAN address so agents
+	// and a standby hub can reach this hub when the public URL is down. On
+	// these, only agent connections, /healthz and /replica are served unless
+	// the request uses the public host name.
+	ListenAlso []string `yaml:"listen_also,omitempty"`
+
+	// Alerts: built-in watching with Telegram messages (see docs/standby-hub.md
+	// for the hub pair, README for alerts).
+	Alerts AlertsConfig `yaml:"alerts,omitempty"`
+
+	// Replica sets up a primary/standby pair (see docs/standby-hub.md).
+	Replica ReplicaConfig `yaml:"replica,omitempty"`
+}
+
+type ReplicaConfig struct {
+	// Role is "primary" or "standby" (empty = no replication).
+	Role string `yaml:"role,omitempty"`
+	// PeerURL is the other hub's LAN address, e.g. http://10.10.11.102:7420.
+	PeerURL string `yaml:"peer_url,omitempty"`
+	// SecretFile holds the shared secret both hubs use (same file content on both).
+	SecretFile string `yaml:"secret_file,omitempty"`
+	// TakeoverAfterSec: a standby starts serving after the primary has not
+	// answered for this long (default 90).
+	TakeoverAfterSec int `yaml:"takeover_after_sec,omitempty"`
+	// TrustedProxies are addresses (the standby's) whose X-Forwarded-For and
+	// CF-Connecting-IP headers are trusted, like loopback.
+	TrustedProxies []string `yaml:"trusted_proxies,omitempty"`
 }
 
 type NotifyConfig struct {
@@ -52,6 +80,8 @@ type NotifyConfig struct {
 	NtfyToken string `yaml:"ntfy_token,omitempty"`
 	// WebhookURL receives a JSON POST for every approval request (n8n, Home Assistant, ...).
 	WebhookURL string `yaml:"webhook_url,omitempty"`
+	// Telegram sends approval requests (with buttons) and alerts.
+	Telegram TelegramConfig `yaml:"telegram,omitempty"`
 }
 
 func (c *Config) applyDefaults() {
@@ -75,6 +105,7 @@ func (c *Config) applyDefaults() {
 	defi(&c.AccessTokenTTLMin, 60)
 	defi(&c.RefreshTokenTTLDays, 30)
 	defi(&c.DashboardSessionHours, 24)
+	defi(&c.Replica.TakeoverAfterSec, 90)
 	if len(c.AllowedRedirectHosts) == 0 {
 		c.AllowedRedirectHosts = []string{"claude.ai", "claude.com", "localhost", "127.0.0.1"}
 	}

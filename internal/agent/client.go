@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -35,6 +37,58 @@ type Agent struct {
 	policy *policy.Policy
 	exec   *Executor
 	audit  *audit.Log
+	out    outbox
+}
+
+// outbox keeps results until they have been sent to the hub. A call keeps
+// running when the connection drops; its result is sent on the next
+// connection (the hub waits for it for a few minutes).
+type outbox struct {
+	mu    sync.Mutex
+	send  func(proto.Envelope) error // current connection, nil when offline
+	items map[string]outItem
+}
+
+type outItem struct {
+	env proto.Envelope
+	at  time.Time
+}
+
+const outboxKeep = 15 * time.Minute
+
+func (o *outbox) put(env proto.Envelope) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.send != nil && o.send(env) == nil {
+		return
+	}
+	if o.items == nil {
+		o.items = map[string]outItem{}
+	}
+	o.items[env.ID] = outItem{env: env, at: time.Now()}
+	slog.Warn("hub not reachable; result kept until reconnect", "call", env.ID)
+}
+
+// attach makes send the current connection and flushes kept results.
+func (o *outbox) attach(send func(proto.Envelope) error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.send = send
+	if send == nil {
+		return
+	}
+	for id, it := range o.items {
+		if time.Since(it.at) > outboxKeep {
+			delete(o.items, id)
+			continue
+		}
+		if send(it.env) != nil {
+			o.send = nil
+			return
+		}
+		delete(o.items, id)
+		slog.Info("re-sent result after reconnect", "call", id)
+	}
 }
 
 func New(cfg *Config) (*Agent, error) {
@@ -55,27 +109,66 @@ func New(cfg *Config) (*Agent, error) {
 
 func (a *Agent) Policy() *policy.Policy { return a.policy }
 
-// Run keeps a connection to the hub open until ctx is cancelled.
+// Run keeps a connection to the hub open until ctx is cancelled. It tries
+// hub_url first and then each fallback URL; while on a fallback it checks
+// hub_url every few minutes and moves back when it answers.
 func (a *Agent) Run(ctx context.Context) error {
-	a.audit.Write(audit.Entry{Event: "agent_started", Detail: map[string]string{"version": version.String(), "hub": a.cfg.HubURL}})
+	a.audit.Write(audit.Entry{Event: "agent_started", Detail: map[string]any{"version": version.String(), "hub": a.cfg.HubURL, "fallbacks": a.cfg.FallbackHubURLs}})
+	urls := append([]string{a.cfg.HubURL}, a.cfg.FallbackHubURLs...)
+	idx := 0
 	backoff := time.Second
 	for {
 		start := time.Now()
-		err := a.connectOnce(ctx)
+		err := a.connectOnce(ctx, urls[idx], idx > 0)
 		if ctx.Err() != nil {
 			return nil
+		}
+		if errors.Is(err, errBackToPrimary) {
+			idx, backoff = 0, time.Second
+			continue
 		}
 		if time.Since(start) > time.Minute {
 			backoff = time.Second
 		}
-		slog.Warn("hub connection lost", "err", err, "retry_in", backoff)
+		wait := backoff
+		if len(urls) > 1 {
+			// Try the next URL quickly; back off only after a full round.
+			idx = (idx + 1) % len(urls)
+			if idx != 0 {
+				wait = 2 * time.Second
+			} else {
+				backoff = min(backoff*2, time.Minute)
+			}
+		} else {
+			backoff = min(backoff*2, time.Minute)
+		}
+		slog.Warn("hub connection lost", "err", err, "next", urls[idx], "retry_in", wait)
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(backoff):
+		case <-time.After(wait):
 		}
-		backoff = min(backoff*2, time.Minute)
 	}
+}
+
+var errBackToPrimary = errors.New("primary hub URL answers again")
+
+// primaryCheckEvery is how often an agent on a fallback URL checks hub_url.
+var primaryCheckEvery = 5 * time.Minute
+
+func (a *Agent) primaryUp(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.cfg.HubURL+"/healthz", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := (&http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}).Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 func wsURL(hub string) string {
@@ -88,7 +181,7 @@ func wsURL(hub string) string {
 	return hub + "/agent/connect"
 }
 
-func (a *Agent) connectOnce(ctx context.Context) error {
+func (a *Agent) connectOnce(ctx context.Context, hubURL string, fallback bool) error {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	sig := ed25519.Sign(a.key, proto.SigningPayload(a.cfg.AgentID, ts))
 	h := http.Header{}
@@ -97,7 +190,7 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	h.Set(proto.HeaderSignature, base64.StdEncoding.EncodeToString(sig))
 	h.Set("User-Agent", "csa-agent/"+version.Version)
 	dialer := websocket.Dialer{HandshakeTimeout: 20 * time.Second, Proxy: http.ProxyFromEnvironment}
-	conn, resp, err := dialer.DialContext(ctx, wsURL(a.cfg.HubURL), h)
+	conn, resp, err := dialer.DialContext(ctx, wsURL(hubURL), h)
 	if err != nil {
 		if resp != nil {
 			return fmt.Errorf("dial: %w (HTTP %s)", err, resp.Status)
@@ -105,7 +198,10 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close()
-	slog.Info("connected to hub", "hub", a.cfg.HubURL, "agent", a.cfg.Name)
+	slog.Info("connected to hub", "hub", hubURL, "agent", a.cfg.Name, "fallback", fallback)
+	if fallback {
+		a.audit.Write(audit.Entry{Event: "hub_fallback", Detail: map[string]string{"hub": hubURL}})
+	}
 
 	conn.SetReadLimit(maxMessage)
 	conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -128,16 +224,42 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 		return err
 	}
 
+	a.out.attach(send)
+	defer a.out.attach(nil)
+
 	connCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		<-connCtx.Done()
 		conn.Close()
 	}()
+	var back atomic.Bool
+	if fallback {
+		go func() {
+			t := time.NewTicker(primaryCheckEvery)
+			defer t.Stop()
+			for {
+				select {
+				case <-connCtx.Done():
+					return
+				case <-t.C:
+					if a.primaryUp(connCtx) {
+						slog.Info("primary hub URL answers again; moving back", "hub", a.cfg.HubURL)
+						back.Store(true)
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+	}
 
 	for {
 		var env proto.Envelope
 		if err := conn.ReadJSON(&env); err != nil {
+			if back.Load() {
+				return errBackToPrimary
+			}
 			return err
 		}
 		conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -146,11 +268,11 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 			if env.Call == nil {
 				continue
 			}
+			// Run with the agent's context, not the connection's: a dropped
+			// connection must not kill a running command.
 			go func(id string, call *proto.Call) {
-				res := a.exec.Handle(connCtx, call)
-				if err := send(proto.Envelope{Type: proto.TypeResult, ID: id, Result: res}); err != nil {
-					slog.Error("sending result", "err", err)
-				}
+				res := a.exec.Handle(ctx, call)
+				a.out.put(proto.Envelope{Type: proto.TypeResult, ID: id, Result: res})
 			}(env.ID, env.Call)
 		case proto.TypeSetRules:
 			if err := a.policy.SetHubRules(env.Rules); err != nil {

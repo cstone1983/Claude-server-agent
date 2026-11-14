@@ -132,7 +132,28 @@ func (e *Executor) Handle(ctx context.Context, call *proto.Call) *proto.Result {
 		if stop != nil {
 			return stop
 		}
-		return e.execute(ctx, call, act, d, procSpec{Argv: []string{"/bin/bash", "-c", a.Script}, As: a.As, Cwd: a.Cwd, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
+		argv, env := shellSpec(a.Script)
+		return e.execute(ctx, call, act, d, procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
+
+	case "inspect":
+		var a tools.InspectArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		if strings.TrimSpace(a.Script) == "" {
+			return errResult("script is empty")
+		}
+		act := policy.Action{Kind: "inspect", Shell: a.Script}
+		d, stop := e.gate(call, actionHash(call.Tool, a), act, a.Reason)
+		if stop != nil {
+			return stop
+		}
+		argv, env := shellSpec(a.Script)
+		res := e.execute(ctx, call, act, d, procSpec{Argv: argv, Env: env, Cwd: a.Cwd, Sandbox: true, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
+		if res != nil && !res.OK && strings.Contains(res.Text, "exit code: -1") && strings.Contains(res.Text, "operation not permitted") {
+			res.Text = "the inspect sandbox is not available on this server (it cannot create a network namespace, e.g. inside a container); use run_command/run_shell instead.\n" + res.Text
+		}
+		return res
 
 	case "service":
 		var a tools.ServiceArgs
@@ -660,14 +681,14 @@ func listDir(p string) *proto.Result {
 
 func (e *Executor) startJob(call *proto.Call, a tools.StartJobArgs, hash string) *proto.Result {
 	var act policy.Action
-	var argv []string
+	var argv, env []string
 	switch {
 	case len(a.Argv) > 0 && a.Script == "":
 		act = policy.Action{Kind: "exec", Argv: a.Argv, As: a.As}
 		argv = a.Argv
 	case a.Script != "" && len(a.Argv) == 0:
 		act = policy.Action{Kind: "shell", Shell: a.Script, As: a.As}
-		argv = []string{"/bin/bash", "-c", a.Script}
+		argv, env = shellSpec(a.Script)
 	default:
 		return errResult("give exactly one of argv or script")
 	}
@@ -682,7 +703,7 @@ func (e *Executor) startJob(call *proto.Call, a tools.StartJobArgs, hash string)
 	if timeout > 24*time.Hour {
 		timeout = 24 * time.Hour
 	}
-	j, err := e.jobs.start(procSpec{Argv: argv, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary())
+	j, err := e.jobs.start(procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary())
 	if err != nil {
 		return errResult("%v", err)
 	}

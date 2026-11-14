@@ -1,0 +1,14 @@
+#!/bin/bash
+# server-notify: send a message to the "Stoneys servers" Telegram bot via the
+# n8n workflow "Server Notifications (Telegram)". Runs on the n8n VM (root).
+#   server-notify <level> <source> <text...>     level: ok | info | warn | alert
+#   echo "multi-line text" | server-notify warn "Weekly check" -
+# Path + key: /root/.config/server-notify/env (root-only).
+set -euo pipefail
+. /root/.config/server-notify/env
+level=${1:?level}; source=${2:?source}; shift 2
+if [ "${1:-}" = "-" ]; then text=$(cat); else text="$*"; fi
+python3 -c 'import json,sys; print(json.dumps({"level":sys.argv[1],"source":sys.argv[2],"text":sys.argv[3]}))' "$level" "$source" "$text" |
+  curl -fsS -m 20 -X POST -H 'Content-Type: application/json' -H "x-notify-key: $NOTIFY_KEY" \
+       --data-binary @- "http://127.0.0.1:5678/webhook/$NOTIFY_PATH" >/dev/null
+echo "sent"

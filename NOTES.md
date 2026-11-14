@@ -4,9 +4,187 @@ Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
 usage in [README.md](README.md).
 
+## Current state and next steps (2026-11-11 night, after the network overhaul)
+
+**2026-11-11 04:30: backups after the moves all OK (22:15 file server, 23:00
+off-site 125G in 121 min). Firewall review round 1 done; round 2 after the
+NEW-only counters have run for several hours.**
+
+- **Network overhaul: all moves DONE 2026-11-11** (details and rollback info:
+  docs/network-overhaul.md, status lines at the top of "Final runbook").
+  - Servers VLAN 10 (10.10.10.0/23): hardware in 10.10.10.x (Proxmox host
+    10.10.10.15, iDRAC 10.10.10.10), VMs at 10.10.11.<VMID> (n8n .102, HA
+    .103, Solar .100, Recipes .107, Finance .111, fileserver .112, Autopilot
+    .110 - stopped). DMZ: CPU-Share 10.10.20.104. Storage VLAN 40: SAN
+    10.10.40.10/.11, Proxmox 10.10.40.100. Cameras 10.10.4.10/.11, Lutron
+    10.10.3.11. Main keeps the desktops (101 .185, 106 .254), TVs, phones.
+  - DNS `<name>.localdomain` for every server; `proxmox` and `idrac` records
+    do NOT resolve (fix). Proxmox UI: https://10.10.10.15:8006.
+  - Proxmox login allow-list ON (8006/22/8007/consoles only from Main + VPN).
+- **Left to do (recap tomorrow), in order:**
+  1. Firewall review round 2 (round 1 done 2026-11-11 04:30, see
+     docs/network-overhaul.md): OBSERVE rules now count NEW connections
+     only; re-read their counters vs /root/net-overhaul/observe-baseline-*.tsv
+     on n8n, allow what is needed, then switch them to BLOCK (NEW-only! a
+     plain block would also drop replies and cut HA off from IoT). Remove
+     old IPs from the OBJ groups.
+  2. **Per-VM firewalls - in progress** (Proxmox VM firewall, one
+     allow-list per VM). Enforced 2026-11-11: Fiance 111, Recipes 107,
+     Solar-Calc 100, n8n 102, Fileshare 112. HA 103 in OBSERVE since
+     2026-11-11 afternoon (NIC firewall=1, nothing blocked): review the log
+     after a night, then block. Left after that: the desktops. See To do.
+     (SAN set up 2026-11-08 ~13:00-13:40. Its clock was ~9 months behind -
+     SAN log entries before 2026-11-11 17:00 show Feb 2026 dates; set to
+     the correct time + America/New_York 2026-11-11. No NTP: the Storage
+     VLAN is VLAN-only with no gateway, so the SAN's "Def-Gateway
+     10.10.1.1" is meaningless and was left. Option: NTP from Proxmox
+     (chrony on 10.10.40.100). Clock will drift; check it in the weekly.)
+  3. iDRAC IP Blocking (user will do it: Network > Advanced, 10.10.1.0/24).
+  4. Fix the `proxmox`/`idrac` DNS records; Collabora (broken before the
+     move); change the Solar `solar_ro` DB password; SAN: PSU 1 failed (user
+     may leave it out to save power when racked); tidy the 16 migrated
+     legacy UDM policies.
+     SAN 2026-11-11: user inserted the second control module (slot 0 =
+     secondary/standby, same FW V7.0.4, cache battery "low voltage" while
+     charging - recheck) and cabled it to switch port 26 -> set native
+     Storage VLAN 40 (port 31 = active controller eth3). Disk in slot 8
+     (old "foreign" label from another array): user OK'd, label cleared
+     2026-11-11 17:00 -> now a hot SPARE (2 spares: slots 8 + 15; RAID 6
+     set unchanged at 14 disks, 10.47 TB). UPDATE 2026-11-13: the array DID grow on its own
+     (11-11 17:00, 14 -> 15 disks RAID 6, using slot 15 + disk 8). 11-12
+     18:03 the SAN predicted disk 8 would fail, copied it to slot 15
+     (done 20:55) and marked DISK 8 FAILED; expansion finished 11-13 04:32,
+     then parity verify. Now: 15 disks RAID 6, 11.34 TB, 0 SPARES (SAN
+     warns "More spare drives are expected"), data fine, no I/O errors.
+     To do (user): pull disk 8 (bad drive; it also flapped on 11-08) and
+     insert a replacement 1 TB SATA -> becomes the spare.
+  5. Off-site: delete the old per-VM Drive folders; `--fast-list`.
+  6. **Internal HTTPS - DONE 2026-11-11** (docs/internal-https.md):
+     proxmox (no port needed), unifi, pbs, ha, idrac .lan.stoneyshome.com
+     all work with trusted certs. Open: roll the Cloudflare
+     token (first ~30 chars were printed once); move the public n8n
+     router to the cfdns resolver; remove the HA SSH add-on's password;
+     UDM encrypted DNS upstream + rule "DNS only via the UDM" (with the
+     firewall round 2). Original plan text:
+     Needs from the user: a Cloudflare API token (Edit zone DNS,
+     stoneyshome.com only) in a root-only file on n8n. Use two kinds of
+     names: machine names `<host>.lan.stoneyshome.com` -> the server's own
+     IP (SSH/PuTTY, SMB) and web names -> the Traefik proxy on n8n. (The user
+     tried SSH to n8n.stoneyshome.com - that is the public Cloudflare name,
+     web only.)
+- **WAN drops (found 2026-11-11):** every internet drop since Oct 17 starts
+  with SMART_POWER_MODEM_RESTARTED: the USP-Plug (modem outlet, "auto power
+  cycle" ON) restarts the modem. The plug is Wi-Fi meshed (was Porch LR,
+  now Basement AP -59 dBm). User: keep auto restart, lock the plug's uplink
+  to the Basement AP (to do once the UDM Network app is back after the
+  2026-11-11 UDM update). Switch also auto power-cycles stuck PoE devices
+  (Upstairs AP port 5 today, U7 port 48 before).
+- **Wi-Fi review + tuning 2026-11-11** (backups of the old settings in
+  /root/net-overhaul/review/*.before-wifi-tuning.json on n8n):
+  - Fixed channels: 2.4 GHz Upstairs 1 / Basement 11 / Porch LR 6 /
+    Garage LR 11 / U7 Ultra 6; 5 GHz Basement 100 (40 MHz), Porch LR 116,
+    Garage LR 132, U7 Ultra 36 (80 MHz), Upstairs AUTO (fixed DFS 52 made it
+    drop its config and need re-adopting; it recovered by itself).
+    2.4 GHz power medium on Upstairs + Basement. Old: all auto, two APs on
+    5 GHz 149 next to 189 neighbour networks, Upstairs+Basement both on 1.
+  - SSID Obi-Wan: min rate 6 Mb/s (2.4) / 12 Mb/s (5), BSS transition on,
+    WPA2/WPA3 transition, PMF optional. IoT + Guest unchanged.
+  - IoT devices took 5-20 min to rejoin after the channel change (HA
+    unavailable 698 -> 757 -> recovering). Re-check; power-cycle laggards.
+  - Wi-Fi follow-up: 9 devices not back after the tuning: the 2 TVs, 2
+    tablets, laptop, watch (Obi-Wan - suspect the WPA2/WPA3 transition) and
+    Porch Kasa bulbs/plug/pool lights (suspect Porch LR 2.4 GHz ch 6).
+    User 2026-11-11: NO revert - the TVs were simply off and the laptop is
+    connected; watch the others (tablets, watch, porch Kasa) and revert only
+    if they stay off. HA SSH password login DISABLED
+    2026-11-11 (key only).
+  - Physical faults (user): switch port 48 (U7 Ultra) and port 42 (Garage
+    LR) link at 100 Mb/s - cable/jack; port 48 had ~2000 rx errors.
+  - Also found: nightly UDM speed test fails ("Error"); the guest network
+    is open with a click-through portal (no password) - user wants a better
+    guest portal (decide: password or voucher).
+- **Backups:** old 23:30 vzdump job DISABLED 2026-11-11. Nightly: 21:30 PBS
+  (all 9 VMs; 2026-11-11 run OK), 22:15 file server files, 23:00 off-site
+  sync to Google Drive (first full copy done 2026-11-10).
+- **Game server for Anthony (planned, not started):** Pelican panel + Wings +
+  the free "Modpack Manager" plugin (CurseForge/Modrinth one-click modpacks;
+  needs a CurseForge API key; panel installed natively), on a new VM
+  "game-server" (~6 cores, 16 GB, 100 GB) in the DMZ. Fallback: Pterodactyl.
+  Waiting for the user's go. Minecraft on VM 101 stopped/disabled; UDM
+  forward "Minecraft" WAN 25565 -> 10.10.1.185 still enabled;
+  home.stoneyshome.com -> WAN 172.100.91.63 (dynamic, no updater).
+- **Hub:** v0.1.29 on n8n and all agents. Open hub ideas: persist approvals
+  across restarts; agent result buffering across Cloudflare resets; home
+  portal + SSO (To do section).
+- **Thermostat Pi:** IoT 10.10.3.10, reaches HA via homeassistant.localdomain.
+- **Bookmarks (user's wish 2026-11-11):** the user sends a Chrome
+  bookmarks export (.html) when addresses change; only UPDATE the server
+  addresses in it (no reorganizing), and hand back an importable file.
+  **New server addresses always go into the "Servers" folder.** Bar layout
+  (2026-11-11): Lincoln Financial, Special Fund Account, then the
+  "Servers" folder; everything else is under Other bookmarks. The
+  "Servers" folder holds: Proxmox, Backups (PBS), UniFi,
+  iDRAC, Home Assistant (all https://<name>.lan.stoneyshome.com), n8n,
+  Server Agent Hub, Nextcloud, AI Recipes, Finance, Solar, Space (public
+  https://<name>.stoneyshome.com names). iDRAC moved to
+  https://idrac.lan.stoneyshome.com on 2026-11-11.
+- User preferences: approve via the hub (remembered device); hands-off mode
+  is used at times (then ask in chat before risky steps); reboots/updates
+  only when the user says; keep notes updated; recommendations rather than
+  option lists.
+
+## Hub improvements 2026-11-14 (code done, NOT deployed yet)
+On branch ccr-59230fbc-jw6beu, CI green; needs a release + update_server (only when the user says).
+- `inspect` tool: read-only diagnostic scripts as nobody (+adm, systemd-journal), no network; never
+  needs approval. Not available inside the HA add-on container (no network namespaces).
+- Shell deny/ask_always rules match whole command words; script text no longer on the command line.
+- Calls survive a dropped agent connection (agent keeps running, re-sends the result; hub waits 3 min).
+- Agent `fallback_hub_urls`; standby hub with state copy/forwarding/takeover/merge-back:
+  docs/standby-hub.md. Needs: standby VM choice, a dedicated Cloudflare tunnel for
+  agents.stoneyshome.com (today it shares n8n's tunnel), secret file, LAN listen + firewall 7420.
+- list_servers health line (uptime, load, mem, fullest disk, updates, REBOOT PENDING, failed units).
+- Telegram approvals (Approve/Deny/Always; ask-always + rule requests: link only) and built-in alerts
+  (offline, disk, failed units, checks): README "Telegram approvals and alerts". Needs the bot token
+  in /etc/csa-hub/telegram.token on n8n, chat id 6897458189, and the bot without a webhook.
+- Hands-off mode unchanged (auto-approved actions never reach Telegram; checks never ask for approval).
+
+## Secrets and where they live (never in chat or in this repo)
+
+- **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
+  user; permission: DNS Edit on zone stoneyshome.com only; no expiration;
+  no IP filter). Stored root-only (0600) as **`/root/cf-dns-token`** on
+  **Proxmox** and on **n8n**. Used for Let's Encrypt DNS-01 certificates
+  (`*.lan.stoneyshome.com`: Traefik on n8n, Proxmox ACME). Reuse it for any
+  other service that needs a certificate or Cloudflare DNS changes: copy the
+  file as root (e.g. `install -m 600`), never print it. Revoke/rotate in
+  Cloudflare -> My Profile -> API Tokens, then rewrite both files (and the
+  Proxmox ACME plugin, which keeps its own copy).
+- **EqualLogic SAN grpadmin password**: `/root/.config/eql/pass` on Proxmox
+  (used by `/usr/local/sbin/eql-cli`); the user's password manager.
+- **UniFi local admin**: `/root/.config/unifi/.env` on n8n (`unifi` helper).
+- **Backup alert token**: `/etc/backup-report.conf` on Proxmox.
+- **Thermostat MQTT**: `/etc/thermostat.env` on the Pi.
+- **Server notifications (Telegram bot "Stoneys servers")**: n8n credential
+  "Stoneys servers" (id dBIuMpWGXYcBrEnX, user's chat id 6897458189);
+  workflow "Server Notifications (Telegram)" (id Unagh3QcCttjPfnq): callable
+  from other workflows (text, level, source) or via a keyed POST webhook.
+  Webhook path + key in `/root/.config/server-notify/env` on n8n (root-only);
+  helper `/usr/local/bin/server-notify <ok|info|warn|alert> <source> <text|->`
+  (scripts/server-notify). Scheduled checks: docs/server-checks.md (prompts,
+  pre-approved hub rules, scripts). The user creates the two tasks in the
+  Claude app (tasks created by Claude can't carry connectors). Still to do:
+  move other server alerts (backup reports) to this bot.
+
+- **SSH into Home Assistant** (Terminal & SSH add-on, port 22): key
+  `/root/.ssh/ha_ssh` on n8n (root-only); the add-on accepts it only
+  `from="10.10.11.102"`. Use: `ssh -i /root/.ssh/ha_ssh
+  root@homeassistant.lan.stoneyshome.com` (via the hub on n8n). The add-on
+  ALSO still has password login with a weak password that was shown in a
+  tool output on 2026-11-11 - to be removed (ask the user first).
+
 ## What exists
 
-- **csa-hub** runs on the **n8n** VM (10.10.1.86).
+- **csa-hub** runs on the **n8n** VM (10.10.11.102 since 2026-11-11; was 10.10.1.86).
   - It listens on `127.0.0.1:7420`.
   - It's published through the existing Cloudflare tunnel `n8n_tunnel` as
     the route `agents.stoneyshome.com` → `http://localhost:7420`.
@@ -45,7 +223,7 @@ usage in [README.md](README.md).
 | vm-fiance | personal-finance-dashboard + starhaul (11 containers, 2 Postgres) | **Ubuntu 26.04.1** (upgraded today) | 97 GB, 41% (extended today) |
 | solar_perdiction | solar-calc (hostname `solar-calc`), 10.10.1.156, 64 GB RAM | Ubuntu 24.04.5 | 97 GB, 16% (extended today) |
 | AI-recipes | | Ubuntu 24.04.5 | 97 GB, 10% (extended today) |
-| cpu-share | VM 104, 10.10.1.134; new and empty, 24 vCPU / 64 GB; to become an **Akash compute provider** | **Ubuntu 26.04.1** | 498 GB |
+| cpu-share | VM 104, DMZ 10.10.20.104 (since 2026-11-11); new and empty, 24 vCPU / 64 GB; to become an **Akash compute provider** | **Ubuntu 26.04.1** | 498 GB |
 | Proxmox | node `starwars`, 10.10.1.15, tag `proxmox`, careful-mode policy | Proxmox VE **8.4.21**, kernel 6.8.12-43 | see below |
 | jessy-desktop | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 22% (no LVM) |
 | Ubuntu-Anthony | desktop, tag `Desktop` | Ubuntu 24.04.5 | 98 GB, 28% (no LVM) |
@@ -70,6 +248,14 @@ usage in [README.md](README.md).
    `/root/backups/apt-sources/`.
 5. Afterwards, `/` was extended to the full disk.
 6. Its Proxmox snapshot can be deleted once the user is happy.
+
+## Updates 2026-11-10
+
+- All agents v0.1.29. OS updates: cpu-share, n8n, Proxmox (vim + PBS 4.2.10),
+  Fileshare (incl. the unused PHP 8.3 packages: user chose to keep and update
+  them; Apache stays on PHP 8.4), thermostat Pi. Remaining are Ubuntu phased
+  updates. cpu-share logrotate fixed (duplicate cloud-init logrotate file moved
+  to /root); Proxmox PBS enterprise repo disabled (nightly apt 401).
 
 ## Hub login: remembered devices (v0.1.26, 2026-11-10)
 
@@ -266,6 +452,9 @@ usage in [README.md](README.md).
   UNWIRED, the user uses it as a sensor only. HA entity
   climate.basement_thermostat (MQTT, broker = Mosquitto on HA).
 - Wi-Fi Obi-Wan-IoT since 2026-11-09 (old Obi-Wan profile kept, priority 0).
+- 2026-11-10: first OS update since setup (488 packages), kernel 6.12 -> 6.18
+  (6.18.60+rpt-rpi-2712, old kernel still installed); rebooted, thermostat,
+  MQTT and agent came back on their own.
 - Script /home/stonec/thermostat_client/thermostat.py, `thermostat.service`
   (user stonec). Rewritten 2026-11-09 (backup thermostat.py.bak-202611091907):
   MQTT by name (homeassistant.localdomain), credentials in root-only
@@ -399,6 +588,91 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [x] **Home Assistant via the hub (2026-11-14):** HA add-on "Claude Server Agent"
+      (repo ha-addon/csa_agent, HA repo URL ...Claude-server-agent#ccr-59230fbc-jw6beu,
+      slug 3571fe5c_csa_agent) - server "home-assistant" (tag ha) in the hub. Uses the
+      `ha` CLI (Supervisor API, role admin) through a wrapper that loads the add-on's
+      Supervisor token; HA config is at /homeassistant inside the add-on. Read-only
+      `ha ... info/list` free, everything else approval, host shutdown denied.
+      HA core API from the agent: curl http://supervisor/core/api/... with the token
+      from /run/s6/container_environment/SUPERVISOR_TOKEN (never print it).
+- [x] HA updated 2026-11-14: Core 2026.11.1, OS 18.4, all add-ons, 10 HACS, ha-mcp,
+      Shelly + Sonoff firmware sent. VM 103 now 4 cores / 24 GB / 100 GB disk (data
+      partition grew on reboot: 97.7 GB, 70 GB free).
+      LESSON: update HA Core BEFORE HACS integrations. Airstage v1.10.0 on Core
+      2026.10.1 failed to load ('__attr_temperature_unit') -> all 7 heat pumps
+      unavailable 11:23-11:33 until Core 2026.11.1 was installed.
+      HA has no log file; use `ha core logs` from the agent. Unavailable for 48h+
+      before the updates (not caused by them): climate.air_conditioner and two
+      Eight Sleep sides (ashley, S).
+      HAOS 18.4 `ha os update` no longer reboots by itself: "Reboot ... to finish".
+
+- [ ] **CPU-Share (VM 104) tuned for mining (2026-11-15, user's request).**
+      Was: cpu x86-64-v3, 4 virtual sockets x 6, NUMA off. Now: cpu host,
+      2 sockets x 15 cores = 30 vCPUs matching the 2 real CPUs, NUMA on with
+      numa0 -> host node 0 / numa1 -> host node 1 (32 GB each,
+      policy=preferred, not bind: node 0 had only ~17 GB free), cpuunits 20
+      (low priority: HA, voice, desktops win under load). Guest sees 2 NUMA
+      nodes + pdpe1gb (1 GB pages). XMRig/Akash software is handled by a
+      separate chat (it measures hashrate). Not done yet (step 4): host-backed
+      huge pages + smaller RAM - needs the Akash RAM usage first.
+      Undo: qm set 104 --cpu x86-64-v3 --sockets 4 --cores 6 --numa 0
+      --delete numa0,numa1,cpuunits, then restart.
+
+- [ ] cloudflared updated to 2026.11.0 on all 6 servers that run it
+      (2026-11-14). HA's "Cloudflared" add-on is installed but STOPPED (HA
+      remote access uses Homeway) and has an update: update or remove it.
+      HA has 9 add-on updates waiting. Rotate the voice tunnel token.
+
+- [ ] **Self-hosted voice dictation - ON HOLD, own chat later** (user,
+      2026-11-14). VM 113 "voice" created (8 cores host CPU, 16 GB, 64 GB,
+      10.10.11.113 reserved, voice.lan DNS), sitting in the Ubuntu installer.
+      Full plan, keyboard research (Dictate top pick), learning + training
+      session ideas: docs/voice-dictation.md. Start a new chat with that doc.
+- [ ] **Idea: our own Android keyboard app** (user, 2026-11-14) for the
+      self-hosted voice dictation (VM 113 "voice"). Try Dictate first; fork
+      Dictate/FlorisBoard for what it lacks. See docs/voice-dictation.md; ready-made prompt for a new chat: docs/keyboard-app-prompt.md. Being built (2026-11-14) by a separate chat, working only in the GitHub repo "voice-keyboard"; read its notes there.
+
+- [ ] **Per-VM firewalls (user's request 2026-11-11) - in progress.** The
+      UDM only filters BETWEEN VLANs; Proxmox VM firewalls (filtered at the
+      bridge, can't be turned off from inside a VM) add one allow-list per
+      VM. User's rules: SSH (22) from Main + VPN (ipset `trusted`) and from
+      all servers (ipset `servers`); everything else only what is needed;
+      Proxmox host stays Main + VPN only. Method per VM: write
+      `/etc/pve/firewall/<vmid>.fw` with policy ACCEPT + a final
+      `IN ACCEPT -log info` (observe), watch `/var/log/pve-firewall.log`
+      2-3 min, then policy DROP + `log_level_in: nolog`, verify from n8n,
+      from Main (Ubuntu-Anthony) and from inside the VM (outbound, tunnel).
+      Agents and all public names go through Cloudflare (outbound), so the
+      VM firewalls never affect them; HA's n8n webhooks use
+      n8n.stoneyshome.com (Cloudflare) too.
+      Done (enforced + verified):
+      - 111 Fiance: trusted 22; servers 22; icmp.
+      - 107 Recipes: trusted 22,80,3000,24678; servers 22; n8n -> 80
+        (net-check); icmp.
+      - 100 Solar-Calc: trusted 22,8080; servers 22; n8n -> 8080; icmp.
+      - 102 n8n: trusted 22,80,443; servers 22; Solar -> 5433; icmp.
+      - 112 Fileshare (NIC firewall=1 set 2026-11-11):
+      trusted tcp 22,80,139,445,5357 + udp 137,138,3702; servers 22;
+      n8n -> 80,445; icmp.
+      In progress: 103 HA, observe only (trusted 8123,22; servers 22; n8n -> 8123; mDNS; UniFi 10001; log the rest).
+      Left: 103 HA (NIC needs firewall=1: brief blip; many IoT inbound
+      flows: 8123, MQTT 1883, CoIoT, Sonos, HomeKit - longer observe), the
+      desktops. CPU-Share already has one (104.fw).
+      Found while verifying: proxmox.lan without :8006 (443 REDIRECT) did
+      not work from VMs on the host; changed to an explicit DNAT, works now.
+- [ ] **Network overhaul: enforce the blocks** after reviewing the observe
+      logs (IoT, Cameras, Servers, DMZ); keep allow rules above the blocks
+      (the "HA to TVs on Main" rule was added after the observe rule). Then
+      remove the old IPs from the OBJ groups. All VMs moved 2026-11-11.
+- [ ] **Collabora (Nextcloud office) not working** - the built-in CODE
+      server stays "starting"; discovery has returned 503 every hour since
+      at least 2026-11-10 (before the network move). wopi_url is now
+      http://fileserver.localdomain/apps/richdocumentscode/proxy.php?req=.
+- [ ] **UDM DNS records `proxmox` and `idrac` don't resolve** (the others
+      do). Recreate or check for a name clash.
+- [ ] **Change the Solar read-only DB password** (`solar_ro`): it was
+      printed in a tool output during the move (LAN-only, read-only user).
 - [ ] **Future project: one home portal + single sign-on** (user's idea,
       2026-11-10). There are now many separate dashboards, each with its own
       login: Proxmox, PBS, iDRAC, UniFi, Home Assistant, n8n, Nextcloud, the
@@ -648,7 +922,7 @@ Only rules scoped to them by name or tag apply.
       (about 400 MB/s); needs a storage switch or VLAN plus multipath. **Set up 2026-11-08:** password recovery (Ctrl-P → `EQL>` prompt,
       `setenv RESETPASSWORD 1`, `reload`), then `reset` (DeleteAllMyDataNow),
       then `setup`. Group `eqlgroup` at **10.10.1.31**, member `eql1` on
-      **eth3 10.10.1.30** (switch port 26 on USW Pro 48; eth0 has no link).
+      **eth3 10.10.1.30** (switch port 31 on USW Pro 48; eth0 has no link). **Moved 2026-11-11 to Storage VLAN 40: group 10.10.40.10, eth3 10.10.40.11, eth0 10.10.40.12; Proxmox 10.10.40.100 (vmbr0.40).** CLI over serial: `/usr/local/sbin/eql-cli` on Proxmox (password in root-only /root/.config/eql/pass).
       The grpadmin password is the user's (in their password manager; the
       temp file was shredded). Firmware V7.0.4; GUI is a Java applet.
       Disks: 15 × 1 TB SATA 7200 (Hitachi HUA722010CLA330 / Seagate

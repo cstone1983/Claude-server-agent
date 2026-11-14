@@ -201,6 +201,7 @@ func (h *Hub) listServers(caller Caller) Outcome {
 		LastSeen        time.Time `json:"last_seen"`
 		LatestVersion   string    `json:"latest_version,omitempty"`
 		UpdateAvailable bool      `json:"update_available"`
+		Health          *health   `json:"health,omitempty"`
 	}
 	var list []srv
 	h.store.View(func(d *stateData) {
@@ -209,7 +210,12 @@ func (h *Hub) listServers(caller Caller) Outcome {
 				continue
 			}
 			latest, upd := h.updateAvailable(a.AgentVersion)
-			list = append(list, srv{a.Name, h.reg.online(a.ID), a.Tags, a.Hostname, a.OS, a.Arch, a.AgentVersion, a.LastSeen, latest, upd})
+			online := h.reg.online(a.ID)
+			var hl *health
+			if online {
+				hl = h.healthOf(a.ID)
+			}
+			list = append(list, srv{a.Name, online, a.Tags, a.Hostname, a.OS, a.Arch, a.AgentVersion, a.LastSeen, latest, upd, hl})
 		}
 	})
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
@@ -236,6 +242,9 @@ func (h *Hub) listServers(caller Caller) Outcome {
 		}
 		if !s.Online && !s.LastSeen.IsZero() {
 			fmt.Fprintf(&sb, " — last seen %s", s.LastSeen.Format(time.RFC3339))
+		}
+		if s.Health != nil {
+			sb.WriteString("\n    " + s.Health.line())
 		}
 		sb.WriteString("\n")
 	}

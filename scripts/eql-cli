@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""eql-cli: run commands on the EqualLogic SAN over its serial console.
+
+Runs on the Proxmox host (USB-serial adapter + null-modem cable into the SAN's
+active control module). Logs in as grpadmin with the password from the
+root-only file /root/.config/eql/pass (never printed), runs each argument as
+one CLI command, prints the output, logs out.
+
+    eql-cli "show member eql1" "volume show"
+    EQL_USER=grpadmin EQL_DEV=/dev/ttyUSB0 eql-cli ...
+    EQL_STAY=1 eql-cli "show"   # log in and stay logged in (then use picocom)
+
+Serial survives IP changes, which is why IP changes go through here and not SSH.
+"""
+import os, sys, termios, time, tty, re
+
+DEV = os.environ.get("EQL_DEV", "/dev/ttyUSB0")
+USER = os.environ.get("EQL_USER", "grpadmin")
+PASSFILE = "/root/.config/eql/pass"
+# The prompt (e.g. "eqlgroup> ") can follow \r, \n or a banner; match it at the end.
+PROMPT = re.compile(rb"[\w.-]+(\([^)]*\))?>\s*$")
+# A bare login prompt at the end (not "Last login: ..." in the banner).
+LOGIN = re.compile(rb"(^|[\r\n])login: ?$")
+
+def open_port():
+    fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
+    tty.setraw(fd)
+    a = termios.tcgetattr(fd)
+    a[4] = a[5] = termios.B9600
+    a[2] &= ~(termios.PARENB | termios.CSTOPB | termios.CRTSCTS)
+    a[2] |= termios.CS8 | termios.CLOCAL | termios.CREAD
+    termios.tcsetattr(fd, termios.TCSANOW, a)
+    os.set_blocking(fd, False)
+    return fd
+
+def read_until(fd, pats, timeout, quiet=None):
+    """Read until a pattern matches, the timeout passes, or (if quiet is set)
+    the console has been silent for `quiet` seconds after sending something.
+    The quiet rule matters: the prompt is not always recognisable at the end."""
+    buf, end, last = b"", time.time() + timeout, time.time()
+    while time.time() < end:
+        if quiet and buf and time.time() - last > quiet:
+            return buf, "quiet"
+        try:
+            chunk = os.read(fd, 4096)
+        except BlockingIOError:
+            chunk = b""
+        if chunk:
+            buf += chunk
+            last = time.time()
+            if b"Press any key" in buf[-80:]:
+                os.write(fd, b" ")
+            for p in pats:
+                if (p.search(buf) if hasattr(p, "search") else p in buf[-200:]):
+                    return buf, p
+        else:
+            time.sleep(0.1)
+    return buf, None
+
+def send(fd, s):
+    os.write(fd, s.encode() + b"\r")
+
+def main():
+    cmds = sys.argv[1:]
+    if not cmds:
+        sys.exit(__doc__)
+    pw = open(PASSFILE).read().strip()
+    fd = open_port()
+    os.write(fd, b"\x03\r")  # Ctrl-C first: cancels a half-typed command or a pager
+    buf, hit = read_until(fd, [LOGIN, PROMPT], 3)
+    os.write(fd, b"\r")
+    buf, hit = read_until(fd, [LOGIN, PROMPT], 10)
+    if hit is LOGIN:
+        send(fd, USER)
+        buf, hit = read_until(fd, [b"assword:"], 10)
+        if not hit:
+            sys.exit("no password prompt")
+        send(fd, pw)
+        buf, hit = read_until(fd, [PROMPT, b"Login incorrect", LOGIN], 30)
+        if hit is not PROMPT:
+            sys.exit("login failed; SAN said: " + repr(buf.decode("utf-8", "replace").replace(pw, "<redacted>")[-300:]))
+    elif hit is None:
+        sys.exit("no answer from the SAN console on " + DEV)
+    send(fd, "cli-settings paging off")
+    read_until(fd, [PROMPT], 15, quiet=3)
+    rc = 0
+    for c in cmds:
+        send(fd, c)
+        out, hit = read_until(fd, [PROMPT], 120, quiet=4)
+        text = out.decode("utf-8", "replace").replace(pw, "<redacted>").replace("\r", "")
+        print(f"### {c}\n{text.strip()}\n")
+        if hit is None:
+            print("(no prompt after 120 s)"); rc = 1; break
+    if os.environ.get("EQL_STAY"):  # leave the console logged in (for picocom)
+        os.close(fd)
+        sys.exit(rc)
+    # A command like "member select eql1 disk select 8" leaves the CLI in a
+    # sub-menu ("eqlgroup(member_eql1 disk_8)>"); back out before logging out.
+    for _ in range(3):
+        send(fd, "exit")
+        read_until(fd, [PROMPT], 3, quiet=1)
+    send(fd, "logout")
+    _, hit = read_until(fd, [b"(y/n)"], 5)
+    if hit:
+        send(fd, "y")
+    read_until(fd, [LOGIN], 5)
+    os.close(fd)
+    sys.exit(rc)
+
+if __name__ == "__main__":
+    main()

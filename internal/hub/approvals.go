@@ -165,6 +165,9 @@ func (h *Hub) Decide(id string, approve, always bool, scope, via string) (*Appro
 	close(ap.decided)
 	snap := *ap
 	h.appr.mu.Unlock()
+	if h.tg != nil {
+		go h.tg.decided(snap, via)
+	}
 
 	ev := "approval_denied"
 	if approve {

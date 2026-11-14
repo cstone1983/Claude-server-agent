@@ -55,7 +55,7 @@ func clientIP(r *http.Request) string {
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || trustedProxy(host)) {
 		if cf := r.Header.Get("CF-Connecting-IP"); cf != "" {
 			return strings.TrimSpace(cf)
 		}
@@ -65,3 +65,9 @@ func clientIP(r *http.Request) string {
 	}
 	return host
 }
+
+// trustedProxies are extra addresses (a standby hub) treated like loopback
+// for forwarded client addresses. Set once at startup.
+var trustedProxies map[string]bool
+
+func trustedProxy(ip string) bool { return trustedProxies[ip] }

@@ -12,6 +12,9 @@ var notifyClient = &http.Client{Timeout: 15 * time.Second}
 
 func (h *Hub) notify(ap Approval) {
 	n := h.cfg.Notify
+	if h.tg != nil {
+		go h.tg.notifyApproval(ap)
+	}
 	if n.NtfyURL != "" {
 		body := ap.Summary
 		if ap.Reason != "" {

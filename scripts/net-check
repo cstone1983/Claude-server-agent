@@ -2,17 +2,18 @@
 # net-check: read-only connectivity check for the network overhaul, run on the
 # n8n VM (the hub) before and after every firewall/VLAN change. Tests the paths
 # from docs/network-overhaul.md that n8n itself depends on or can see.
-# Edit TARGETS when a server moves (or use the DNS names once they exist).
+# Targets use the UDM's local DNS names, so they follow servers when they move.
 # Exit code = number of failed checks.
 TARGETS=(
   "UDM API            10.10.1.1 443"
   "UDM DNS            10.10.1.1 53"
-  "Home Assistant     10.10.1.116 8123"
-  "Solar-Calc         10.10.1.156 8080"
-  "fileserver SMB     10.10.1.80 445"
-  "fileserver web     10.10.1.80 80"
-  "Proxmox UI         10.10.1.15 8006"
+  "Home Assistant     homeassistant.localdomain 8123"
+  "Solar-Calc         solar.localdomain 8080"
+  "fileserver SMB     fileserver.localdomain 445"
+  "fileserver web     fileserver.localdomain 80"
+  "Recipes web        recipes.localdomain 80"
   "solar Postgres     127.0.0.1 5432"
+  "solar PG relay     127.0.0.1 5433"
   "internet           1.1.1.1 443"
   "Cloudflare edge    agents.stoneyshome.com 443"
 )
@@ -22,6 +23,9 @@ for t in "${TARGETS[@]}"; do
   read -r -a f <<< "$t"; port=${f[-1]}; host=${f[-2]}; name=${t%%"$host"*}
   if tcp "$host" "$port"; then echo "ok    $name$host:$port"; else echo "FAIL  $name$host:$port"; fail=$((fail+1)); fi
 done
+# Proxmox only lets Main/VPN reach 8006/22 (its allow-list), so from here: ping only.
+if ping -c1 -W2 10.10.10.15 >/dev/null 2>&1; then echo "ok    Proxmox host (ping) 10.10.10.15"
+else echo "FAIL  Proxmox host (ping) 10.10.10.15"; fail=$((fail+1)); fi
 if getent hosts fileserver.localdomain >/dev/null; then echo "ok    DNS name fileserver.localdomain -> $(getent hosts fileserver.localdomain | cut -d' ' -f1)"
 else echo "FAIL  DNS name fileserver.localdomain"; fail=$((fail+1)); fi
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://agents.stoneyshome.com/ || true)

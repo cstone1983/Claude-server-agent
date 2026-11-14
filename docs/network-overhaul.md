@@ -65,11 +65,11 @@ Every step: one change, then verify, with a stated rollback. Nothing in phases
 - Phase 3 (low risk, instant rollback = disable rule): Cameras -> UDM only.
   IoT -> no local access except DNS/DHCP/NTP. Test HA's integrations and casting
   right after; add a narrow allow only where a device must reach HA.
-- Phase 4: DMZ: move CPU-Share (parked; Akash already broken) to VLAN 20,
-  update its 6 port forwards. First real server move, lowest stakes.
-- Phase 5 (brief blip, quiet hour): make Proxmox's bridge VLAN-aware and confirm
+- Phase 4 (brief blip, quiet hour): make Proxmox's bridge VLAN-aware and confirm
   the R630's switch port carries the tagged VLANs. A network reload on the host
-  blips all VMs for a few seconds.
+  blips all VMs for a few seconds. Must come before ANY VM gets a VLAN tag.
+- Phase 5: DMZ: move CPU-Share (parked; Akash already broken) to VLAN 20,
+  update its 6 port forwards. First real server move, lowest stakes.
 - Phase 6: move VMs to Servers one at a time, ~1-2 min each (VLAN tag in
   Proxmox + DHCP renew/new reservation, update anything that referenced the old
   IP): Recipies (107) -> Solar-Calc (100) -> Fiance (111) -> file server (112)
@@ -85,9 +85,206 @@ Desktops 101 (Anthony) and 106 (Jessy) stay on Trusted (people use them).
 After the overhaul: trusted internal HTTPS under `*.lan.stoneyshome.com`,
 see docs/internal-https.md.
 
-## Status
+## Final runbook (agreed 2026-11-10)
+
+Evening 1 (~2 h): firewall + devices + bridge. Next day: review logs (15-30 min).
+Evening 2 (~1.5-2 h): VM moves, n8n last. Day after: enforce blocks (15 min).
+Later evening (~1-1.5 h, optional): Proxmox/iDRAC/SAN (Phase 7).
+
+Every block starts as "allow + log" (observe), so nothing breaks on the night;
+blocks are switched to enforce only after the logs were reviewed.
+
+Evening 1, in order:
+0. User: fresh UDM backup (download). Claude: net-check baseline, confirm last
+   night's PBS backups OK, no backup/off-site sync running.
+1. Claude: objects (IP groups: HA old+new IP, n8n old+new IP, Solar old+new,
+   laptop, thermostat Pi, Shelly, Sonos), zones Servers / IoT / Cameras, assign
+   Servers/IoT/Cameras networks, DMZ network to the Dmz zone. Allow rules 1-13,
+   15, 17-18 first; then IoT/Cameras/Servers/DMZ "block" rules created as
+   allow+log (observe). net-check + HA check after.
+2. Claude: Cameras: reservations on Cameras (10.10.4.10/.11), switch ports
+   43/45 native VLAN -> Cameras. User: both cameras live in Protect.
+3. Claude: Lutron bridge: reservation IoT 10.10.3.11, switch port 11 native ->
+   IoT; update the HA Lutron integration host. User: test a few lights.
+4. TVs: DECIDED 2026-11-11 - they stay on Main for now (skip this step). In
+   evening 2, before HA moves, allow HA -> LG 10.10.1.204 (3000/3001) and
+   TLC Google TV 10.10.1.225 (6466/6467, 8008/8009).
+   (Original step, for later:) TVs (LG bedroom, TLC Google TV): DECISION first (IoT Wi-Fi is 2.4 GHz only).
+   Claude tries per-device network override on the UDM; else user re-joins
+   each TV to the IoT Wi-Fi with the remote. Claude updates the HA LG host.
+   User: test casting from a phone.
+5. Claude: Proxmox bridge VLAN-aware (pve-net-apply, self-reverting; all VMs
+   blip a few seconds, hub drops ~5-30 s).
+6. Claude (optional): CPU-Share -> DMZ (vm-net-move 104 20 10.10.20.104), its
+   6 port forwards, /etc/pve/firewall/104.fw, k3s config on the VM.
+
+Next day: Claude reviews the observe logs (anything IoT/Cameras would have had
+blocked), adds narrow allows if needed; user reports anything odd at home.
+
+Evening 2, in order (each VM: reservation + DNS first, vm-net-move, verify,
+update references, remove the old reservation):
+1. Recipies (107). 2. Solar-Calc (100): relay on n8n re-created on port 5433
+   (all addresses, range=10.10.11.100/32), Solar-Calc DB host
+   n8n.localdomain:5433, n8n "Solar Bill Intake" URL -> 10.10.11.100:8080.
+3. Fiance (111). 4. File server (112): Samba interfaces, Nextcloud
+   trusted_domains, Collabora allowed hosts (+ new IP), DNS fileserver. User:
+   \\fileserver and Nextcloud from a PC. 5. Autopilot (110, stopped: tag only).
+6. Home Assistant (103): IoT->HA rules already include the new IP (object);
+   Shelly Gen1 CoIoT peer, HA internal URL, DNS homeassistant. User: glance at
+   HA. 7. n8n / hub (102) LAST: DNS n8n, hub drops ~30-60 s, self-reverts if
+   the hub does not answer. User: reachable (Proxmox UI fallback).
+
+Day after: Claude switches the observe rules to enforce (IoT, Cameras, Servers,
+DMZ), removes old IPs from the objects, cleans stale reservations.
+
+
 
 - Planned window: Wednesday 11 or Thursday 12 November 2026, evening.
+- 2026-11-11 21:56 Phase 7 step 4 DONE: the Proxmox host's management is on
+  Servers - vmbr0 `inet manual` (no address; still the bridge for the VMs),
+  vmbr0.10 10.10.10.15/23 gateway 10.10.10.1, vmbr0.40 10.10.40.100/24.
+  pve-net-apply OK after 0 s (its health check now reads the gateway after
+  the change). /etc/hosts `10.10.10.15 starwars.local starwars`, resolv.conf
+  nameserver 10.10.10.1, /etc/issue, UDM reservation + DNS `proxmox` ->
+  10.10.10.15, net-check target. Backups of hosts/resolv.conf in
+  /root/net-overhaul/, interfaces backup /etc/network/interfaces.bak-20261110215638.
+  Verified: SAN session, storages, 9 VMs, desktops on Main, hub. The UI is
+  now https://10.10.10.15:8006.
+- 2026-11-11 04:30 OBSERVE REVIEW, round 1. Overnight hits (since ~20:05):
+  IoT->Servers 311k, Servers->Gateway 61k, IoT->Gateway 52k, IoT->Internal
+  32k, Servers->Internal 26k, Cameras ~0. A packet capture on Proxmox's
+  uplink (`tcpdump -i nic0 vlan 10 ...`, files in /root/net-overhaul/cap-*)
+  showed these are almost all REPLY packets of connections the other side
+  started (Kasa :9999, heat pumps :80, Konnected/ESPHome :6053 answering HA):
+  our custom rules (index 10000+) are evaluated before UniFi's own "Allow
+  Return Traffic" (30000+), so every packet counted. **Lesson: the block
+  rules must match NEW connections only (connection_state_type CUSTOM,
+  connection_states ["NEW"]) or they would block replies and cut HA off
+  from the IoT devices.** Done now: every OBSERVE rule switched to NEW-only
+  (still ALLOW + log); "OBSERVE Servers to Internal" recreated so the
+  "HA to TVs on Main" allow (10002) sits above it (10003); mDNS 5353 added
+  to "Servers to Gateway DNS DHCP NTP mDNS". Baseline counts:
+  /root/net-overhaul/observe-baseline-*.tsv on n8n (old rules:
+  policies-before-newonly.json). New real flows seen: HA -> LG TV :3000,
+  HA -> TLC TV :6466 (allowed by the TV rule now), HA -> UDM :53 on
+  10.10.1.1 (allowed: Gateway zone), HA -> UDM :5353 (now allowed).
+  Next: re-read the counters after several hours; anything still counting
+  is a genuine NEW flow -> allow it or accept it being blocked; then switch
+  the OBSERVE rules to BLOCK (keeping NEW-only).
+- 2026-11-11 22:0x Proxmox login allow-list ON: cluster.fw `policy_in: DROP` +
+  `[IPSET management]` = 10.10.1.0/24, 192.168.3.0/24 (overrides the
+  automatic management set, which would have been the whole Servers /23);
+  host.fw enable 1, IN ACCEPT from +management on 8006, 22, 8007, 5900:5999,
+  3128; ICMP from anywhere. Tested: n8n (Servers) blocked on 8006/22, ping
+  OK; Anthony's desktop (Main) gets 8006/22; SAN, PBS, hub unaffected.
+  Rollback: set `enable: 0` in /etc/pve/nodes/starwars/host.fw (or from the
+  iDRAC console); backups /root/net-overhaul/{cluster,host}.fw.bak.
+  `pve-firewall status` keeps saying "pending changes" though the rules are
+  live (iptables checked). Still open: iDRAC IP Blocking (user, later).
+- 2026-11-11 old 23:30 vzdump job (backup-79526ae3-5f24, local storage
+  "backups") DISABLED; the 21:30 PBS job + 23:00 off-site sync are the
+  backups now. Tonight's 21:30 run: OK.
+- 2026-11-11 Phase 7 step 3 DONE (SAN to Storage VLAN 40), ~21:47-21:53,
+  file server offline ~6 min (user OK'd):
+  - Proxmox: `vmbr0.40` 10.10.40.100/24, no gateway (pve-net-apply; backup
+    /etc/network/interfaces.bak-20261110214718). Also `vmbr0.10`
+    10.10.10.15/23 added by the user in the GUI (no gateway yet) - the host
+    still has 10.10.1.15 + gateway 10.10.1.1 on vmbr0 (step 4 not done).
+  - EqualLogic over serial (`/usr/local/sbin/eql-cli`, password in root-only
+    /root/.config/eql/pass; or picocom on /dev/ttyUSB0 after
+    `EQL_STAY=1 eql-cli show`): group IP `grpparams group-ipaddress
+    10.10.40.10`, eth3 10.10.40.11/24, eth0 (no link) 10.10.40.12/24 - the SAN
+    refuses a member IP change unless one member port stays in the group IP's
+    subnet, so eth0 got a 40.x address first. Member def-gateway still
+    10.10.1.1 (unused). Volume `fileshare` access is by Proxmox's IQN, any
+    IP, so no ACL change.
+  - The SAN is on switch **port 31** (not 26 as an older note said): port 31
+    native Storage, tagged block_all. Undo: sw_port_overrides.before-san.json.
+  - Proxmox: storage.cfg `portal 10.10.40.10` (pvesm cannot change portal;
+    edited the file, backup /root/net-overhaul/storage.cfg.before-san); old
+    iSCSI node record deleted, session [2] to 10.10.40.10 (log: "standard
+    frame length"), LVM eql-fileshare active, VM 112 started, /srv/share
+    (XFS) mounted, Samba/Nextcloud OK, file backup run by hand OK.
+  - The policy denies scripts containing "shutdown": use
+    `qm shutdown <id>` as a plain command.
+- 2026-11-11 Phase 7 step 2 DONE early: iDRAC on Servers, 10.10.10.10 /
+  255.255.254.0, gateway + DNS 10.10.10.1 (user set IP + DNS in the iDRAC UI;
+  the gateway was missed at first and set from the Proxmox host with
+  `ipmitool lan set 1 defgw ipaddr 10.10.10.1` / `netmask 255.255.254.0` -
+  ipmitool is now installed on Proxmox for exactly this). Switch port 19
+  native Servers, tagged block_all (undo: sw_port_overrides.before-idrac.json
+  on n8n). https://10.10.10.10 answers. Still open: iDRAC IP Blocking
+  (10.10.1.0/24) - until then the VMs on Servers can reach its login; the
+  `idrac` DNS record points at 10.10.10.10 but does not resolve.
+- 2026-11-11 EVENING 2 DONE the same night (20:39-21:05, before the 21:30
+  backup). All VMs on Servers VLAN 10, verified, net-check 14/14, HA back to
+  its baseline (698 unavailable). Helper `/root/net-overhaul/vmres.sh` on
+  n8n (reserve <mac> <ip> <name> / dns <key> <ip>); each VM's reservation
+  was changed right before its move (a VM still on Main with a Servers
+  reservation would get a random Main IP at its next renewal).
+  - 107 Recipies 10.10.11.107, 111 Fiance 10.10.11.111 (OK after 7 s each).
+  - 100 Solar-Calc 10.10.11.100: new relay container `solar-pg-lan5433` on
+    n8n (0.0.0.0:5433, range=10.10.11.100/32); Solar-Calc
+    ~/.solar-calc/config/database.json -> n8n.localdomain:5433 (backup kept),
+    container restarted; old `solar-pg-lan` removed (its config saved in
+    /root/net-overhaul/solar-pg-lan.old.txt); n8n "Solar Bill Intake" Get
+    Queue -> http://10.10.11.100:8080 (published).
+  - 110 Autopilot (stopped): reservation 10.10.11.110 + tag only.
+  - 103 HA 10.10.11.103: HAOS did not renew DHCP on the link pulse; the
+    script's guest-agent renew got it there after 129 s. Rule "HA to TVs on
+    Main" (3000/3001, 6466/6467, 8008/8009) added - it sits AFTER the
+    Servers->Internal observe rule (index 10002): when enforcing, make sure
+    the allows stay above the block. Thermostat Pi follows the DNS name
+    (env file), reconnected by itself. Shelly Gen1 has no CoIoT peer set.
+  - 102 n8n/hub 10.10.11.102: hub back after 7 s. Nothing on n8n was bound to
+    the old IP. Backup alerts use the public n8n URL.
+  - 112 fileserver 10.10.11.112: Samba `interfaces = lo 10.10.10.0/23`
+    (smb.conf backup kept), Nextcloud trusted_domains + 10.10.11.112,
+    richdocuments wopi_url -> http://fileserver.localdomain/... . Collabora
+    (built-in CODE) was already failing before the move (hourly 503 in the
+    Nextcloud log all day) - separate fix.
+  - DNS: all records updated (cpushare -> 10.10.20.104). `proxmox` and
+    `idrac` records do NOT resolve at all (not new) - fix separately.
+  - n8n caches DNS briefly: `resolvectl flush-caches` after a DNS change.
+  - net-check now uses the DNS names (Proxmox by IP until its record works).
+  - Still to do: enforce the blocks after the log review; remove the old IPs
+    from the OBJ groups; Proxmox/iDRAC/SAN (Phase 7).
+- 2026-11-11 step 6 DONE: CPU-Share (VM 104) on DMZ VLAN 20, 10.10.20.104
+  (reservation, vm-net-move OK after 7 s). 104.fw: ipfilter 10.10.20.104
+  only, DHCP rule -> 10.10.20.1. 6 Akash port forwards -> 10.10.20.104.
+  Verified: internet OK, UDM/LAN unreachable from it. k3s: node-ip,
+  advertise-address, tls-san changed in k3s.service + config.yaml; the
+  embedded etcd still had the old peer URL, fixed with a one-off
+  `k3s server --cluster-reset --node-ip=10.10.20.104` (etcd backup
+  /root/k3s-etcd-before-reset-20261110202942.tgz); then the network-policy
+  controller refused to start until the Node object showed the new IP
+  (`--disable=network-policy` does not disable it; the flag is
+  `--disable-network-policy`), so 10.10.1.133/32 was added to ens18
+  temporarily, removed once the node showed 10.10.20.104. Node Ready,
+  14/14 pods Running, Calico re-detected the new IP.
+- 2026-11-11 evening 1 DONE (steps 0-3, 5, 6):
+  - Step 1: IP groups "OBJ HA", "OBJ n8n", "OBJ Solar-Calc", "OBJ HA n8n",
+    "OBJ HA n8n Solar", "OBJ Laptop", "OBJ Thermostat Pi", "OBJ Shelly"
+    (10.10.3.13 Plus, .45 Gen1), "OBJ Sonos" (10.10.3.138), "OBJ TVs on Main".
+    Zones Servers/IoT/Cameras created; Servers, IoT, Cameras networks in their
+    zones, DMZ network in Dmz. 21 allow rules + 8 "OBSERVE ... (to block)"
+    rules (ALLOW + logging; flip to BLOCK after review). Rule ids and the
+    pre-change UDM config dump: /root/net-overhaul/ on n8n (created_policies.json,
+    policies.json, groups.json, users.json, devices.json, sw_port_overrides.*).
+    API notes: a custom zone's defaults block everything to/from other internal
+    zones (incl. Internal->IoT) - allows must exist before a network moves in;
+    zone PUT needs only {_id,name,network_ids}; create_allow_respond must be
+    false when the destination is Gateway or External.
+  - Step 2: cameras G5 Driveway 10.10.4.10 (port 43), G5 Porch 10.10.4.11
+    (port 45), ports native Cameras / tagged block_all; Protect connected.
+  - Step 3: Lutron bridge 10.10.3.11 (port 11 native IoT). No PoE, and
+    "forward: disabled" is ignored by the API, so the link was flapped by
+    setting the port to 10 Mb/s for 15 s. HA's lutron_caseta entry updated
+    its host by itself (zeroconf). User confirmed lights + cameras work.
+  - Step 5: vmbr0 VLAN-aware (bridge-vids 2-4094) via pve-net-apply, OK
+    after 0 s; backup /etc/network/interfaces.bak-20261110202232.
+  - First minute: OBSERVE IoT to Internal ~2300 hits - review before enforcing.
+- 2026-11-11: user took a fresh UDM backup before starting.
 - 2026-11-09: Servers widened to a /23: 10.10.10.x infrastructure, 10.10.11.x VMs.
 - 2026-11-09: "test" network (VLAN 5) deleted (nothing used it). Networks now:
   Main, Guest (2), IoT (3), Cameras (4), OpenVPN.
@@ -172,8 +369,8 @@ ports on the servers and the SAN being brought into use):
 | Range | Use |
 |---|---|
 | .2-.9 | network gear management, if it ever moves off Main |
-| .10-.19 | out-of-band consoles: iDRAC of the R630 .10, next server .11, ... |
-| .20-.29 | hypervisor hosts, management address: R630 (Proxmox) .20, next host .21, ... |
+| .10-.14 | out-of-band consoles: iDRAC of the R630 .10, next server .11, ... |
+| .15-.29 | hypervisor hosts, management address: R630 (Proxmox) .15, next host .16, ... (same last number as on Main) |
 | .30-.49 | extra host interfaces that need their own address (backup/migration ports, a second management port) |
 | .50-.199 | other infrastructure: PBS if it ever runs separately, appliances, NAS, more hosts' extra ports, spare |
 | .200-.249 | DHCP pool (temporary / new devices) |
@@ -352,7 +549,7 @@ while the hub is down.
 | 103 Home Assistant | .116 -> 10.10.11.103 | n8n "Homelab Agent" workflow (.116:8123) and the n8n credentials "Home Assistant account", "HA Token", "HA Token 2" (-> `homeassistant`); RPi5 thermostat MQTT broker address; Shelly Gen1 CoIoT peer; HA's own internal URL; Ollama (laptop) rule 6 |
 | 102 n8n / hub | .86 -> 10.10.11.102 | Cloudflare n8n route (localhost first, pre-flight 4); Solar-Calc `database.json`/`.env` and `SettingsPanel.jsx` (.86:5432 -> `n8n`); the `solar-pg-lan` container is published on `10.10.1.86:5432` -> rebind to the new IP (or 0.0.0.0, the source `range=` still limits it); n8n credentials "SSH Password account" and "SSH n8n" (host .86 -> `n8n` or 127.0.0.1); the `unifi` helper keeps using 10.10.1.1 (the UDM answers on every network's gateway) |
 | 104 CPU-Share | .133 -> 10.10.20.104 (DMZ, Phase 4) | 6 Akash port forwards; Proxmox VM firewall `/etc/pve/firewall/104.fw` (10.10.1.133, 10.10.1.0/24); k3s config/service, ufw and Akash inventory on the VM |
-| Proxmox host | .15 -> 10.10.10.20 (Phase 7) | see "Proxmox, iDRAC and Storage" |
+| Proxmox host | .15 -> 10.10.10.15 (Phase 7) | see "Proxmox, iDRAC and Storage" |
 
 ### Devices before Home Assistant moves
 
@@ -382,7 +579,9 @@ unavailable integrations; one Telegram test message from n8n.
 
 Decision 2026-11-09: no separate management VLAN. The Proxmox host and the
 iDRAC join the Servers VLAN in the infrastructure range (Proxmox
-10.10.10.20, iDRAC 10.10.10.10). The SAN gets a separate
+10.10.10.15, iDRAC 10.10.10.10 - decided 2026-11-11: they keep the same
+last number as on Main, 10.10.1.15 / 10.10.1.10; exactly the same IPs are
+not possible on another VLAN). The SAN gets a separate
 non-routed storage VLAN (40, 10.10.40.0/24), so iSCSI never crosses the UDM.
 
 Because traffic inside one VLAN never passes the UDM, the VMs (several of them
@@ -411,10 +610,10 @@ Order (one window, iDRAC console open as the fallback):
    serial console as fallback), point `storage.cfg`/iSCSI at
    10.10.40.10, re-login the session. File server (VM 112) stopped during this step: its data disk is on the SAN.
 4. Proxmox host: move its address from vmbr0 to a VLAN 10 interface on the
-   VLAN-aware bridge (10.10.10.20, gateway 10.10.10.1); update `/etc/hosts`,
+   VLAN-aware bridge (10.10.10.15, gateway 10.10.10.1); update `/etc/hosts`,
    `/etc/issue`, the DNS name `proxmox` and the net-check targets. VMs are not
    affected (their VLAN tags do not change). Rollback: iDRAC console, restore
    `/etc/network/interfaces` from the copy taken first, `ifreload -a`.
 5. Verify: hub shows the Proxmox agent online, PBS jobs and the off-site sync
    run, backup reports reach n8n, Proxmox UI and iDRAC open from a PC and do
-   NOT open from a VM (e.g. `curl -k https://10.10.10.20:8006` from n8n fails).
+   NOT open from a VM (e.g. `curl -k https://10.10.10.15:8006` from n8n fails).

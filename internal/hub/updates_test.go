@@ -62,3 +62,16 @@ func TestReleaseWatcher(t *testing.T) {
 		t.Fatalf("flag without a release:\n%s", out.Text)
 	}
 }
+
+func TestHealthLine(t *testing.T) {
+	if a, s := parseUpdates("5 updates can be applied immediately. ; 2 of these updates are standard security updates. ; To see these additional updates run: apt list --upgradable"); a != 5 || s != 2 {
+		t.Fatalf("parseUpdates = %d, %d", a, s)
+	}
+	hl := &health{UptimeHours: 100, Load: "0.10 0.20 0.30", MemUsedPct: 41, FullestDisk: "/", FullestDiskPct: 93, Updates: 5, SecurityUpd: 2, RebootRequired: true, FailedUnits: []string{"x.service"}}
+	got := hl.line()
+	for _, want := range []string{"up 4d", "disk / 93% (NEARLY FULL)", "5 updates (2 security)", "REBOOT PENDING", "FAILED: x.service"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("line %q lacks %q", got, want)
+		}
+	}
+}

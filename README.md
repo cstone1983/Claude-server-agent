@@ -125,6 +125,7 @@ Tools Claude gets:
 | `system_info` | OS, uptime, load, memory, disks, IPs, updates, failed units |
 | `run_command` | Run an argv command (optionally as another user) |
 | `run_shell` | Run a bash script; always needs approval unless the exact script is allowlisted |
+| `inspect` | Run a read-only diagnostic script in a sandbox (user nobody + log groups, no network); never needs approval |
 | `read_file` / `list_dir` | Read files and directories (sensitive files need approval) |
 | `write_file` / `edit_file` | Change files; each change saves a `.csa-bak` backup |
 | `service` | systemctl status/start/stop/restart/reload/enable/disable |
@@ -236,6 +237,35 @@ notify:
   ntfy_url: https://ntfy.sh/<a-long-random-topic>
   webhook_url: https://n8n.yourdomain.com/webhook/csa-approvals
 ```
+
+### Telegram approvals and alerts
+
+```yaml
+notify:
+  telegram:
+    bot_token_file: /etc/csa-hub/telegram.token   # root/csa-hub only, mode 600
+    chat_id: 123456789                            # your private chat with the bot
+    buttons: true    # Approve / Deny / Always buttons (approve without the code)
+alerts:
+  enabled: true
+  offline_after_min: 5
+  disk_pct: 90
+  ignore_servers: [jessy-desktop]          # e.g. desktops that sleep
+  ignore_units: []
+  checks:                                   # optional, must be read-only or allowlisted
+    - {name: proxmox-report, server: Proxmox, argv: [/usr/local/sbin/health-report], every: 6h, timeout_sec: 300}
+```
+- Buttons only appear on ordinary action approvals. Anything that needs its own OK every
+  time (Proxmox reboots, other ask-always actions) and Claude's requests for new rules only get
+  an **Open** link to the approval page, which asks for the code. Presses from any other
+  Telegram account are refused and logged. Hands-off mode is unchanged: what it approves is not
+  sent to Telegram at all.
+- The hub fetches button presses itself (long polling), so the bot must not have a webhook set
+  (`getWebhookInfo` shows an empty url).
+- Alerts: one message when a problem starts (server offline, disk at `disk_pct`, a failed systemd
+  unit, a check that exits non-zero or prints a line starting with `ALERT`) and one when it clears.
+  A check that would need approval is reported as not allowlisted; it never asks for approval.
+- With a standby hub, only the hub that is serving sends alerts and reads button presses.
 
 ## Hub admin CLI (run as root on the hub)
 

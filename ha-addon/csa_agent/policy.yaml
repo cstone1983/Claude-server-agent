@@ -1,0 +1,27 @@
+# Claude Server Agent - policy for the Home Assistant add-on.
+# Read-only "ha" commands run freely; every other change needs approval
+# through the hub ("approve + always allow" works as on other servers).
+# Shutting Home Assistant down is never allowed.
+read:
+  - id: ha-info
+    argv: ["ha", "info|core|supervisor|os|host|network|resolution|jobs|dns|audio|multicast|observer|cli|hardware", "info|stats|logs|check|list|options|reboot-required", "**"]
+  - id: ha-addons-read
+    argv: ["ha", "addons|apps", "list|info|stats|logs|changelog|documentation", "**"]
+  - id: ha-backups-read
+    argv: ["ha", "backups", "list|info", "**"]
+  - id: ha-store-read
+    argv: ["ha", "store", "list|info|addons|repositories", "**"]
+  - id: ha-overview
+    argv: ["ha", "info|version|--version", "**"]
+
+allow: []
+
+deny:
+  - id: no-host-shutdown
+    argv: ["ha", "host|os", "shutdown", "**"]
+
+sensitive_paths:
+  - /config/secrets.yaml
+  - /config/.storage/auth
+  - /config/.storage/auth_provider.homeassistant
+  - /ssl/**

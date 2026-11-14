@@ -304,14 +304,14 @@ func (e *Executor) sessionStart(call *proto.Call, a tools.SessionStartArgs, hash
 		return errResult("this caller is read-only; interactive sessions are not available")
 	}
 	var act policy.Action
-	var argv []string
+	var argv, env []string
 	switch {
 	case len(a.Argv) > 0 && a.Script == "":
 		act = policy.Action{Kind: "exec", Argv: a.Argv, As: a.As}
 		argv = a.Argv
 	case a.Script != "" && len(a.Argv) == 0:
 		act = policy.Action{Kind: "shell", Shell: a.Script, As: a.As}
-		argv = []string{"/bin/bash", "-c", a.Script}
+		argv, env = shellSpec(a.Script)
 	default:
 		return errResult("give exactly one of argv or script")
 	}
@@ -324,7 +324,7 @@ func (e *Executor) sessionStart(call *proto.Call, a tools.SessionStartArgs, hash
 		timeout = 2 * time.Hour
 	}
 	timeout = min(timeout, 24*time.Hour)
-	s, err := e.sess.start(procSpec{Argv: argv, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary(), a.Cols, a.Rows)
+	s, err := e.sess.start(procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary(), a.Cols, a.Rows)
 	if err != nil {
 		return errResult("%v", err)
 	}

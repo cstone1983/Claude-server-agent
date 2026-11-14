@@ -159,3 +159,93 @@ func sparkline(vals []float64, max float64, color string) template.HTML {
 	return template.HTML(fmt.Sprintf(`<svg class="spark" viewBox="0 0 %.0f %.0f" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="%s" fill="%s"/><path class="line" d="%s" stroke="%s"/></svg>`,
 		w, hgt, area, color, line.String(), color))
 }
+
+// health is a short per-server summary from the latest sample, shown by
+// list_servers so problems are visible without extra calls.
+type health struct {
+	UptimeHours    float64   `json:"uptime_hours"`
+	Load           string    `json:"load"`
+	MemUsedPct     float64   `json:"mem_used_pct"`
+	FullestDisk    string    `json:"fullest_disk,omitempty"`
+	FullestDiskPct float64   `json:"fullest_disk_pct,omitempty"`
+	RebootRequired bool      `json:"reboot_required"`
+	Updates        int       `json:"updates"`
+	SecurityUpd    int       `json:"security_updates"`
+	FailedUnits    []string  `json:"failed_units,omitempty"`
+	SampledAt      time.Time `json:"sampled_at"`
+}
+
+// healthOf returns the summary for a server, or nil without a recent sample.
+func (h *Hub) healthOf(id string) *health {
+	if h.metrics == nil {
+		return nil
+	}
+	m, ok := h.metrics.get(id)
+	if !ok || time.Since(m.At) > 10*time.Minute {
+		return nil
+	}
+	si := m.Latest
+	hl := &health{UptimeHours: si.UptimeHours, Load: si.Load, RebootRequired: si.RebootRequired, FailedUnits: si.FailedUnits, SampledAt: m.At}
+	if si.MemTotalMB > 0 {
+		hl.MemUsedPct = math.Round(1000*float64(si.MemTotalMB-si.MemAvailMB)/float64(si.MemTotalMB)) / 10
+	}
+	for _, d := range si.Disks {
+		if d.UsedPct > hl.FullestDiskPct {
+			hl.FullestDisk, hl.FullestDiskPct = d.Mount, d.UsedPct
+		}
+	}
+	hl.Updates, hl.SecurityUpd = parseUpdates(si.Updates)
+	return hl
+}
+
+// parseUpdates reads update-notifier's text, e.g. "5 updates can be applied
+// immediately. ; 2 of these updates are standard security updates."
+func parseUpdates(s string) (all, security int) {
+	for _, part := range strings.Split(s, ";") {
+		f := strings.Fields(part)
+		if len(f) < 2 {
+			continue
+		}
+		var n int
+		if _, err := fmt.Sscan(f[0], &n); err != nil {
+			continue
+		}
+		switch {
+		case strings.Contains(part, "security"):
+			security = n
+		case strings.Contains(part, "can be applied"):
+			all = n
+		}
+	}
+	return
+}
+
+func (hl *health) line() string {
+	var b strings.Builder
+	up := hl.UptimeHours
+	if up >= 48 {
+		fmt.Fprintf(&b, "up %.0fd", up/24)
+	} else {
+		fmt.Fprintf(&b, "up %.0fh", up)
+	}
+	fmt.Fprintf(&b, ", load %s, mem %.0f%%", hl.Load, hl.MemUsedPct)
+	if hl.FullestDisk != "" {
+		fmt.Fprintf(&b, ", disk %s %.0f%%", hl.FullestDisk, hl.FullestDiskPct)
+		if hl.FullestDiskPct >= 90 {
+			b.WriteString(" (NEARLY FULL)")
+		}
+	}
+	if hl.Updates > 0 {
+		fmt.Fprintf(&b, ", %d updates", hl.Updates)
+		if hl.SecurityUpd > 0 {
+			fmt.Fprintf(&b, " (%d security)", hl.SecurityUpd)
+		}
+	}
+	if hl.RebootRequired {
+		b.WriteString(", REBOOT PENDING")
+	}
+	if len(hl.FailedUnits) > 0 {
+		fmt.Fprintf(&b, ", FAILED: %s", strings.Join(hl.FailedUnits, " "))
+	}
+	return b.String()
+}

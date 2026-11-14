@@ -1,0 +1,87 @@
+#!/bin/bash
+# health-report-proxmox: read-only health summary of the Proxmox host (R630),
+# its hardware (IPMI/iDRAC sensors, PERC disks), storage, backups, certificate
+# and the EqualLogic SAN. One line per check: "OK|WARN|ALERT <area>: <text>".
+# Used by the scheduled daily/weekly server checks (docs: NOTES.md).
+# Installed as /usr/local/sbin/health-report on Proxmox. Changes nothing.
+export LC_ALL=C
+now=$(date +%s)
+say() { echo "$1 $2: $3"; }
+age_h() { echo $(( (now - $1) / 3600 )); }
+
+# --- system
+say OK system "$(pveversion | head -1 | cut -d' ' -f1), up $(( $(cut -d. -f1 /proc/uptime) / 86400 ))d"
+run=$(uname -r); new=$(ls -1 /boot/vmlinuz-*-pve 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -1)
+[ -n "$new" ] && [ "$new" != "$run" ] && say WARN system "reboot pending: running kernel $run, installed $new" || true
+n=$(apt list --upgradable 2>/dev/null | grep -c upgradable)
+[ "$n" -gt 0 ] && say WARN updates "$n package update(s) available: $(apt list --upgradable 2>/dev/null | grep upgradable | cut -d/ -f1 | head -8 | tr '\n' ' ')" || say OK updates "no package updates"
+
+# --- storage
+# (eql-fileshare is one thick LV for the file server's disk: always ~100% allocated
+#  by design - the file server's own disk usage is checked on the file server.)
+pvesm status 2>/dev/null | awk 'NR>1 && $3=="active" && $4>0 {p=int($5*100/$4); lvl=(p>=95?"ALERT":(p>=85?"WARN":"OK")); if ($2!="iscsi" && $1!="eql-fileshare") print lvl" storage: "$1" "p"% used"} NR>1 && $3!="active" {print "ALERT storage: "$1" is "$3}'
+r=$(df --output=pcent / | tail -1 | tr -dc 0-9); [ "$r" -ge 85 ] && say WARN storage "root filesystem $r% used" || say OK storage "root filesystem $r% used"
+iscsiadm -m session >/dev/null 2>&1 && say OK san "iSCSI session up ($(iscsiadm -m session | awk '{print $3}' | head -1))" || say ALERT san "no iSCSI session to the SAN (file server data disk!)"
+
+# --- hardware (IPMI)
+if command -v ipmitool >/dev/null; then
+  ipmitool sdr type "Power Supply" 2>/dev/null | awk -F'|' '{gsub(/ +$/,"",$1); gsub(/^ +| +$/,"",$3); gsub(/^ +| +$/,"",$5); if ($3!="ok" && $3!="ns") print "ALERT hardware: power supply "$1": "$3" "$5}'
+  ipmitool sdr type "Power Supply" 2>/dev/null | grep -c "Presence detected" | awk '{print ($1>=2?"OK":"WARN")" hardware: "$1" power supply(s) present"}'
+  ipmitool sdr type Fan 2>/dev/null | awk -F'|' '{gsub(/ +$/,"",$1); gsub(/^ +| +$/,"",$3); if ($3!="ok" && $3!="ns") print "ALERT hardware: fan "$1": "$3}'
+  ipmitool sdr type Temperature 2>/dev/null | awk -F'|' '{gsub(/ +$/,"",$1); gsub(/^ +| +$/,"",$3); gsub(/^ +| +$/,"",$5); if ($3!="ok" && $3!="ns") print "ALERT hardware: temperature "$1": "$3" "$5; else t=t" "$1"="$5} END {gsub(/ degrees C/,"C",t); print "OK hardware: temps"t}'
+  since=$(date -d '7 days ago' +%m/%d/%y)
+  sel=$(ipmitool sel elist 2>/dev/null | awk -F'|' -v s="$since" '{gsub(/ /,"",$2)} $2>=s' | grep -viE 'Unknown MSR Info Log|Log area reset|Event Logging Disabled' | tail -5)
+  [ -n "$sel" ] && say WARN hardware "new hardware log entries (7 days): $(echo "$sel" | cut -d'|' -f2,4,5,6 | tr '\n' ';')" || say OK hardware "no new hardware log entries (7 days)"
+fi
+
+# --- disks behind the PERC
+for d in $(smartctl --scan 2>/dev/null | awk '/megaraid/ {print $1"|"$3}'); do
+  dev=${d%%|*}; typ=${d#*|}
+  h=$(smartctl -H -d "$typ" "$dev" 2>/dev/null | grep -iE 'overall-health|SMART Health Status' | sed 's/.*: *//')
+  [ -n "$h" ] && { case "$h" in PASSED|OK) ;; *) say ALERT disks "$typ on $dev: $h";; esac; }
+done
+smartctl --scan 2>/dev/null | grep -q megaraid && say OK disks "PERC disks checked (SMART)" || true
+
+# --- backups
+last=$(grep ':vzdump::' /var/log/pve/tasks/index 2>/dev/null | tail -1)
+if [ -n "$last" ]; then
+  st=$(echo "$last" | awk '{print $3}'); end=$((16#$(echo "$last" | awk '{print $2}')))
+  a=$(age_h $end)
+  { [ "$st" = "OK" ] && [ "$a" -le 26 ]; } && say OK backups "VM backup (PBS) OK, ${a}h ago" || say ALERT backups "VM backup: last run '$st', ${a}h ago"
+fi
+for f in /var/lib/pbs-offsite-sync.status:off-site /var/lib/pve-fileserver-backup.status:file-server; do
+  file=${f%%:*}; name=${f#*:}
+  [ -f "$file" ] || { say WARN backups "$name status file missing"; continue; }
+  line=$(head -1 "$file"); a=$(age_h $(stat -c %Y "$file"))
+  case "$line" in OK*) [ "$a" -le 26 ] && say OK backups "$name: ${line#OK }" || say WARN backups "$name: last OK is ${a}h old";; *) say ALERT backups "$name: $line";; esac
+done
+
+# --- certificates
+for c in /etc/pve/local/pveproxy-ssl.pem; do
+  end=$(openssl x509 -in "$c" -noout -enddate 2>/dev/null | cut -d= -f2); [ -z "$end" ] && continue
+  d=$(( ($(date -d "$end" +%s) - now) / 86400 ))
+  [ "$d" -lt 20 ] && say WARN certs "Proxmox certificate expires in ${d} days" || say OK certs "Proxmox certificate valid ${d} more days"
+done
+
+# --- VMs
+qm list 2>/dev/null | awk 'NR>1 && $3!="running" {print "INFO vms: VM "$1" "$2" is "$3}'
+pve-firewall status 2>/dev/null | grep -q 'enabled/running' && say OK firewall "Proxmox firewall running" || say ALERT firewall "Proxmox firewall not running"
+
+# --- SAN (EqualLogic over the serial console)
+if [ -x /usr/local/sbin/eql-cli ]; then
+  out=$(timeout 150 /usr/local/sbin/eql-cli "member select eql1 show" "member select eql1 show controllers" "member select eql1 show disks" 2>&1)
+  if echo "$out" | grep -q "Member Information"; then
+    hs=$(echo "$out" | sed -n 's/.*HealthStatus: *\([a-z]*\).*/\1/p' | head -1)
+    warn=$(echo "$out" | sed -n '/Warning conditions/,/^___/p' | grep -vE 'Warning conditions|^_|^\s*$' | tr '\n' ';')
+    crit=$(echo "$out" | sed -n '/Critical conditions/,/Warning conditions/p' | grep -vE 'conditions|^_|^\s*$|None' | tr '\n' ';')
+    [ -n "$crit" ] && say ALERT san "SAN critical: $crit"
+    [ "$hs" = "normal" ] && say OK san "SAN health normal" || say WARN san "SAN health $hs: ${warn:-see console}"
+    echo "$out" | awk '/SlotID:/ {slot=$2; st=$4} /BatteryStatus:/ {sub(/.*BatteryStatus: */,""); sub(/ +$/,""); print "SANCTRL slot "slot" "st" battery "$0}' | while read -r _ _ slot st _ bat; do
+      [ "$bat" = "ok" ] && say OK san "controller $slot $st, battery ok" || say WARN san "controller $slot $st, battery $bat"
+    done
+    bad=$(echo "$out" | awk '/^[0-9]+ +SATA/ {if ($0 !~ / online / && $0 !~ / spare /) print "slot "$1": "$0}' | sed -E 's/ +/ /g' | cut -c1-60 | tr '\n' ';')
+    [ -n "$bad" ] && say WARN san "disks not online/spare: $bad" || say OK san "all disks online or spare"
+  else
+    say WARN san "SAN console did not answer (serial)"
+  fi
+fi

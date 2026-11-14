@@ -5,6 +5,74 @@ under internal names `<name>.lan.stoneyshome.com`. Done AFTER the network
 overhaul (docs/network-overhaul.md), so each piece is set up once on the final
 addresses. Nothing is opened to the internet.
 
+## Status
+
+- 2026-11-11 machine names `<host>.lan.stoneyshome.com` on the UDM (proxmox,
+  idrac, n8n, homeassistant, solar, recipes, finance, fileserver, autopilot,
+  cpushare -> each server's own IP). The UDM needs ~10 s before a new record
+  answers. (`proxmox.localdomain`/`idrac.localdomain` never resolved; the
+  .lan names do.)
+- 2026-11-11 Cloudflare token "lan certificates" (DNS Edit, stoneyshome.com
+  only, zone id 24f93d39a2b743de4e883fdf812d9030) in /root/cf-dns-token on
+  Proxmox and n8n. NOTE: the first ~30 characters were printed once by
+  `pvenode acme plugin list` (it shows plugin data) - roll the token and
+  update both files + the Proxmox plugin (`pvenode acme plugin set
+  cloudflare --data <file>`); never run `plugin list` with data again.
+- 2026-11-11 **Proxmox**: ACME accounts `lan-staging` and `lan` (production,
+  contact stonec@gmail.com - user OK'd), plugin `cloudflare` (dns, cf,
+  CF_Token + CF_Zone_ID, validation delay 30 s), node domain
+  proxmox.lan.stoneyshome.com. Certificate issued by Let's Encrypt, valid to
+  2027-02-09, renewed by Proxmox's daily job. Verified trusted from Main.
+- 2026-11-11 **Traefik on n8n** (compose backup docker-compose.yml.bak-*,
+  acme.json backup in /root/net-overhaul): resolver `cfdns` (DNS-01,
+  Cloudflare, resolvers 1.1.1.1, storage /letsencrypt/acme-lan.json, token
+  via CF_DNS_API_TOKEN_FILE=/run/secrets/cf_dns_token mounted read-only from
+  /root/cf-dns-token), file provider ./traefik-dynamic (lan.yml), insecure
+  dashboard off. Wildcard lan.stoneyshome.com + *.lan.stoneyshome.com issued
+  (production, to 2027-02-09; staging store kept as acme-lan-staging.json.old).
+  Route 1: unifi.lan.stoneyshome.com -> https://10.10.1.1 (skip verify);
+  DNS unifi.lan -> 10.10.11.102. Verified trusted from Main.
+- 2026-11-11 routes added: pbs.lan -> https://10.10.10.15:8007 (Proxmox
+  host.fw: IN ACCEPT -source 10.10.11.102 -dport 8007), idrac.lan ->
+  https://10.10.10.10 (passHostHeader false; the iDRAC still redirects to
+  https://10.10.10.10/start.html - fix: user sets iDRAC "DNS iDRAC Name"
+  idrac + static domain lan.stoneyshome.com, then passHostHeader back to
+  true), ha.lan -> http://10.10.11.103:8123. DNS idrac/pbs/ha/unifi.lan ->
+  10.10.11.102 (the proxy); for SSH to the iDRAC use 10.10.10.10.
+- **HA 2026.10 keeps its HTTP settings in .storage/http, not in
+  configuration.yaml** ("yaml_migration_done": true; the YAML http: block
+  that Homeway added is ignored). Change them in Settings -> System ->
+  Network -> HTTP server (saves, restarts, then must be CONFIRMED within ~5
+  min or HA reverts). Read them with ws command `http/config`. Trusted
+  proxies now: 172.30.32.0/23, 127.0.0.1/32, ::1/128, 10.10.11.102/32.
+  ha.lan verified (200, trusted cert) and the user uses it.
+- 2026-11-11 **https://proxmox.lan.stoneyshome.com without :8006**: on the
+  Proxmox host, systemd unit `pve-https-redirect.service` adds
+  `iptables -t nat -I PREROUTING 1 -d 10.10.10.15/32 -p tcp --dport 443 -j
+  DNAT --to-destination 10.10.10.15:8006` at boot (stop = rule removed). The
+  firewall allow-list (8006 from Main + VPN) still applies; VMs on Servers
+  stay blocked. First version used `REDIRECT --to-ports 8006`, which failed
+  from VMs on this same host (Anthony's desktop): with bridge netfilter on
+  (pve-firewall turns it on for VM firewalls) REDIRECT picks the address of
+  the incoming interface, and vmbr0 has none. Changed to the explicit DNAT
+  the same day; works from the user's PC and from Anthony's desktop.
+- 2026-11-11 **idrac.lan.stoneyshome.com works**: user set the iDRAC's
+  DNS iDRAC Name `idrac` + static domain `lan.stoneyshome.com` (its host
+  header check then accepts the name); proxy passes the Host through
+  again; middleware `idrac-root` redirects the bare "/" (which the iDRAC
+  redirects to its IP) to /start.html. User confirmed it works securely.
+- Not proxied (already trusted HTTPS via their public Cloudflare names):
+  Nextcloud (overwritehost nextcloud.stoneyshome.com - a lan name would
+  just redirect), n8n, Recipes, Finance.
+- Clients that use their own encrypted DNS (Chrome "Use secure DNS" with a
+  fixed provider, Android Private DNS, iCloud Private Relay) get NXDOMAIN for
+  *.lan names: set them to "OS default"/automatic. The user's PC was on
+  Chrome -> Cloudflare 1.1.1.1; fixed.
+- Found: the old `mytlschallenge` resolver keeps failing to renew
+  n8n.stoneyshome.com (TLS-ALPN can't work behind Cloudflare). Harmless (the
+  public site uses the tunnel), but noisy: move the n8n router to `cfdns`
+  when the n8n container may be restarted.
+
 ## How it works
 
 - Names: the UDM answers `*.lan.stoneyshome.com` inside the network (split
@@ -19,6 +87,16 @@ addresses. Nothing is opened to the internet.
   through one internal reverse proxy that holds the wildcard.
 
 ## Decisions
+
+- **Two kinds of names** (2026-11-11, the user wants these names for SSH
+  too): machine names `<host>.lan.stoneyshome.com` (proxmox, n8n,
+  homeassistant, fileserver, finance, recipes, solar, cpushare, idrac)
+  point at each server's own IP - for SSH/PuTTY, SMB and anything not
+  proxied. Web names (e.g. `ha.`, `files.`, `n8n-ui.` ... `.lan.stoneyshome.com`)
+  point at the Traefik proxy and carry the wildcard certificate. Proxmox's
+  own ACME cert uses its machine name directly (no proxy). A browser on a
+  machine name of a proxied service would hit the service's own (untrusted)
+  cert - use the web name in browsers.
 
 - **Proxy** (user's decision 2026-11-09): the existing **Traefik on the n8n
   VM** (compose in /home/stonec/n8n-compose; today it serves only
