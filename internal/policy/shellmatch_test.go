@@ -37,3 +37,13 @@ func TestShellDenyNoFalseAlarmOnPaths(t *testing.T) {
 		t.Fatalf("a script that reboots was not denied: %+v", bad)
 	}
 }
+
+func TestInspectIsReadOnlyButHonoursDenyRules(t *testing.T) {
+	p := New(File{Deny: []Rule{{ID: "d1", Shell: "secret-tool"}}}, nil)
+	if d := p.Classify(Action{Kind: "inspect", Shell: "journalctl -n 50 | grep reboot"}); d.Tier != TierRead {
+		t.Fatalf("inspect should be read-only, got %+v", d)
+	}
+	if d := p.Classify(Action{Kind: "inspect", Shell: "secret-tool lookup x"}); d.Tier != TierDenied {
+		t.Fatalf("deny rule should apply to inspect, got %+v", d)
+	}
+}

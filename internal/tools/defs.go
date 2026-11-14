@@ -23,6 +23,14 @@ type (
 		Reason     string `json:"reason,omitempty"`
 	}
 
+	// InspectArgs: a read-only script run in a sandbox (see the inspect tool).
+	InspectArgs struct {
+		Script     string `json:"script"`
+		Cwd        string `json:"cwd,omitempty"`
+		TimeoutSec int    `json:"timeout_sec,omitempty"`
+		Reason     string `json:"reason,omitempty"`
+	}
+
 	ReadFileArgs struct {
 		Path   string `json:"path"`
 		Offset int64  `json:"offset,omitempty"`
@@ -225,6 +233,21 @@ var All = []Def{
 			"script":      {Type: "string", Desc: "Bash script to run with `bash -c`."},
 			"as":          as,
 			"cwd":         {Type: "string", Desc: "Working directory."},
+			"timeout_sec": timeout,
+			"reason":      reason,
+		},
+		Required: []string{"script"},
+	},
+	{
+		Name: "inspect", Title: "Inspect (read-only script)", ReadOnly: true,
+		Description: "Run a bash script for diagnostics in a read-only sandbox: it never needs approval because it cannot change anything. " +
+			"It runs as the unprivileged user nobody (plus the adm and systemd-journal groups) with NO network: it can read configs, " +
+			"logs, the journal, /proc, ps, df, grep/awk/sed pipelines, but not secrets (root-only files), not Docker, not systemctl " +
+			"start/stop, and not local or remote APIs. Use it for checks and investigations; use run_command/run_shell for anything " +
+			"that needs root, network, Docker or changes.",
+		Props: map[string]Prop{
+			"script":      {Type: "string", Desc: "Bash script to run (pipes, loops and redirects to /tmp are fine)."},
+			"cwd":         {Type: "string", Desc: "Working directory (default /)."},
 			"timeout_sec": timeout,
 			"reason":      reason,
 		},

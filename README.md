@@ -125,6 +125,7 @@ Tools Claude gets:
 | `system_info` | OS, uptime, load, memory, disks, IPs, updates, failed units |
 | `run_command` | Run an argv command (optionally as another user) |
 | `run_shell` | Run a bash script; always needs approval unless the exact script is allowlisted |
+| `inspect` | Run a read-only diagnostic script in a sandbox (user nobody + log groups, no network); never needs approval |
 | `read_file` / `list_dir` | Read files and directories (sensitive files need approval) |
 | `write_file` / `edit_file` | Change files; each change saves a `.csa-bak` backup |
 | `service` | systemctl status/start/stop/restart/reload/enable/disable |

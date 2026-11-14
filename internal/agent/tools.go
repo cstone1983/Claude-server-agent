@@ -135,6 +135,26 @@ func (e *Executor) Handle(ctx context.Context, call *proto.Call) *proto.Result {
 		argv, env := shellSpec(a.Script)
 		return e.execute(ctx, call, act, d, procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
 
+	case "inspect":
+		var a tools.InspectArgs
+		if err := parse(&a); err != nil {
+			return errResult("%v", err)
+		}
+		if strings.TrimSpace(a.Script) == "" {
+			return errResult("script is empty")
+		}
+		act := policy.Action{Kind: "inspect", Shell: a.Script}
+		d, stop := e.gate(call, actionHash(call.Tool, a), act, a.Reason)
+		if stop != nil {
+			return stop
+		}
+		argv, env := shellSpec(a.Script)
+		res := e.execute(ctx, call, act, d, procSpec{Argv: argv, Env: env, Cwd: a.Cwd, Sandbox: true, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
+		if res != nil && !res.OK && strings.Contains(res.Text, "exit code: -1") && strings.Contains(res.Text, "operation not permitted") {
+			res.Text = "the inspect sandbox is not available on this server (it cannot create a network namespace, e.g. inside a container); use run_command/run_shell instead.\n" + res.Text
+		}
+		return res
+
 	case "service":
 		var a tools.ServiceArgs
 		if err := parse(&a); err != nil {

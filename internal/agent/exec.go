@@ -22,6 +22,12 @@ type procSpec struct {
 	Timeout time.Duration
 	// Env is added to the clean environment (e.g. CSA_SCRIPT for shellSpec).
 	Env []string
+	// Sandbox runs the command as the unprivileged user nobody (plus the adm and
+	// systemd-journal groups, for logs) in a new, empty network namespace: it can
+	// read world/log-readable files and /proc but cannot write system files,
+	// signal root processes, use Docker/systemd control sockets or reach any
+	// network service. Used by the inspect tool.
+	Sandbox bool
 }
 
 // shellRunner is the fixed command line used for scripts. The script itself
@@ -57,6 +63,12 @@ func buildCmd(ctx context.Context, s procSpec) (*exec.Cmd, error) {
 	username := s.As
 	var u *user.User
 	var err error
+	if s.Sandbox {
+		if os.Geteuid() != 0 {
+			return nil, fmt.Errorf("the inspect sandbox needs the agent to run as root")
+		}
+		username = "nobody"
+	}
 	if username == "" && os.Geteuid() != 0 {
 		// Not running as root (development/testing): run as ourselves.
 		u, err = user.Current()
@@ -88,6 +100,33 @@ func buildCmd(ctx context.Context, s procSpec) (*exec.Cmd, error) {
 		}
 	}
 	attr := &syscall.SysProcAttr{Setpgid: true}
+	if s.Sandbox {
+		cmd.Dir = "/"
+		if s.Cwd != "" {
+			cmd.Dir = s.Cwd
+		}
+		uid, _ := strconv.ParseUint(u.Uid, 10, 32)
+		gid, _ := strconv.ParseUint(u.Gid, 10, 32)
+		var groups []uint32
+		for _, name := range []string{"adm", "systemd-journal"} {
+			if g, err := user.LookupGroup(name); err == nil {
+				if n, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
+					groups = append(groups, uint32(n))
+				}
+			}
+		}
+		attr.Credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid), Groups: groups}
+		attr.Cloneflags = syscall.CLONE_NEWNET
+		cmd.SysProcAttr = attr
+		cmd.Cancel = func() error {
+			if cmd.Process != nil {
+				return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
+			return nil
+		}
+		cmd.WaitDelay = 5 * time.Second
+		return cmd, nil
+	}
 	if os.Geteuid() == 0 && u.Uid != "0" {
 		uid, _ := strconv.ParseUint(u.Uid, 10, 32)
 		gid, _ := strconv.ParseUint(u.Gid, 10, 32)

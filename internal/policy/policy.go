@@ -128,7 +128,7 @@ type File struct {
 
 // Action is something the agent has been asked to do.
 type Action struct {
-	Kind  string   // "exec", "shell", "read_file", "write_file"
+	Kind  string   // "exec", "shell", "inspect", "read_file", "write_file"
 	Argv  []string // exec
 	Shell string   // shell
 	As    string   // user to run as; "" = root
@@ -147,6 +147,8 @@ func (a Action) Summary() string {
 		return "run: " + quoteArgv(a.Argv) + who
 	case "shell":
 		return "shell script" + who + ":\n" + a.Shell
+	case "inspect":
+		return "inspect (read-only sandbox):\n" + a.Shell
 	case "read_file":
 		return "read file " + a.Path
 	case "write_file":
@@ -335,6 +337,18 @@ func (p *Policy) Classify(a Action) Decision {
 			}
 		}
 		return Decision{Tier: TierElevated, Why: "shell scripts need approval unless allowlisted exactly"}
+
+	case "inspect":
+		// Runs as nobody without network (see the agent's sandbox): it cannot
+		// change anything, so it is read-only whatever the script says. Deny rules
+		// written for scripts still apply, so a server owner can forbid patterns.
+		script := strings.TrimSpace(a.Shell)
+		for _, r := range deny {
+			if r.Shell != "" && shellContains(script, r.Shell) {
+				return Decision{Tier: TierDenied, RuleID: r.ID, Why: "matches deny rule: " + r.String()}
+			}
+		}
+		return Decision{Tier: TierRead, Why: "read-only sandbox (nobody, no network)"}
 
 	case "write_file":
 		for _, r := range deny {
