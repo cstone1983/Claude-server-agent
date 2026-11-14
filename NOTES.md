@@ -573,6 +573,18 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **CPU-Share (VM 104) tuned for mining (2026-11-15, user's request).**
+      Was: cpu x86-64-v3, 4 virtual sockets x 6, NUMA off. Now: cpu host,
+      2 sockets x 15 cores = 30 vCPUs matching the 2 real CPUs, NUMA on with
+      numa0 -> host node 0 / numa1 -> host node 1 (32 GB each,
+      policy=preferred, not bind: node 0 had only ~17 GB free), cpuunits 20
+      (low priority: HA, voice, desktops win under load). Guest sees 2 NUMA
+      nodes + pdpe1gb (1 GB pages). XMRig/Akash software is handled by a
+      separate chat (it measures hashrate). Not done yet (step 4): host-backed
+      huge pages + smaller RAM - needs the Akash RAM usage first.
+      Undo: qm set 104 --cpu x86-64-v3 --sockets 4 --cores 6 --numa 0
+      --delete numa0,numa1,cpuunits, then restart.
+
 - [ ] cloudflared updated to 2026.11.0 on all 6 servers that run it
       (2026-11-14). HA's "Cloudflared" add-on is installed but STOPPED (HA
       remote access uses Homeway) and has an update: update or remove it.
