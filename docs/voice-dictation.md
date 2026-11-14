@@ -39,9 +39,14 @@ dedicated chat for this project.** State at hold: VM 113 created and started
 - First speed test (11 s JFK sample, 8 vCPU, default settings): small.en
   4.6 s but dropped words; large-v3-turbo ~20 s (too slow - tune: int8,
   threads, VAD, more cores); qwen2.5:3b cleanup 2.4 s, very good.
-- Getting the key onto a phone: `sudo voice-key-qr` on voice shows the base
-  URL and the key as QR codes in the terminal (qrencode). Later: pairing code
-  + per-device keys in our own app.
+- Getting the key onto a phone: `sudo voice-key-qr [url|key|app]` on voice
+  shows QR codes in the terminal (qrencode). Contents:
+  - url: `https://voice.stoneyshome.com/v1/`
+  - key: the 64-character lowercase hex key only (no "Bearer", no newline)
+  - app: one JSON line for our app's "scan to set up":
+    `{"v":1,"base_url":"https://voice.stoneyshome.com/v1/","api_key":"<64 hex>"}`
+    The app sends `Authorization: Bearer <api_key>` on every request.
+  Later: pairing code + per-device keys.
 - To do: Whisper tuning, 113.fw firewall (observe -> block), voice.lan via
   Traefik, health checks.
 
