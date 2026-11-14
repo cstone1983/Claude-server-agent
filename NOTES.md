@@ -580,7 +580,7 @@ Only rules scoped to them by name or tag apply.
       session ideas: docs/voice-dictation.md. Start a new chat with that doc.
 - [ ] **Idea: our own Android keyboard app** (user, 2026-11-14) for the
       self-hosted voice dictation (VM 113 "voice"). Try Dictate first; fork
-      Dictate/FlorisBoard for what it lacks. See docs/voice-dictation.md; ready-made prompt for a new chat: docs/keyboard-app-prompt.md.
+      Dictate/FlorisBoard for what it lacks. See docs/voice-dictation.md; ready-made prompt for a new chat: docs/keyboard-app-prompt.md. Being built (2026-11-14) by a separate chat, working only in the GitHub repo "voice-keyboard"; read its notes there.
 
 - [ ] **Per-VM firewalls (user's request 2026-11-11) - in progress.** The
       UDM only filters BETWEEN VLANs; Proxmox VM firewalls (filtered at the
