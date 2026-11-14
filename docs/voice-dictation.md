@@ -47,7 +47,17 @@ dedicated chat for this project.** State at hold: VM 113 created and started
     `{"v":1,"base_url":"https://voice.stoneyshome.com/v1/","api_key":"<64 hex>"}`
     The app sends `Authorization: Bearer <api_key>` on every request.
   Later: pairing code + per-device keys.
-- To do: Whisper tuning, 113.fw firewall (observe -> block), voice.lan via
+- Tuning 2026-11-14 (11 s sample): VM now 16 cores, but Whisper fastest at
+  8 threads (16 crosses CPU sockets): small.en ~3.6-3.9 s via the API, beam
+  size makes no difference; large-v3-turbo ~11-12 s whatever the settings
+  (too slow on CPU, no GPU possible). Chosen: speech
+  Systran/faster-whisper-small.en, cleanup qwen2.5:3b (~2.5 s). Chunked
+  upload in the app (docs/keyboard-chunked-prompt.md) hides most of it.
+- Setup QR "app" format now also carries stt_model + chat_model (the app
+  pre-fills them). /v1/models lists only the Whisper models (speaches); the
+  cleanup model must come from the QR or be typed. Possible later: merge
+  Ollama's list into /v1/models.
+- To do: 113.fw firewall (observe -> block), voice.lan via
   Traefik, health checks.
 
 ## Phone: keyboard research (2026-11-14)
