@@ -1,7 +1,9 @@
 # Self-hosted voice dictation ("Wispr Flow" on our own server)
 
-Started 2026-11-14 (user's request). Status: VM created, waiting for the user
-to install Ubuntu + the agent.
+Started 2026-11-14 (user's request). **ON HOLD (2026-11-14): the user wants a
+dedicated chat for this project.** State at hold: VM 113 created and started
+(booted into the Ubuntu Server installer, nothing installed yet), UDM fixed IP
++ DNS done. Next: user installs Ubuntu + agent, then the server setup below.
 
 ## Server: VM 113 "voice"
 - 8 cores (cpu type `host` for AVX2), 16 GB RAM, 64 GB on VM ZFS (discard),

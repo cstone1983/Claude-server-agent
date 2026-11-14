@@ -573,6 +573,11 @@ Only rules scoped to them by name or tag apply.
 
 ## To do / ideas
 
+- [ ] **Self-hosted voice dictation - ON HOLD, own chat later** (user,
+      2026-11-14). VM 113 "voice" created (8 cores host CPU, 16 GB, 64 GB,
+      10.10.11.113 reserved, voice.lan DNS), sitting in the Ubuntu installer.
+      Full plan, keyboard research (Dictate top pick), learning + training
+      session ideas: docs/voice-dictation.md. Start a new chat with that doc.
 - [ ] **Idea: our own Android keyboard app** (user, 2026-11-14) for the
       self-hosted voice dictation (VM 113 "voice"). Try Dictate first; fork
       Dictate/FlorisBoard for what it lacks. See docs/voice-dictation.md.
