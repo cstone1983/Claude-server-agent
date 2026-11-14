@@ -210,6 +210,9 @@ Today's rules are blind word swaps ("Jesse" -> "Jessy" everywhere). Plan, once
 - Spoken punctuation ("comma", "period", "new line") is NOT a learning task:
   fixed conversion in the app (being built by the app chat, 2026-11-15),
   plus a backup line in the cleanup prompt.
+- Server fix 2026-11-15: everyday-word fixes (this->the, there->their: both
+  sides only common English words) are stored but never become rules or
+  vocabulary; vocabulary excludes common words. Removed the This->The rule.
 - Server fixes already done 2026-11-15: punctuation around corrected words is
   stripped (Jesse, -> Jessy, stored as Jesse -> Jessy); a bogus rule from the
   cleanup "text" bug was removed.
