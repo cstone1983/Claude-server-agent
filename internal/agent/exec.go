@@ -20,6 +20,21 @@ type procSpec struct {
 	Cwd     string
 	Stdin   string
 	Timeout time.Duration
+	// Env is added to the clean environment (e.g. CSA_SCRIPT for shellSpec).
+	Env []string
+}
+
+// shellRunner is the fixed command line used for scripts. The script itself
+// travels in the CSA_SCRIPT environment variable (removed before the script
+// runs, so child processes never see it). Keeping the script text out of the
+// command line means `pkill -f <pattern>` / `pgrep -f` inside a script can no
+// longer match - and kill - the script's own shell, and the text does not show
+// up in `ps` for other users.
+const shellRunner = `__csa_s=$CSA_SCRIPT; unset CSA_SCRIPT; eval "$__csa_s"`
+
+// shellSpec returns the argv and environment that run a bash script.
+func shellSpec(script string) ([]string, []string) {
+	return []string{"/bin/bash", "-c", shellRunner, "csa-script"}, []string{"CSA_SCRIPT=" + script}
 }
 
 type procResult struct {
@@ -64,6 +79,7 @@ func buildCmd(ctx context.Context, s procSpec) (*exec.Cmd, error) {
 		"LANG=C.UTF-8", "TERM=dumb", "PAGER=cat", "SYSTEMD_PAGER=", "SYSTEMD_COLORS=0",
 		"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=l", "NO_COLOR=1",
 	}
+	cmd.Env = append(cmd.Env, s.Env...)
 	cmd.Dir = s.Cwd
 	if cmd.Dir == "" {
 		cmd.Dir = u.HomeDir

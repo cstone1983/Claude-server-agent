@@ -317,7 +317,7 @@ func (p *Policy) Classify(a Action) Decision {
 	case "shell":
 		script := strings.TrimSpace(a.Shell)
 		for _, r := range deny {
-			if r.Shell != "" && strings.Contains(script, r.Shell) {
+			if r.Shell != "" && shellContains(script, r.Shell) {
 				return Decision{Tier: TierDenied, RuleID: r.ID, Why: "matches deny rule: " + r.String()}
 			}
 			if len(r.AnyArg) > 0 && len(r.Argv) == 0 && containsAnyLiteral(script, r.AnyArg) {
@@ -325,7 +325,7 @@ func (p *Policy) Classify(a Action) Decision {
 			}
 		}
 		for _, r := range p.local.AskAlways {
-			if r.Shell != "" && strings.Contains(script, r.Shell) {
+			if r.Shell != "" && shellContains(script, r.Shell) {
 				return Decision{Tier: TierElevated, RuleID: r.ID, AskAlways: true, Why: "needs its own approval every time (script contains " + strconv.Quote(r.Shell) + ")"}
 			}
 		}
@@ -367,6 +367,41 @@ func (p *Policy) Classify(a Action) Decision {
 		return Decision{Tier: TierRead, Why: "file read"}
 	}
 	return Decision{Tier: TierDenied, Why: "unknown action kind " + a.Kind}
+}
+
+// shellWords splits a script into shell words: separators are whitespace and
+// shell punctuation, so "/var/run/reboot-required" stays one word (and does
+// not contain the word "reboot"), while "systemctl reboot;" yields "reboot".
+func shellWords(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return strings.ContainsRune(" \t\r\n;|&()<>`$\"'{}\\", r)
+	})
+}
+
+// shellContains reports whether the word sequence of pat (e.g. "reboot" or
+// "qm destroy") appears in the script as whole words. The first word also
+// matches a path ending in it ("/sbin/reboot"). This replaces plain substring
+// matching, which refused harmless scripts such as one that only reads
+// /var/run/reboot-required.
+func shellContains(script, pat string) bool {
+	pw, sw := shellWords(pat), shellWords(script)
+	if len(pw) == 0 {
+		return false
+	}
+	for i := 0; i+len(pw) <= len(sw); i++ {
+		ok := true
+		for j, p := range pw {
+			w := sw[i+j]
+			if w != p && !(j == 0 && strings.HasSuffix(w, "/"+p)) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAnyLiteral(s string, pats []string) bool {

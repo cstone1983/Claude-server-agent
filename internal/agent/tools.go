@@ -132,7 +132,8 @@ func (e *Executor) Handle(ctx context.Context, call *proto.Call) *proto.Result {
 		if stop != nil {
 			return stop
 		}
-		return e.execute(ctx, call, act, d, procSpec{Argv: []string{"/bin/bash", "-c", a.Script}, As: a.As, Cwd: a.Cwd, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
+		argv, env := shellSpec(a.Script)
+		return e.execute(ctx, call, act, d, procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: e.timeout(a.TimeoutSec)}, a.Reason)
 
 	case "service":
 		var a tools.ServiceArgs
@@ -660,14 +661,14 @@ func listDir(p string) *proto.Result {
 
 func (e *Executor) startJob(call *proto.Call, a tools.StartJobArgs, hash string) *proto.Result {
 	var act policy.Action
-	var argv []string
+	var argv, env []string
 	switch {
 	case len(a.Argv) > 0 && a.Script == "":
 		act = policy.Action{Kind: "exec", Argv: a.Argv, As: a.As}
 		argv = a.Argv
 	case a.Script != "" && len(a.Argv) == 0:
 		act = policy.Action{Kind: "shell", Shell: a.Script, As: a.As}
-		argv = []string{"/bin/bash", "-c", a.Script}
+		argv, env = shellSpec(a.Script)
 	default:
 		return errResult("give exactly one of argv or script")
 	}
@@ -682,7 +683,7 @@ func (e *Executor) startJob(call *proto.Call, a tools.StartJobArgs, hash string)
 	if timeout > 24*time.Hour {
 		timeout = 24 * time.Hour
 	}
-	j, err := e.jobs.start(procSpec{Argv: argv, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary())
+	j, err := e.jobs.start(procSpec{Argv: argv, Env: env, As: a.As, Cwd: a.Cwd, Timeout: timeout}, act.Summary())
 	if err != nil {
 		return errResult("%v", err)
 	}
