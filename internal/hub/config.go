@@ -51,6 +51,10 @@ type Config struct {
 	// the request uses the public host name.
 	ListenAlso []string `yaml:"listen_also,omitempty"`
 
+	// Alerts: built-in watching with Telegram messages (see docs/standby-hub.md
+	// for the hub pair, README for alerts).
+	Alerts AlertsConfig `yaml:"alerts,omitempty"`
+
 	// Replica sets up a primary/standby pair (see docs/standby-hub.md).
 	Replica ReplicaConfig `yaml:"replica,omitempty"`
 }
