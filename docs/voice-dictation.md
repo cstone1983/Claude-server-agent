@@ -103,6 +103,8 @@ Dictate. Notes for when we pick it up:
 - Decide after a few weeks of using Dictate: build only for what it lacks.
 
 ### Learning feature (user, 2026-11-14)
+Phase 2 design + app prompt, ready to build: docs/voice-learning.md
+
 The keyboard gets better the more it is used; everything stays on our server.
 - Capture corrections: after dictated text is inserted, notice what the user
   edits (original vs. final text) and send the pair to the server.
