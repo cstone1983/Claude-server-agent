@@ -180,3 +180,19 @@ Settings screen "Learning":
 Done when: correcting the same mishear twice makes the third dictation come
 out right, and "Forget everything" empties the learned list.
 ```
+
+## Next: Google sign-in (user plans it, 2026-11-15)
+Replace the household key + name picker with "Sign in with Google":
+- Google Cloud project "Voice Keyboard"; OAuth consent screen External in
+  TESTING mode (allowed accounts added as test users, no Google review).
+- OAuth clients: Web application (its Client ID = token audience the server
+  checks; no secret needed) and Android (package
+  io.github.cstone1983.voicekeyboard + SHA-1 of the signing cert, from the app
+  chat's CI keystore).
+- App: Credential Manager "Sign in with Google" -> ID token -> POST
+  vk/auth/google once -> server verifies (Google JWKS signature, aud = web
+  client ID, iss, exp, email_verified) and checks the email allow-list
+  (email -> user) -> issues a personal per-device key (voice-user key ...)
+  returned to the app; app stores it (Keystore) and drops the picker.
+- Server to build: the endpoint, allow-list file (root-only), key issuing and
+  revoking, then turn the household key k1 personal or revoke it.
