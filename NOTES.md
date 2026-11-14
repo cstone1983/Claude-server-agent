@@ -133,6 +133,21 @@ NEW-only counters have run for several hours.**
   only when the user says; keep notes updated; recommendations rather than
   option lists.
 
+## Hub improvements 2026-11-14 (code done, NOT deployed yet)
+On branch ccr-59230fbc-jw6beu, CI green; needs a release + update_server (only when the user says).
+- `inspect` tool: read-only diagnostic scripts as nobody (+adm, systemd-journal), no network; never
+  needs approval. Not available inside the HA add-on container (no network namespaces).
+- Shell deny/ask_always rules match whole command words; script text no longer on the command line.
+- Calls survive a dropped agent connection (agent keeps running, re-sends the result; hub waits 3 min).
+- Agent `fallback_hub_urls`; standby hub with state copy/forwarding/takeover/merge-back:
+  docs/standby-hub.md. Needs: standby VM choice, a dedicated Cloudflare tunnel for
+  agents.stoneyshome.com (today it shares n8n's tunnel), secret file, LAN listen + firewall 7420.
+- list_servers health line (uptime, load, mem, fullest disk, updates, REBOOT PENDING, failed units).
+- Telegram approvals (Approve/Deny/Always; ask-always + rule requests: link only) and built-in alerts
+  (offline, disk, failed units, checks): README "Telegram approvals and alerts". Needs the bot token
+  in /etc/csa-hub/telegram.token on n8n, chat id 6897458189, and the bot without a webhook.
+- Hands-off mode unchanged (auto-approved actions never reach Telegram; checks never ask for approval).
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
