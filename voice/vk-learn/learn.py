@@ -95,8 +95,18 @@ def clean(s, limit):
     return s.replace("\x00", "").strip()[:limit]
 
 
+EDGE_PUNCT = " \t\n,.;:!?\"'()[]{}…“”‘’"
+
+
+def strip_shared_punct(before, after):
+    """'Jesse,' -> 'Jessy,' becomes 'Jesse' -> 'Jessy': punctuation around the
+    corrected word is not part of the correction (rules then match anywhere)."""
+    return before.strip(EDGE_PUNCT), after.strip(EDGE_PUNCT)
+
+
 def learn_edit(c, user, before, after):
     """Turn one correction into learned items. Returns True if anything changed."""
+    before, after = strip_shared_punct(before, after)
     if not before or not after or before == after:
         return False                       # pure insertions/deletions (e.g. removed filler) teach nothing
     if re.fullmatch(r"[\d\s.,:/-]+", before + after):
