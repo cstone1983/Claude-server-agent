@@ -85,12 +85,12 @@ def sync():
             lines.append(f"  \"Bearer {k['key']}\" \"{k[field]}\";\n")
         lines.append("}\n")
     lines.append("map $voice_user $voice_auth_ok {\n  \"\" 0;\n  default 1;\n}\n")
+    # Write IN PLACE (same inode): the gateway container bind-mounts this single
+    # file, and a replaced file (new inode) would stay invisible to it.
     old = os.umask(0o077)
-    tmp = NGINX_MAP + ".new"
-    with open(tmp, "w") as f:
+    with open(NGINX_MAP, "w") as f:
         f.writelines(lines)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, NGINX_MAP)
+    os.chmod(NGINX_MAP, 0o600)
     os.umask(old)
     test = subprocess.run(["docker", "exec", "voice-gateway", "nginx", "-t"], capture_output=True, text=True)
     if test.returncode != 0:
