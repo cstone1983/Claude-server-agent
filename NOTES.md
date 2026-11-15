@@ -180,6 +180,12 @@ with the add-on version or the Supervisor reuses the cached download).
   long-polls getUpdates, so the bot must have NO webhook: never activate an n8n Telegram Trigger on
   this bot (it would set one and break the buttons; use a separate bot for that). The n8n
   server-notify workflow only sends, which is fine. Verified with one silent test message.
+- **v0.1.31 (2026-11-15)**: Telegram hands-off control bar (send the bot /start: 1h/4h/8h,
+  one-use "Include Proxmox" box, Status, Stop; follows the dashboard and the expiry), hub
+  instructions tell Claude to use `inspect` first, Telegram listener/presses logged. Hubs on n8n and
+  Vm-finance updated; the standby's hub binary is updated by hand (download release, check
+  checksums.txt, install /usr/local/bin/csa-hub, restart): `update_server` only updates its agent.
+  Other agents stay on v0.1.30 (no agent change).
 - Hands-off mode unchanged.
 
 ## Secrets and where they live (never in chat or in this repo)
