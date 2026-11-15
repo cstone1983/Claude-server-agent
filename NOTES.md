@@ -429,6 +429,17 @@ with the add-on version or the Supervisor reuses the cached download).
   `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
   speed from about 10 to about 34 Mbps.
 
+## Proxmox update 2026-11-15 (no restart needed)
+17 point updates at 08:53-08:54: pve-manager 9.2.26 -> 9.2.27, pve-container, libpve-*, proxmox-firewall
+1.2.4 -> 1.2.5, ifupdown2 pmx14, proxmox-backup-server/client 4.2.11, acme 1.7.3, libcares2 (Debian
+security), widget toolkit, docs, and kernel package 7.0.14-29 (installed only). Still running and
+pinned to 6.8.12-43 (GRUB_DEFAULT in /etc/default/grub.d/proxmox-kernel-pin.cfg; 7.0 resets the
+R630). No restart flag. After: all PVE/PBS services active, all VMs in their usual state, hub port
+7420 open on n8n + Vm-finance. `pve-firewall status` says "pending changes" - it did before the
+update too (seen 2026-11-14); traffic matches the rules; worth a look some day.
+Note: the Proxmox deny rule matches the word "reboot" anywhere in a script (even in echo text or
+the reboot-required path) - phrase checks without it.
+
 ## Proxmox host memory: ZFS ARC capped (2026-11-09)
 
 - 188 GB RAM. The ZFS cache (ARC, for the "VM" pool; root is ext4/LVM) had
