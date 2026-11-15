@@ -286,7 +286,7 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 **App inventory (what runs where):** `/srv/homelab/INVENTORY.md` on server
 `n8n`. Read it with `read_file`. It isn't kept in this public repo on purpose.
 
-## Servers (all on agent v0.1.18, timezone America/New_York)
+## Servers (table from 2026-11-08; versions now: agents v0.1.30, hub v0.1.31. Timezone America/New_York)
 
 | Name | Role / notes | OS | Disk `/` |
 |---|---|---|---|
