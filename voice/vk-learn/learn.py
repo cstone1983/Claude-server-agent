@@ -42,7 +42,7 @@ Endpoints (JSON; paths relative to /v1/vk/):
   DELETE data               -> forget everything for this user (audio included)
   GET    health             (no user needed)
 """
-import difflib, json, os, re, shutil, sqlite3, threading, time, urllib.request
+import difflib, io, json, os, re, shutil, sqlite3, threading, time, urllib.request, wave
 from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -605,9 +605,14 @@ class H(BaseHTTPRequestHandler):
             path = os.path.join(folder, f"{d['id']}.{ext}")
             with open(path, "wb") as f:
                 f.write(data)
+            # The clip's own length counts (the app's audio_ms can be 0 or stale).
+            ms = wav_ms(data) if ext == "wav" else None
+            ms = ms or d["audio_ms"] or 0
+            if ms and not d["audio_ms"]:
+                c.execute("UPDATE dictations SET audio_ms=? WHERE id=?", (ms, d["id"]))
             c.execute("DELETE FROM audio WHERE user=? AND dictation_id=?", (user, d["id"]))
             c.execute("INSERT INTO audio(user, dictation_id, path, text, bytes, audio_ms, created) VALUES(?,?,?,?,?,?,?)",
-                      (user, d["id"], path, d["final"] or d["cleaned"], len(data), d["audio_ms"], now()))
+                      (user, d["id"], path, d["final"] or d["cleaned"], len(data), ms, now()))
         return self.reply(200, {"ok": True, "dictation": d["id"], "bytes": len(data)})
 
     def do_DELETE(self):
@@ -637,8 +642,36 @@ class H(BaseHTTPRequestHandler):
         print("%s %s" % (self.command, self.path.split("?")[0]), flush=True)
 
 
+def wav_ms(data):
+    """Length of a WAV clip in ms, or None if it can't be read."""
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            return int(w.getnframes() * 1000 / w.getframerate()) if w.getframerate() else None
+    except Exception:
+        return None
+
+
+def backfill_audio_ms():
+    """Measure stored WAV clips whose length was recorded as 0 (older app builds)."""
+    n = 0
+    with lock, db() as c:
+        for r in c.execute("SELECT id, dictation_id, path FROM audio WHERE coalesce(audio_ms,0)=0").fetchall():
+            try:
+                with open(r["path"], "rb") as f:
+                    ms = wav_ms(f.read()) if r["path"].endswith(".wav") else None
+            except OSError:
+                ms = None
+            if ms:
+                c.execute("UPDATE audio SET audio_ms=? WHERE id=?", (ms, r["id"]))
+                c.execute("UPDATE dictations SET audio_ms=? WHERE id=? AND coalesce(audio_ms,0)=0", (ms, r["dictation_id"]))
+                n += 1
+    if n:
+        print(f"backfilled the length of {n} audio clip(s)", flush=True)
+
+
 if __name__ == "__main__":
     init()
+    backfill_audio_ms()
     threading.Thread(target=purge_loop, daemon=True).start()
     threading.Thread(target=nightly_loop, daemon=True).start()
     print(f"vk-learn on :8082, db {DB}, retention {RETENTION_DAYS} days, style model {STYLE_MODEL} "

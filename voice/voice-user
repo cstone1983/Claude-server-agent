@@ -121,9 +121,11 @@ def qr(key_row, mode="app"):
     payloads = {
         "url": BASE_URL,
         "key": key_row["key"],
+        # "user" is the display name; "user_id" is the id the server uses ("*" = household key:
+        # the app then asks who is using it and sends X-VK-As with a user id from GET vk/users).
         "app": ('{"v":1,"base_url":"%s","api_key":"%s","stt_model":"%s","chat_model":"%s",'
-                '"user":"%s","device":"%s"}' % (BASE_URL, key_row["key"], STT, CHAT, name,
-                                                 key_row["device"])),
+                '"user":"%s","user_id":"%s","device":"%s"}' % (BASE_URL, key_row["key"], STT, CHAT, name,
+                                                               key_row["user"], key_row["device"])),
     }
     for m in (["url", "key", "app"] if mode == "all" else [mode]):
         label = {"url": "Base URL", "key": "API key only", "app": "App setup (scan in Voice Keyboard)"}[m]
