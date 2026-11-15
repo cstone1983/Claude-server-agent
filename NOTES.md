@@ -160,6 +160,11 @@ with the add-on version or the Supervisor reuses the cached download).
   it in Cloudflare and replace hub.env on both when convenient.
 - **Failover test 2026-11-14 23:00 passed**: primary stopped 23:00:36, standby served 23:02:26,
   8 agents reconnected over the LAN 23:02:48, primary back 23:03:46, merged + handed back 23:03:47.
+  **Test 2 (23:35, after binding the connectors to their hubs) passed cleanly**: hub+connector
+  stopped 23:35:50 (connector takes ~30 s to drain), standby serving 23:37:26 with all 12 agents
+  (desktops/Pi came in via the tunnel), primary + connector back 23:38:13, merged 23:38:16.
+  Expected blips: ~90 s of 502 before takeover; the first MCP call after a switch fails once (the
+  session lived on the other hub); pending approvals don't survive a switch (ask again).
   Desktops and thermostat-pi can't reach the LAN fallbacks (not in +servers); they use only the
   public URL. Lesson: moving the route left agents.stoneyshome.com without a DNS record for a few
   minutes and the UDM cached the NXDOMAIN for up to 30 min (SOA minimum 1800) - next time create
