@@ -313,6 +313,7 @@ func (h *Hub) Serve(ctx context.Context) error {
 	}
 	if h.tg != nil {
 		go h.tg.run(ctx)
+		go h.tg.watchPanel(ctx)
 	}
 	if h.watch != nil {
 		go h.watch.run(ctx)
