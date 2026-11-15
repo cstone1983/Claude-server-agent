@@ -169,9 +169,17 @@ with the add-on version or the Supervisor reuses the cached download).
   public URL. Lesson: moving the route left agents.stoneyshome.com without a DNS record for a few
   minutes and the UDM cached the NXDOMAIN for up to 30 min (SOA minimum 1800) - next time create
   the new route only after deleting the old one (or check the CNAME right away).
-- Telegram approvals (buttons approved by the user 2026-11-14) and alerts: code ready, not
-  configured yet: needs the bot token in /etc/csa-hub/telegram.token on n8n (and the standby), chat
-  id 6897458189, and the bot without a webhook. README "Telegram approvals and alerts".
+- **Telegram approvals + alerts ON (2026-11-14 23:42)**, bot "Stoneys servers"
+  (@Stoney_servers_bot), chat 6897458189. Token copied from the n8n credential (id
+  dBIuMpWGXYcBrEnX, `n8n export:credentials --decrypted --output` inside the container, never
+  printed) to `/etc/csa-hub/telegram.token` on n8n AND Vm-finance (csa-hub, 600; moved encrypted).
+  hub.yaml on both: `notify.telegram {bot_token_file, chat_id, buttons: true}` and `alerts {enabled,
+  offline_after_min 5, disk_pct 90, ignore_servers [Ubuntu-Anthony, jessy-desktop]}`; backups
+  hub.yaml.bak-telegram*. Buttons: Approve / Deny / Always on <server> for ordinary actions;
+  ask-always (Proxmox reboots etc.) and rule requests get an Open link only (code needed). The hub
+  long-polls getUpdates, so the bot must have NO webhook: never activate an n8n Telegram Trigger on
+  this bot (it would set one and break the buttons; use a separate bot for that). The n8n
+  server-notify workflow only sends, which is fine. Verified with one silent test message.
 - Hands-off mode unchanged.
 
 ## Secrets and where they live (never in chat or in this repo)
