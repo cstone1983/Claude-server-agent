@@ -170,6 +170,7 @@ func (t *telegram) run(ctx context.Context) {
 	if !t.cfg.Buttons {
 		return
 	}
+	slog.Info("telegram: listening for approval button presses")
 	var offset int64
 	for ctx.Err() == nil {
 		if !t.h.replica.serving() {
@@ -212,6 +213,7 @@ func (t *telegram) press(ctx context.Context, u tgUpdate) {
 		answer("Not allowed.")
 		return
 	}
+	slog.Info("telegram: button pressed", "data", cb.Data)
 	action, id, ok := strings.Cut(cb.Data, ":")
 	if !ok {
 		answer("Unknown button.")

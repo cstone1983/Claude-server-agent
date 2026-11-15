@@ -85,6 +85,7 @@ func New(cfg *Config) (*Hub, error) {
 
 const instructions = `This connector controls the user's Linux servers through Claude Server Agent.
 Start with list_servers to learn server names; every other tool takes a "server" argument (a name, "tag:<tag>" or "all").
+For investigations and checks use inspect first: it runs read-only scripts (logs, journal, configs, ps, df, systemctl status, grep pipelines) in a sandbox and never needs approval. Only use run_command/run_shell when inspect cannot do it (needs root-only files, network, Docker, or a change).
 Prefer run_command (argv, no shell) over run_shell. Use start_job for anything that may take more than a minute.
 Read-only actions run immediately. Other actions run immediately only if the server's allowlist permits them; otherwise the result says NEEDS APPROVAL with a link: show the link to the user, wait for them to approve, then call check_approval.
 Always pass a short "reason" for actions that change things. Never try to work around a denial.
