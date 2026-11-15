@@ -13,7 +13,6 @@ TARGETS=(
   "fileserver web     fileserver.localdomain 80"
   "Recipes web        recipes.localdomain 80"
   "solar Postgres     127.0.0.1 5432"
-  "solar PG relay     127.0.0.1 5433"
   "internet           1.1.1.1 443"
   "Cloudflare edge    agents.stoneyshome.com 443"
 )
@@ -23,6 +22,11 @@ for t in "${TARGETS[@]}"; do
   read -r -a f <<< "$t"; port=${f[-1]}; host=${f[-2]}; name=${t%%"$host"*}
   if tcp "$host" "$port"; then echo "ok    $name$host:$port"; else echo "FAIL  $name$host:$port"; fail=$((fail+1)); fi
 done
+# Solar DB relay: only accepts Solar-Calc (10.10.11.100), so a TCP test from here proves nothing.
+# Check the container runs and listens on the LAN address instead.
+if [ "$(docker inspect -f '{{.State.Running}}' solar-pg-lan5433 2>/dev/null)" = true ] && ss -tln | grep -q '10.10.11.102:5433 '; then
+  echo "ok    solar PG relay  solar-pg-lan5433 on 10.10.11.102:5433 (Solar-Calc only)"
+else echo "FAIL  solar PG relay  solar-pg-lan5433 not running / not listening on 10.10.11.102:5433"; fail=$((fail+1)); fi
 # Proxmox only lets Main/VPN reach 8006/22 (its allow-list), so from here: ping only.
 if ping -c1 -W2 10.10.10.15 >/dev/null 2>&1; then echo "ok    Proxmox host (ping) 10.10.10.15"
 else echo "FAIL  Proxmox host (ping) 10.10.10.15"; fail=$((fail+1)); fi

@@ -219,6 +219,24 @@ Server fixes deployed: WAV-measured clip length + QR user_id (docs/voice-dictati
 Phone not checked live: Wireless debugging was off (turn it on and give the IP:port; jessy-desktop
 is already paired, adb at /usr/bin/adb on jessy-desktop).
 
+## Solar DB relay on n8n (port 5433) - reviewed + tightened 2026-11-15
+- `solar-pg-lan5433` (alpine/socat, `docker run`, not in compose) forwards to `solar-postgres`
+  (127.0.0.1:5432 only) and accepts only Solar-Calc 10.10.11.100. Used by the Solar-Calc app:
+  /home/stonec/.solar-calc/config/database.json on Solar-Calc = postgres://solar_ro@n8n.localdomain:5433/solar
+  (read-only role). Needed - not a leftover.
+- Exposure: LAN only, effectively Solar-Calc only (Proxmox 102.fw policy DROP + allow 5433 from
+  10.10.11.100; socat range; no UDM port forward). n8n's own ufw is off and DOCKER-USER empty.
+- 2026-11-15 17:43: recreated bound to 10.10.11.102:5433 only (was 0.0.0.0 + [::]). Old config saved
+  in /root/solar-pg-lan5433.inspect-202611151743.json. Recreate command:
+  `docker run -d --name solar-pg-lan5433 --restart unless-stopped --network n8n-compose_default
+  -p 10.10.11.102:5433:5432 alpine/socat "tcp-listen:5432,fork,reuseaddr,range=10.10.11.100/32"
+  tcp-connect:solar-postgres:5432`. Verified: Solar app /api/bills ready=true.
+- net-check: the relay line now checks container + LAN listener (the old TCP probe of
+  127.0.0.1:5433 could never mean anything; it caused the daily "refusing 172.18.0.1" socat lines).
+  Backup /usr/local/bin/net-check.bak-*.
+- Note: solar-postgres pg_hba allows scram logins from any address; fine while only n8n's network
+  and the relay can reach it.
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
