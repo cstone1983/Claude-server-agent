@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Server_Agent_Hub__inspect"
+    ]
+  }
+}
