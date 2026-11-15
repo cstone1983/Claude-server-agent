@@ -1,10 +1,34 @@
-# Project notes (state as of 2026-11-08)
+# Project notes (state as of 2026-11-15)
 
 Running notes for whoever picks this up next, including Claude after a context
 reset. Design is in [PLAN.md](PLAN.md), setup in [INSTALL.md](INSTALL.md) and
 usage in [README.md](README.md).
 
-## Current state and next steps (2026-11-11 night, after the network overhaul)
+## Current state and next steps (2026-11-15)
+
+- **Hub v0.1.31** on n8n (primary) + **standby hub on Vm-finance** (VM 111), tunnel `csa-hub`
+  with connectors on both; failover tested twice 2026-11-14. Agents v0.1.30 (HA add-on 0.1.30-2),
+  all with LAN fallback URLs. Telegram: approval buttons, hands-off control bar (/start), alerts.
+  `inspect` = read-only, no-approval checks. Details: "Hub improvements" below, docs/standby-hub.md.
+- **Proxmox** updated 2026-11-15 (pve-manager 9.2.27), still on pinned kernel 6.8.12-43, no
+  restart needed. Per-VM firewalls enforced except HA 103 (observe) and the desktops.
+- **Voice keyboard**: server healthy; 11 app findings handed to the app chat
+  (docs/keyboard-review-2026-11-15.md); 2.6 of 120 training minutes collected.
+- **Open / next:**
+  1. App chat: apply docs/keyboard-review-2026-11-15.md, then re-check server logs (chunks per
+     dictation should drop to 1-2, no repeated text).
+  2. Phone live check: turn on Wireless debugging, give IP:port (jessy-desktop already paired).
+  3. Refresh the csa-hub tunnel token (pasted in chat 2026-11-14); swap /etc/cloudflared/hub.env
+     on n8n + Vm-finance.
+  4. SAN: replacement 1 TB drive arrives Tue 2026-11-17 -> pull failed disk 8, insert, clear label,
+     confirm it becomes the spare.
+  5. HA firewall: review observe log, then enforce; desktops' firewalls.
+  6. Voice tunnel token rotation (pasted in chat), HA Cloudflared add-on unused (remove?),
+     Sonoff/Shelly firmware check, 3 climate entities unavailable 48 h+, repo history has family
+     names (rewrite or make private).
+  7. `pve-firewall status` shows "pending changes" since 2026-11-14 (traffic fine) - look at it.
+
+## Earlier state (2026-11-11 night, after the network overhaul) - history
 
 **2026-11-11 04:30: backups after the moves all OK (22:15 file server, 23:00
 off-site 125G in 121 min). Firewall review round 1 done; round 2 after the
@@ -113,9 +137,8 @@ NEW-only counters have run for several hours.**
   Waiting for the user's go. Minecraft on VM 101 stopped/disabled; UDM
   forward "Minecraft" WAN 25565 -> 10.10.1.185 still enabled;
   home.stoneyshome.com -> WAN 172.100.91.63 (dynamic, no updater).
-- **Hub:** v0.1.29 on n8n and all agents. Open hub ideas: persist approvals
-  across restarts; agent result buffering across Cloudflare resets; home
-  portal + SSO (To do section).
+- **Hub:** (2026-11-11: v0.1.29; superseded, see "Current state" above). Open hub ideas: persist
+  approvals across restarts; home portal + SSO (To do section).
 - **Thermostat Pi:** IoT 10.10.3.10, reaches HA via homeassistant.localdomain.
 - **Bookmarks (user's wish 2026-11-11):** the user sends a Chrome
   bookmarks export (.html) when addresses change; only UPDATE the server
