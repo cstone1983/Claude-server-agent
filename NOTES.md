@@ -152,9 +152,18 @@ with the add-on version or the Supervisor reuses the cached download).
 - Every agent has `fallback_hub_urls: [http://10.10.11.102:7420, http://10.10.11.111:7420]`
   (backup `/etc/csa/agent.yaml.bak-fallback`). thermostat-pi is on the IoT VLAN: its fallbacks are
   blocked (it only uses the public URL).
-- **Still to do**: a dedicated Cloudflare tunnel for agents.stoneyshome.com with connectors on n8n
-  AND Vm-finance (today the route is on n8n's tunnel, so Claude can't reach the standby while n8n
-  is down; agents can, over the LAN). Then test a failover (stop csa-hub on n8n ~2 min).
+- **Tunnel `csa-hub`** (id 1d06d3b0-828d-4978-88d8-d04fdac7cb3d, created 2026-11-14) carries only
+  agents.stoneyshome.com -> http://localhost:7420; DNS CNAME agents -> <id>.cfargotunnel.com.
+  Connectors: `cloudflared-hub.service` on n8n AND Vm-finance (token in /etc/cloudflared/hub.env,
+  root-only), bound to csa-hub (BindsTo: stops/starts with the hub, so Cloudflare never routes to a
+  stopped hub). n8n_tunnel now only has n8n.stoneyshome.com. The token was pasted in chat: refresh
+  it in Cloudflare and replace hub.env on both when convenient.
+- **Failover test 2026-11-14 23:00 passed**: primary stopped 23:00:36, standby served 23:02:26,
+  8 agents reconnected over the LAN 23:02:48, primary back 23:03:46, merged + handed back 23:03:47.
+  Desktops and thermostat-pi can't reach the LAN fallbacks (not in +servers); they use only the
+  public URL. Lesson: moving the route left agents.stoneyshome.com without a DNS record for a few
+  minutes and the UDM cached the NXDOMAIN for up to 30 min (SOA minimum 1800) - next time create
+  the new route only after deleting the old one (or check the CNAME right away).
 - Telegram approvals (buttons approved by the user 2026-11-14) and alerts: code ready, not
   configured yet: needs the bot token in /etc/csa-hub/telegram.token on n8n (and the standby), chat
   id 6897458189, and the bot without a webhook. README "Telegram approvals and alerts".
