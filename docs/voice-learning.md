@@ -257,3 +257,10 @@ greyed preview from Zipformer, final text from Whisper + cleanup); it does not
 shorten stop-to-final. speaches' realtime/WebSocket mode would re-run Whisper
 repeatedly (>=2.5 s each on CPU): not worth it. Revisit after the app's speed
 fixes if the wait still feels long.
+
+## Status 2026-11-15
+- 29 dictations, accuracy 85 % (11-14) -> 94 % (11-15); 27 voice clips = 2.6 min of the 120 min needed
+  for the fine-tune (layer 3). The app's new Voice training screen (reading rounds + free talk) sends
+  training clips the same way (source=training) - the fastest way to reach 120 min.
+- Clip length is now measured server-side from the WAV (see voice-dictation.md, health check).
+- App fixes requested: docs/keyboard-review-2026-11-15.md.

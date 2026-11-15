@@ -156,3 +156,19 @@ needs much more audio (tens of minutes to hours) collected over time, opt-in.
 Can be done before our own app exists: a small web page on voice.lan that
 records in the browser, runs the script and builds Dictate's custom-words +
 replacement list to import.
+
+## Health check 2026-11-15 (server + logs + app code review)
+- Server: 5 containers up (ollama, speaches, voice-gateway, voice-learn, voice-models-merge), 12 GB
+  RAM free, disk 48 %. qwen2.5:3b resident (keep-alive forever); models listed with task field
+  (small.en + turbo transcription, qwen2.5:3b/7b chat). voice-warmup is a one-shot (inactive = done).
+- Logs (24 h): 149 transcriptions, 99 cleanups, all 200; no errors in speaches, ollama or vk-learn.
+  Pattern per dictation now: 2-4 Whisper chunks, ONE cleanup, then dictation record (+ audio +
+  message). Cleanup latency typically 1-2 s, 4-10 s on long messages. 401s are only internet
+  scanners (/.git/config, /.svn, ...).
+- App code review (voice-keyboard @ e1e4e34a): 11 findings, sent to the app chat via
+  docs/keyboard-review-2026-11-15.md. Top two: chunk prompts can make Whisper repeat earlier text
+  (the "previous transcription appended" bug) and 3-second chunks cost ~2.5 s each on this server.
+- Server fixes deployed (commit bbc63fb): vk-learn measures each clip's length from the WAV itself
+  (app's audio_ms could be 0/stale) and backfills zero-length clips at start (none found); the
+  setup QR now includes "user_id" ("chris", or "*" for a household key) next to the display "user".
+  Backups: /opt/voice/vk-learn/learn.py.bak-*, /usr/local/sbin/voice-user.bak-*.

@@ -188,6 +188,14 @@ with the add-on version or the Supervisor reuses the cached download).
   Other agents stay on v0.1.30 (no agent change).
 - Hands-off mode unchanged.
 
+## Voice keyboard check 2026-11-15
+Server healthy, no errors in 24 h, cleanup 1-2 s; 29 dictations, 2.6 of 120 training minutes.
+App review (11 findings, top: chunk prompt echo = "previous text appended" bug, 3 s chunks too
+small for the CPU server) -> prompt for the app chat in docs/keyboard-review-2026-11-15.md.
+Server fixes deployed: WAV-measured clip length + QR user_id (docs/voice-dictation.md "Health check").
+Phone not checked live: Wireless debugging was off (turn it on and give the IP:port; jessy-desktop
+is already paired, adb at /usr/bin/adb on jessy-desktop).
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
