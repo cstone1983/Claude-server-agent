@@ -2,13 +2,16 @@ ARG BUILD_FROM
 FROM $BUILD_FROM
 
 ARG BUILD_ARCH
+# Pinned agent release: change it together with the add-on version (a changed
+# line also makes the Supervisor's build download it instead of reusing a cache).
+ARG CSA_VERSION=v0.1.30
 # csa-agent from the project's GitHub release (checksum-verified), and the
 # Home Assistant CLI ("ha") that talks to the Supervisor API.
 RUN apk add --no-cache bash curl jq ca-certificates coreutils \
  && case "$BUILD_ARCH" in amd64) A=amd64 ;; aarch64) A=arm64 ;; *) echo "unsupported arch $BUILD_ARCH"; exit 1 ;; esac \
  && mkdir -p /tmp/csa && cd /tmp/csa \
- && curl -fsSL -o csa.tgz "https://github.com/cstone1983/Claude-server-agent/releases/latest/download/csa_linux_${A}.tar.gz" \
- && curl -fsSL -o checksums.txt "https://github.com/cstone1983/Claude-server-agent/releases/latest/download/checksums.txt" \
+ && curl -fsSL -o csa.tgz "https://github.com/cstone1983/Claude-server-agent/releases/download/${CSA_VERSION}/csa_linux_${A}.tar.gz" \
+ && curl -fsSL -o checksums.txt "https://github.com/cstone1983/Claude-server-agent/releases/download/${CSA_VERSION}/checksums.txt" \
  && grep " csa_linux_${A}.tar.gz\$" checksums.txt | sed "s/csa_linux_${A}.tar.gz/csa.tgz/" | sha256sum -c - \
  && tar -xzf csa.tgz && install -m 0755 csa-agent /usr/local/bin/csa-agent \
  && curl -fsSL -o /usr/local/bin/ha.bin "https://github.com/home-assistant/cli/releases/latest/download/ha_${BUILD_ARCH}" \
