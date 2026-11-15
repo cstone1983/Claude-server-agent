@@ -266,6 +266,11 @@ alerts:
   unit, a check that exits non-zero or prints a line starting with `ALERT`) and one when it clears.
   A check that would need approval is reported as not allowlisted; it never asks for approval.
 - With a standby hub, only the hub that is serving sends alerts and reads button presses.
+- **Hands-off control bar**: send the bot anything (e.g. /start) and it shows a persistent button bar
+  at the bottom of the chat: `Hands-off 1h` · `4h` · `8h`, `☐ Include Proxmox` (a one-use tick box;
+  Proxmox reboots still always need their own OK) and `Status` (hands-off state + waiting approvals).
+  While hands-off is on the bar shows `⏹ Stop hands-off (until hh:mm)`. It follows changes made on the
+  dashboard and posts "Hands-off ended" when it runs out. Only your own chat is obeyed.
 
 ## Hub admin CLI (run as root on the hub)
 

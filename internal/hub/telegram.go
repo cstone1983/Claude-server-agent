@@ -45,6 +45,12 @@ type telegram struct {
 
 	mu   sync.Mutex
 	msgs map[string]int64 // approval ID -> message ID, to update the message
+
+	// The hands-off control bar (a persistent reply keyboard).
+	panelMu        sync.Mutex
+	includeCareful bool // the "Include Proxmox" box, cleared after each use
+	panelKnown     bool // panelActive has been initialised
+	panelActive    bool // hands-off state the bar last showed
 }
 
 func newTelegram(h *Hub, cfg TelegramConfig) (*telegram, error) {
@@ -163,6 +169,15 @@ type tgUpdate struct {
 		} `json:"message"`
 		Data string `json:"data"`
 	} `json:"callback_query"`
+	Message *struct {
+		From *struct {
+			ID int64 `json:"id"`
+		} `json:"from"`
+		Chat struct {
+			ID int64 `json:"id"`
+		} `json:"chat"`
+		Text string `json:"text"`
+	} `json:"message"`
 }
 
 // run fetches button presses while this hub is the one serving.
@@ -170,6 +185,7 @@ func (t *telegram) run(ctx context.Context) {
 	if !t.cfg.Buttons {
 		return
 	}
+	slog.Info("telegram: listening for approval button presses")
 	var offset int64
 	for ctx.Err() == nil {
 		if !t.h.replica.serving() {
@@ -178,7 +194,7 @@ func (t *telegram) run(ctx context.Context) {
 			continue
 		}
 		var ups []tgUpdate
-		err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": 50, "allowed_updates": []string{"callback_query"}}, &ups)
+		err := t.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": 50, "allowed_updates": []string{"callback_query", "message"}}, &ups)
 		if err != nil {
 			if ctx.Err() == nil {
 				slog.Warn("telegram: fetching button presses failed", "err", err)
@@ -188,8 +204,11 @@ func (t *telegram) run(ctx context.Context) {
 		}
 		for _, u := range ups {
 			offset = u.UpdateID + 1
-			if u.Callback != nil {
+			switch {
+			case u.Callback != nil:
 				t.press(ctx, u)
+			case u.Message != nil:
+				t.panelMessage(ctx, u)
 			}
 		}
 	}
@@ -212,6 +231,7 @@ func (t *telegram) press(ctx context.Context, u tgUpdate) {
 		answer("Not allowed.")
 		return
 	}
+	slog.Info("telegram: button pressed", "data", cb.Data)
 	action, id, ok := strings.Cut(cb.Data, ":")
 	if !ok {
 		answer("Unknown button.")

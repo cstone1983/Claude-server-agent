@@ -19,5 +19,12 @@ if [ ! -f /data/etc/agent.yaml ]; then
   bashio::log.info "Enrolled. The join token is used up; you can clear it from the options."
 fi
 
+# Fallback hub addresses (tried when hub_url can't be reached), from the options.
+sed -i '/^fallback_hub_urls:/,/^[^ -]/{/^fallback_hub_urls:/d;/^ *- /d}' /data/etc/agent.yaml
+if bashio::config.has_value 'fallback_hub_urls'; then
+  echo "fallback_hub_urls:" >> /data/etc/agent.yaml
+  for u in $(bashio::config 'fallback_hub_urls'); do echo "  - ${u}" >> /data/etc/agent.yaml; done
+fi
+
 bashio::log.info "Starting csa-agent ($(csa-agent version 2>/dev/null || echo unknown))"
 exec csa-agent run

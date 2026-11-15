@@ -1,5 +1,5 @@
 name: Claude Server Agent
-version: "0.1.29-2"
+version: "0.1.30-2"
 slug: csa_agent
 description: Connects Home Assistant to your Claude Server Agent hub, with the same approvals as your other servers.
 url: https://github.com/cstone1983/Claude-server-agent
@@ -24,8 +24,13 @@ options:
   join_token: ""
   name: home-assistant
   tags: ha
+  fallback_hub_urls:
+    - http://10.10.11.102:7420
+    - http://10.10.11.111:7420
 schema:
   hub_url: url
   join_token: password?
   name: str
   tags: str?
+  fallback_hub_urls:
+    - url

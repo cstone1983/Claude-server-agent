@@ -133,20 +133,54 @@ NEW-only counters have run for several hours.**
   only when the user says; keep notes updated; recommendations rather than
   option lists.
 
-## Hub improvements 2026-11-14 (code done, NOT deployed yet)
-On branch ccr-59230fbc-jw6beu, CI green; needs a release + update_server (only when the user says).
-- `inspect` tool: read-only diagnostic scripts as nobody (+adm, systemd-journal), no network; never
-  needs approval. Not available inside the HA add-on container (no network namespaces).
-- Shell deny/ask_always rules match whole command words; script text no longer on the command line.
-- Calls survive a dropped agent connection (agent keeps running, re-sends the result; hub waits 3 min).
-- Agent `fallback_hub_urls`; standby hub with state copy/forwarding/takeover/merge-back:
-  docs/standby-hub.md. Needs: standby VM choice, a dedicated Cloudflare tunnel for
-  agents.stoneyshome.com (today it shares n8n's tunnel), secret file, LAN listen + firewall 7420.
-- list_servers health line (uptime, load, mem, fullest disk, updates, REBOOT PENDING, failed units).
-- Telegram approvals (Approve/Deny/Always; ask-always + rule requests: link only) and built-in alerts
-  (offline, disk, failed units, checks): README "Telegram approvals and alerts". Needs the bot token
-  in /etc/csa-hub/telegram.token on n8n, chat id 6897458189, and the bot without a webhook.
-- Hands-off mode unchanged (auto-approved actions never reach Telegram; checks never ask for approval).
+## Hub improvements (v0.1.30, deployed 2026-11-14)
+All servers on agent v0.1.30 (HA add-on 0.1.30-2; its Dockerfile pins CSA_VERSION, bump it
+with the add-on version or the Supervisor reuses the cached download).
+- `inspect` tool: read-only scripts as nobody (+adm, systemd-journal), no network, no approval.
+  Not available in the HA add-on container.
+- Shell deny/ask_always rules match whole command words; script text off the command line.
+- Calls survive a dropped connection (agent re-sends the result; hub waits 3 min). Not across an
+  agent restart (results are kept in memory only).
+- list_servers shows a health line per server.
+- **Standby hub on Vm-finance (VM 111, 10.10.11.111)**: csa-hub v0.1.30, `/etc/csa-hub/hub.yaml`
+  (copy of n8n's + `replica: role standby, peer http://10.10.11.102:7420`), unit
+  `csa-hub.service`. Primary n8n: `listen_also 10.10.11.102:7420`, `replica: role primary,
+  trusted_proxies [10.10.11.111]`. Shared secret `/etc/csa-hub/replica.secret` on both (root/csa-hub
+  only). Backups: n8n `/etc/csa-hub/hub.yaml.bak-*`. Firewall: Proxmox 102.fw + 111.fw allow 7420
+  from +servers; Vm-finance ufw allows 7420 from 10.10.10.0/23. hub.yaml was moved encrypted
+  (one-time RSA key on the standby, only ciphertext passed through the hub).
+- Every agent has `fallback_hub_urls: [http://10.10.11.102:7420, http://10.10.11.111:7420]`
+  (backup `/etc/csa/agent.yaml.bak-fallback`). thermostat-pi is on the IoT VLAN: its fallbacks are
+  blocked (it only uses the public URL).
+- **Tunnel `csa-hub`** (id 1d06d3b0-828d-4978-88d8-d04fdac7cb3d, created 2026-11-14) carries only
+  agents.stoneyshome.com -> http://localhost:7420; DNS CNAME agents -> <id>.cfargotunnel.com.
+  Connectors: `cloudflared-hub.service` on n8n AND Vm-finance (token in /etc/cloudflared/hub.env,
+  root-only), bound to csa-hub (BindsTo: stops/starts with the hub, so Cloudflare never routes to a
+  stopped hub). n8n_tunnel now only has n8n.stoneyshome.com. The token was pasted in chat: refresh
+  it in Cloudflare and replace hub.env on both when convenient.
+- **Failover test 2026-11-14 23:00 passed**: primary stopped 23:00:36, standby served 23:02:26,
+  8 agents reconnected over the LAN 23:02:48, primary back 23:03:46, merged + handed back 23:03:47.
+  **Test 2 (23:35, after binding the connectors to their hubs) passed cleanly**: hub+connector
+  stopped 23:35:50 (connector takes ~30 s to drain), standby serving 23:37:26 with all 12 agents
+  (desktops/Pi came in via the tunnel), primary + connector back 23:38:13, merged 23:38:16.
+  Expected blips: ~90 s of 502 before takeover; the first MCP call after a switch fails once (the
+  session lived on the other hub); pending approvals don't survive a switch (ask again).
+  Desktops and thermostat-pi can't reach the LAN fallbacks (not in +servers); they use only the
+  public URL. Lesson: moving the route left agents.stoneyshome.com without a DNS record for a few
+  minutes and the UDM cached the NXDOMAIN for up to 30 min (SOA minimum 1800) - next time create
+  the new route only after deleting the old one (or check the CNAME right away).
+- **Telegram approvals + alerts ON (2026-11-14 23:42)**, bot "Stoneys servers"
+  (@Stoney_servers_bot), chat 6897458189. Token copied from the n8n credential (id
+  dBIuMpWGXYcBrEnX, `n8n export:credentials --decrypted --output` inside the container, never
+  printed) to `/etc/csa-hub/telegram.token` on n8n AND Vm-finance (csa-hub, 600; moved encrypted).
+  hub.yaml on both: `notify.telegram {bot_token_file, chat_id, buttons: true}` and `alerts {enabled,
+  offline_after_min 5, disk_pct 90, ignore_servers [Ubuntu-Anthony, jessy-desktop]}`; backups
+  hub.yaml.bak-telegram*. Buttons: Approve / Deny / Always on <server> for ordinary actions;
+  ask-always (Proxmox reboots etc.) and rule requests get an Open link only (code needed). The hub
+  long-polls getUpdates, so the bot must have NO webhook: never activate an n8n Telegram Trigger on
+  this bot (it would set one and break the buttons; use a separate bot for that). The n8n
+  server-notify workflow only sends, which is fine. Verified with one silent test message.
+- Hands-off mode unchanged.
 
 ## Secrets and where they live (never in chat or in this repo)
 
