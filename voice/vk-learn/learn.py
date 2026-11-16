@@ -558,9 +558,11 @@ class H(BaseHTTPRequestHandler):
                     out["stt_model"] = m       # app sends it as `model`; transcriptions fall back if it fails
                 return self.reply(200, out)
             if path == "personal":
-                r = c.execute("SELECT body FROM personal WHERE user=?", (user,)).fetchone()
+                r = c.execute("SELECT body, updated_at FROM personal WHERE user=?", (user,)).fetchone()
                 if r:
-                    return self.reply_raw(200, r["body"].encode())
+                    prof = json.loads(r["body"])
+                    prof["updated_at"] = r["updated_at"]          # the server's time is the version
+                    return self.reply(200, prof)
                 return self.reply(200, seed_personal(c, user))   # never 404: the app reads that as "no endpoint"
             if path == "profile":
                 return self.reply(200, profile(c, user, (q.get("app") or [None])[0],
@@ -674,12 +676,26 @@ class H(BaseHTTPRequestHandler):
             return self.reply(400, {"error": "invalid JSON"})
         if not isinstance(prof, dict):
             return self.reply(400, {"error": "profile must be a JSON object"})
-        t = int(time.time())
-        body = data.decode("utf-8", "replace") if data else "{}"
+        # Several devices per person: optimistic concurrency. "if_updated_at" is the updated_at the
+        # device merged from (0 / the seed's time when it saw no stored profile); never stored.
+        has_if = "if_updated_at" in prof
+        want = prof.pop("if_updated_at", None)
+        try:
+            want = int(want) if want is not None else None
+        except (TypeError, ValueError):
+            return self.reply(400, {"error": "if_updated_at must be unix seconds"})
         with lock, db() as c:
+            r = c.execute("SELECT updated_at FROM personal WHERE user=?", (user,)).fetchone()
+            if has_if and r and r["updated_at"] != want:
+                return self.reply(409, {"error": "changed", "updated_at": r["updated_at"]})
+            t = int(time.time())
+            if r and t <= r["updated_at"]:
+                t = r["updated_at"] + 1      # always moves forward, so a stale if_updated_at never matches
+            prof["updated_at"] = t           # the server's time is the profile's version
+            body = json.dumps(prof, ensure_ascii=False, separators=(",", ":"))
             c.execute("INSERT INTO personal(user, body, bytes, updated_at, created) VALUES(?,?,?,?,?) "
                       "ON CONFLICT(user) DO UPDATE SET body=excluded.body, bytes=excluded.bytes, "
-                      "updated_at=excluded.updated_at", (user, body, len(data), t, now()))
+                      "updated_at=excluded.updated_at", (user, body, len(body.encode()), t, now()))
         return self.reply(200, {"ok": True, "updated_at": t})
 
     def post_audio(self, user, q):

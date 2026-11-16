@@ -273,6 +273,11 @@ fixes if the wait still feels long.
   before posting), replaces the old one; 200 `{"ok":true,"updated_at":<server unix time>}`;
   >2 MB -> 413; not an object -> 400. Table `personal` (user PK, body, bytes, updated_at).
   In `vk/export` as `personal: {updated_at, profile}`; removed by `DELETE vk/data`. Bodies never logged.
+- Several devices (2026-11-16): POST sets the stored profile's `updated_at` to the server's time
+  (strictly increasing per person) and GET returns that. Optional `"if_updated_at"` in the POST
+  body (never stored): if a stored profile exists with a different updated_at -> 409
+  `{"error":"changed","updated_at":<stored>}`; no stored profile -> stored as usual; without the
+  field -> stored as before.
 - `GET vk/me` adds `stt_model` only when the Whisper server lists the person's model
   (`local/whisper-small.en-<user>`, as installed by train-voice.sh; list cached 60 s).
 - `POST /v1/audio/transcriptions` now goes gateway -> models-merge (voice/models-merge/merge.py)
