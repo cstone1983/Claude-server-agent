@@ -264,3 +264,22 @@ fixes if the wait still feels long.
   training clips the same way (source=training) - the fastest way to reach 120 min.
 - Clip length is now measured server-side from the WAV (see voice-dictation.md, health check).
 - App fixes requested: docs/keyboard-review-2026-11-15.md.
+
+## Per-person personalisation (server side, deployed 2026-11-16, commit 690edf8)
+- `GET vk/personal` -> the person's stored profile JSON exactly as posted, or a seeded profile
+  `{"version":1,"updated_at":0,"seeded":true,"words":{word:[uses,newest_unix]}}` built from their
+  dictations + messages (top 3000 words), or `{}` when there is nothing to seed from. Never 404.
+- `POST vk/personal` -> full profile (any JSON object; unknown fields kept as sent; the app merges
+  before posting), replaces the old one; 200 `{"ok":true,"updated_at":<server unix time>}`;
+  >2 MB -> 413; not an object -> 400. Table `personal` (user PK, body, bytes, updated_at).
+  In `vk/export` as `personal: {updated_at, profile}`; removed by `DELETE vk/data`. Bodies never logged.
+- `GET vk/me` adds `stt_model` only when the Whisper server lists the person's model
+  (`local/whisper-small.en-<user>`, as installed by train-voice.sh; list cached 60 s).
+- `POST /v1/audio/transcriptions` now goes gateway -> models-merge (voice/models-merge/merge.py)
+  -> speaches. A model that is not installed is swapped for Systran/faster-whisper-small.en before
+  sending (no surprise downloads); a model that fails to load (HTTP >= 400) is retried with the
+  default. Response header `X-VK-STT-Fallback: <asked model>` when that happened. Only the multipart
+  `model` value changes - prompt/audio/language are passed byte-for-byte.
+- Verified live 2026-11-16 (all checks in the chat report). Backups on voice:
+  /opt/voice/{vk-learn/learn.py,models-merge/merge.py,gateway/voice.conf}.bak-* (the earliest
+  timestamp of each is the pre-change original).

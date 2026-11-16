@@ -12,7 +12,8 @@ usage in [README.md](README.md).
   `inspect` = read-only, no-approval checks. Details: "Hub improvements" below, docs/standby-hub.md.
 - **Proxmox** updated 2026-11-15 (pve-manager 9.2.27), still on pinned kernel 6.8.12-43, no
   restart needed. Per-VM firewalls enforced except HA 103 (observe) and the desktops.
-- **Voice keyboard**: server healthy; 11 app findings handed to the app chat
+- **Voice keyboard**: per-person personalisation server side LIVE 2026-11-16 (vk/personal, stt_model
+  in vk/me, transcription model fallback via models-merge; docs/voice-learning.md). Server healthy; 11 app findings handed to the app chat
   (docs/keyboard-review-2026-11-15.md); 2.6 of 120 training minutes collected.
 - **Open / next:**
   1. App chat: apply docs/keyboard-review-2026-11-15.md, then re-check server logs (chunks per
