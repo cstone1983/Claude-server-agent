@@ -54,6 +54,8 @@ RETENTION_DAYS = int(os.environ.get("VK_RETENTION_DAYS", "365"))
 OLLAMA = os.environ.get("VK_OLLAMA", "http://ollama:11434")
 STYLE_MODEL = os.environ.get("VK_STYLE_MODEL", "qwen2.5:7b")
 STYLE_HOUR_UTC = int(os.environ.get("VK_STYLE_HOUR_UTC", "8"))   # 08:00 UTC = 03:00 Eastern
+STT = os.environ.get("VK_STT", "http://speaches:8000")         # Whisper server (for per-person models)
+MAX_PERSONAL = 2 * 1024 * 1024     # vk/personal profile body limit
 PROMOTE_AFTER = 2          # identical correction / removal seen this often -> active
 MAX_EDITS, MAX_LEN, MAX_MSG, MAX_AUDIO = 20, 200, 4000, 20 * 1024 * 1024
 VOCAB_CAP, PROMPT_CHARS = 100, 600
@@ -124,6 +126,9 @@ def init():
           id INTEGER PRIMARY KEY, user TEXT NOT NULL, dictation_id INTEGER, path TEXT NOT NULL,
           text TEXT, bytes INTEGER, audio_ms INTEGER, created TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS audio_user ON audio(user, created);
+        CREATE TABLE IF NOT EXISTS personal(
+          user TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER, updated_at INTEGER NOT NULL,
+          created TEXT NOT NULL);
         """)
 
 
@@ -430,11 +435,71 @@ def delete_audio(c, user):
     return n
 
 
+_stt_cache = {"t": 0.0, "ids": set()}
+
+
+def stt_models():
+    """Model ids the Whisper server can serve right now (cached for a minute)."""
+    if time.time() - _stt_cache["t"] > 60:
+        try:
+            with urllib.request.urlopen(STT + "/v1/models", timeout=5) as r:
+                _stt_cache["ids"] = {m.get("id") for m in json.load(r).get("data", []) if m.get("id")}
+            _stt_cache["t"] = time.time()
+        except Exception:
+            pass        # keep the last known list
+    return _stt_cache["ids"]
+
+
+def personal_stt_model(user, available=None):
+    """The person's own fine-tuned Whisper model (installed by train-voice.sh as
+    local/whisper-small.en-<user>) once the Whisper server can serve it, else ""."""
+    ids = stt_models() if available is None else available
+    want = f"local/whisper-small.en-{user}"
+    if want in ids:
+        return want
+    mine = sorted(i for i in ids if i.startswith("local/") and i.endswith(f"-{user}"))
+    return mine[0] if mine else ""
+
+
+def unix(iso):
+    try:
+        return int(datetime.fromisoformat(iso).timestamp())
+    except (TypeError, ValueError):
+        return 0
+
+
+def seed_personal(c, user, cap=3000):
+    """A starting profile for a person without one: lowercase word -> [uses, newest use]
+    from their stored dictations and messages. {} when there is nothing to seed from."""
+    counts = {}
+    rows = list(c.execute("SELECT coalesce(nullif(final,''), cleaned, raw) t, created FROM dictations WHERE user=?",
+                          (user,))) + list(c.execute("SELECT text t, created FROM messages WHERE user=?", (user,)))
+    for r in rows:
+        ts = unix(r["created"])
+        for w in WORD.findall(r["t"] or ""):
+            w = w.lower().strip(".'’-")
+            if not w:
+                continue
+            n, last = counts.get(w, (0, 0))
+            counts[w] = (n + 1, max(last, ts))
+    if not counts:
+        return {}
+    top = sorted(counts.items(), key=lambda kv: (-kv[1][0], kv[0]))[:cap]
+    return {"version": 1, "updated_at": 0, "seeded": True, "words": {w: [n, t] for w, (n, t) in top}}
+
+
 class H(BaseHTTPRequestHandler):
     server_version = "vk-learn"
 
     def reply(self, code, obj):
         body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def reply_raw(self, code, body):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -487,8 +552,16 @@ class H(BaseHTTPRequestHandler):
         with db() as c:
             if path == "me":
                 name = next((u["name"] for u in users() if u["user"] == user), user)
-                return self.reply(200, {"user": user, "name": name, "device": device,
-                                        "household": self.household})
+                out = {"user": user, "name": name, "device": device, "household": self.household}
+                m = personal_stt_model(user)
+                if m:
+                    out["stt_model"] = m       # app sends it as `model`; transcriptions fall back if it fails
+                return self.reply(200, out)
+            if path == "personal":
+                r = c.execute("SELECT body FROM personal WHERE user=?", (user,)).fetchone()
+                if r:
+                    return self.reply_raw(200, r["body"].encode())
+                return self.reply(200, seed_personal(c, user))   # never 404: the app reads that as "no endpoint"
             if path == "profile":
                 return self.reply(200, profile(c, user, (q.get("app") or [None])[0],
                                                (q.get("category") or [None])[0]))
@@ -513,6 +586,8 @@ class H(BaseHTTPRequestHandler):
                     out[t] = [dict(r) for r in c.execute(f"SELECT * FROM {t} WHERE user=?", (user,))]
                 out["audio"] = [{k: r[k] for k in ("id", "dictation_id", "text", "bytes", "audio_ms", "created")}
                                 for r in c.execute("SELECT * FROM audio WHERE user=?", (user,))]
+                r = c.execute("SELECT body, updated_at FROM personal WHERE user=?", (user,)).fetchone()
+                out["personal"] = {"updated_at": r["updated_at"], "profile": json.loads(r["body"])} if r else None
                 return self.reply(200, out)
         self.reply(404, {"error": "not found"})
 
@@ -523,6 +598,8 @@ class H(BaseHTTPRequestHandler):
             return self.no_user()
         if path == "audio":
             return self.post_audio(user, q)
+        if path == "personal":
+            return self.post_personal(user)
         if path == "style/rebuild":
             threading.Thread(target=rebuild_styles, args=(user,), daemon=True).start()
             return self.reply(202, {"ok": True, "note": "rebuilding in the background (about a minute)"})
@@ -583,6 +660,28 @@ class H(BaseHTTPRequestHandler):
             return self.reply(200, {"ok": True, "id": cur.lastrowid, "learned": learned})
         self.reply(404, {"error": "not found"})
 
+    def post_personal(self, user):
+        """Store the person's whole personalisation profile (format version 1), replacing
+        the old one. The app merges before posting; unknown fields are kept as sent."""
+        try:
+            data = self.raw_body(MAX_PERSONAL)
+        except ValueError:
+            self.close_connection = True
+            return self.reply(413, {"error": "profile too large (max 2 MB)"})
+        try:
+            prof = json.loads(data or b"{}")
+        except Exception:
+            return self.reply(400, {"error": "invalid JSON"})
+        if not isinstance(prof, dict):
+            return self.reply(400, {"error": "profile must be a JSON object"})
+        t = int(time.time())
+        body = data.decode("utf-8", "replace") if data else "{}"
+        with lock, db() as c:
+            c.execute("INSERT INTO personal(user, body, bytes, updated_at, created) VALUES(?,?,?,?,?) "
+                      "ON CONFLICT(user) DO UPDATE SET body=excluded.body, bytes=excluded.bytes, "
+                      "updated_at=excluded.updated_at", (user, body, len(data), t, now()))
+        return self.reply(200, {"ok": True, "updated_at": t})
+
     def post_audio(self, user, q):
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         ext = AUDIO_TYPES.get(ctype)
@@ -624,7 +723,7 @@ class H(BaseHTTPRequestHandler):
             if path == "data":
                 counts = {t: c.execute(f"DELETE FROM {t} WHERE user=?", (user,)).rowcount
                           for t in ("corrections", "messages", "dictations", "replacements", "vocabulary", "avoid",
-                                    "styles", "meta")}
+                                    "styles", "meta", "personal")}
                 counts["audio"] = delete_audio(c, user)
                 return self.reply(200, {"ok": True, "deleted": counts})
             if path == "audio":
