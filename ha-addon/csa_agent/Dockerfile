@@ -4,7 +4,7 @@ FROM $BUILD_FROM
 ARG BUILD_ARCH
 # Pinned agent release: change it together with the add-on version (a changed
 # line also makes the Supervisor's build download it instead of reusing a cache).
-ARG CSA_VERSION=v0.1.30
+ARG CSA_VERSION=v0.1.31
 # csa-agent from the project's GitHub release (checksum-verified), and the
 # Home Assistant CLI ("ha") that talks to the Supervisor API.
 RUN apk add --no-cache bash curl jq ca-certificates coreutils \
