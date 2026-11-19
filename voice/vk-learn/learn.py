@@ -525,8 +525,21 @@ class H(BaseHTTPRequestHandler):
     def raw_body(self, limit):
         n = int(self.headers.get("Content-Length") or 0)
         if n > limit:
+            self.discard(n)
             raise ValueError("body too large")
         return self.rfile.read(n) if n else b""
+
+    def discard(self, n, cap=64 * 1024 * 1024):
+        """Read and drop an oversized body so the client gets a clean 413 instead of a
+        broken connection mid-upload (the gateway already caps bodies at 50 MB)."""
+        if n > cap:
+            self.close_connection = True
+            return
+        while n > 0:
+            chunk = self.rfile.read(min(n, 1024 * 1024))
+            if not chunk:
+                break
+            n -= len(chunk)
 
     def body(self):
         return json.loads(self.raw_body(256 * 1024) or b"{}")
@@ -668,7 +681,6 @@ class H(BaseHTTPRequestHandler):
         try:
             data = self.raw_body(MAX_PERSONAL)
         except ValueError:
-            self.close_connection = True
             return self.reply(413, {"error": "profile too large (max 4 MB)"})
         try:
             prof = json.loads(data or b"{}")
