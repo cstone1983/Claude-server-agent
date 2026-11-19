@@ -55,7 +55,7 @@ OLLAMA = os.environ.get("VK_OLLAMA", "http://ollama:11434")
 STYLE_MODEL = os.environ.get("VK_STYLE_MODEL", "qwen2.5:7b")
 STYLE_HOUR_UTC = int(os.environ.get("VK_STYLE_HOUR_UTC", "8"))   # 08:00 UTC = 03:00 Eastern
 STT = os.environ.get("VK_STT", "http://speaches:8000")         # Whisper server (for per-person models)
-MAX_PERSONAL = 2 * 1024 * 1024     # vk/personal profile body limit
+MAX_PERSONAL = 4 * 1024 * 1024     # vk/personal profile body limit (app doc: "up to about 4 MB")
 PROMOTE_AFTER = 2          # identical correction / removal seen this often -> active
 MAX_EDITS, MAX_LEN, MAX_MSG, MAX_AUDIO = 20, 200, 4000, 20 * 1024 * 1024
 VOCAB_CAP, PROMPT_CHARS = 100, 600
@@ -669,7 +669,7 @@ class H(BaseHTTPRequestHandler):
             data = self.raw_body(MAX_PERSONAL)
         except ValueError:
             self.close_connection = True
-            return self.reply(413, {"error": "profile too large (max 2 MB)"})
+            return self.reply(413, {"error": "profile too large (max 4 MB)"})
         try:
             prof = json.loads(data or b"{}")
         except Exception:

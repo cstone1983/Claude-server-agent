@@ -278,6 +278,9 @@ fixes if the wait still feels long.
   body (never stored): if a stored profile exists with a different updated_at -> 409
   `{"error":"changed","updated_at":<stored>}`; no stored profile -> stored as usual; without the
   field -> stored as before.
+- Body limit 4 MB (2026-11-19; 413 above). Profile sections so far: version, updated_at, words,
+  learned, pairs, dictionary, touch, settings, fixes, blocked, confusion (stored as sent; unknown
+  fields kept).
 - `GET vk/me` adds `stt_model` only when the Whisper server lists the person's model
   (`local/whisper-small.en-<user>`, as installed by train-voice.sh; list cached 60 s).
 - `POST /v1/audio/transcriptions` now goes gateway -> models-merge (voice/models-merge/merge.py)
