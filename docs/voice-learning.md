@@ -291,3 +291,18 @@ fixes if the wait still feels long.
 - Verified live 2026-11-16 (all checks in the chat report). Backups on voice:
   /opt/voice/{vk-learn/learn.py,models-merge/merge.py,gateway/voice.conf}.bak-* (the earliest
   timestamp of each is the pre-change original).
+
+## Voice training data + prompt fixes (2026-11-20, commits 7564805, d83e070)
+- train-voice.sh now exports with voice/vk-learn/export_clips.py. Label = what was SPOKEN: `raw`
+  plus only the person's own cleaned->final word edits (word-aligned onto raw). Skipped: cleanup
+  changed > 20 % of the words (ignoring punctuation, capitals, fillers and dictated punctuation
+  like "comma"), the person rewrote (> 4 words) or added (> 2 words) text, empty texts, clips
+  > 30 s. Voice-training clips (dictations.source = "training", stored from now on) use their
+  script text. `train-voice.sh <user> --dry-run` exports only.
+- Dry run 2026-11-20 for chris: 328 clips, kept 284 (33.3 min); skipped 27 reworded by cleanup,
+  10 rewritten, 5 > 30 s, 1 not alignable, 1 empty.
+- Whisper prompt (profile().whisper_prompt) capped at 250 chars (was 600), most-used words first;
+  the app adds ~180 chars of its own words + ~200 of previous text.
+- POST vk/audio stays capped at 20 MB; a 413 there never removes the dictation (it is stored first).
+- Seen: the learned vocabulary that feeds the prompt contains junk ("EventuallyYbe", "mkes",
+  "aGlow") - worth a cleanup/stricter rule later.
