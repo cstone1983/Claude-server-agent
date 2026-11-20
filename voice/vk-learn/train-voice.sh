@@ -1,21 +1,18 @@
 #!/bin/bash
-# train-voice.sh <user> - fine-tune Whisper small.en on one person's stored clips.
+# train-voice.sh <user> [--dry-run] - fine-tune Whisper small.en on one person's stored clips.
+# --dry-run: only export clips.jsonl and print how many clips were kept/skipped and why.
 # See README-training.md. Runs in a throwaway container; output goes to speaches'
 # model cache as local/whisper-small.en-<user>. UNTESTED until real clips exist.
 set -euo pipefail
-U="${1:?usage: train-voice.sh <user>}"
+U="${1:?usage: train-voice.sh <user> [--dry-run]}"; DRY="${2:-}"
 DATA=/opt/voice/learn; HF=/opt/voice/hf-cache; WORK=/opt/voice/train/$U
+HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$WORK"
-python3 - "$U" "$DATA" "$WORK" <<'PY'
-import json, sqlite3, sys
-u, data, work = sys.argv[1:4]
-c = sqlite3.connect(f"file:{data}/learn.db?mode=ro", uri=True)
-rows = c.execute("SELECT path, text FROM audio WHERE user=? AND text != ''", (u,)).fetchall()
-with open(f"{work}/clips.jsonl", "w") as f:
-    for p, t in rows:
-        f.write(json.dumps({"audio": p.replace("/data/", f"{data}/"), "text": t}) + "\n")
-print(f"{len(rows)} clips exported")
-PY
+# Labels = what was spoken (raw + the person's own word fixes), clips <= 30 s; see export_clips.py.
+python3 "$HERE/export_clips.py" "$U" "$DATA/learn.db" "$DATA" "$WORK/clips.jsonl"
+if [ "$DRY" = "--dry-run" ]; then
+  echo "dry run: exported $WORK/clips.jsonl only, no training"; exit 0
+fi
 cat > "$WORK/train.py" <<'PY'
 import json, random, sys, subprocess, os
 import torch, evaluate, numpy as np, soundfile as sf

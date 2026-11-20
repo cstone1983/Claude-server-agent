@@ -13,8 +13,13 @@ still fine: the final text is what the user actually said/meant.
 `train-voice.sh <user>` (next to this file):
 1. Builds a one-off training container (Python, PyTorch CPU, transformers, datasets,
    ctranslate2, ffmpeg) - nothing is installed on the VM itself.
-2. Exports the user's clips + final texts to a dataset, converts audio to 16 kHz mono WAV,
-   holds back 10 % for testing.
+2. Exports the user's clips (export_clips.py) with labels = what was SPOKEN: Whisper's raw
+   transcript plus only the person's own word fixes (cleaned -> final edits, word-aligned).
+   Skipped: clips where cleanup changed the wording by more than 20 % (beyond punctuation,
+   capitals, fillers), rewrites/large additions by the person, empty texts, clips over 30 s
+   (Whisper trains on the first 30 s only). Voice-training clips (source=training) use their
+   script text. Converts audio to 16 kHz mono WAV, holds back 10 % for testing.
+   `train-voice.sh <user> --dry-run` only exports and prints kept/skipped counts.
 3. Fine-tunes `openai/whisper-small.en` (the base of `Systran/faster-whisper-small.en`)
    for a few epochs with a low learning rate (adapts, does not forget English).
 4. Measures word error rate on the held-back clips **before and after**; keeps the new

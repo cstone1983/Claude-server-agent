@@ -58,7 +58,7 @@ STT = os.environ.get("VK_STT", "http://speaches:8000")         # Whisper server 
 MAX_PERSONAL = 4 * 1024 * 1024     # vk/personal profile body limit (app doc: "up to about 4 MB")
 PROMOTE_AFTER = 2          # identical correction / removal seen this often -> active
 MAX_EDITS, MAX_LEN, MAX_MSG, MAX_AUDIO = 20, 200, 4000, 20 * 1024 * 1024
-VOCAB_CAP, PROMPT_CHARS = 100, 600
+VOCAB_CAP, PROMPT_CHARS = 100, 250   # Whisper prompt: the app adds ~180 chars of its own + ~200 of previous text
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9'’.-]*[A-Za-z0-9]|[A-Za-z]")
 AUDIO_TYPES = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav", "audio/ogg": "ogg",
                "audio/opus": "opus", "audio/mp4": "m4a", "audio/m4a": "m4a", "audio/mpeg": "mp3",
@@ -130,6 +130,14 @@ def init():
           user TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER, updated_at INTEGER NOT NULL,
           created TEXT NOT NULL);
         """)
+
+
+def migrate():
+    """Columns added after the first release."""
+    with db() as c:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(dictations)")}
+        if "source" not in cols:     # "training" = voice-training program (scripted text), else dictation
+            c.execute("ALTER TABLE dictations ADD COLUMN source TEXT")
 
 
 def bump(c, user):
@@ -664,11 +672,11 @@ class H(BaseHTTPRequestHandler):
             with lock, db() as c:
                 cur = c.execute(
                     "INSERT INTO dictations(user, client_id, device, app, category, lang, stt_model, raw, cleaned, final,"
-                    " audio_ms, low_conf, timings, created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " audio_ms, low_conf, timings, created, source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (user, clean(str(b.get("id") or ""), 64), device, clean(b.get("app"), 128),
                      clean(b.get("category"), 16) or "other", clean(b.get("lang"), 8), clean(b.get("stt_model"), 128),
                      raw, cleaned, final, audio_ms, json.dumps([w for w in low if isinstance(w, str)][:30]),
-                     json.dumps(timings)[:2000], now()))
+                     json.dumps(timings)[:2000], now(), clean(b.get("source"), 16) or "dictation"))
                 learned = learn_dictation(c, user, raw, cleaned, final, low)
                 if learned:
                     bump(c, user)
@@ -798,6 +806,7 @@ def backfill_audio_ms():
 
 if __name__ == "__main__":
     init()
+    migrate()
     backfill_audio_ms()
     threading.Thread(target=purge_loop, daemon=True).start()
     threading.Thread(target=nightly_loop, daemon=True).start()
