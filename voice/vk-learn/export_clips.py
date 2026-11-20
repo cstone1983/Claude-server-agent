@@ -32,9 +32,22 @@ def words(text):
     return (text or "").split()
 
 
+SPOKEN_PUNCT = {("comma",), ("period",), ("colon",), ("semicolon",), ("full", "stop"), ("question", "mark"),
+                ("exclamation", "mark"), ("exclamation", "point"), ("new", "line"), ("new", "paragraph")}
+
+
 def content(text):
-    """Normalised words without punctuation, case or fillers (for the distance check)."""
-    return [n for n in (norm(t) for t in words(text)) if n and n not in FILLERS]
+    """Normalised words without punctuation, case, fillers or dictated punctuation ("comma",
+    "question mark": the app turns those into marks) - for the distance check only."""
+    ws = [n for n in (norm(t) for t in words(text)) if n and n not in FILLERS]
+    out, i = [], 0
+    while i < len(ws):
+        if i + 1 < len(ws) and (ws[i], ws[i + 1]) in SPOKEN_PUNCT:
+            i += 2; continue
+        if (ws[i],) in SPOKEN_PUNCT:
+            i += 1; continue
+        out.append(ws[i]); i += 1
+    return out
 
 
 def wer(a, b):
