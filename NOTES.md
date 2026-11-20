@@ -479,6 +479,21 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
   speed from about 10 to about 34 Mbps.
 
+## Update round 2026-11-20 (all servers)
+- Packages on all 11 Linux servers (04:46-05:13). Ubuntu still holds back phased systemd/udev updates.
+- Kernel reboots one at a time, each verified: AI-recipes, Fileshare, solar (6.8.0-151), voice
+  (already on 7.0.0-43, its 6.8 line updated), cpu-share + Vm-finance (7.0.0-44), n8n (6.8.0-151)
+  last; standby hub covered n8n. cpu-share: xmrig + k3s (14 pods) come back on boot.
+- Proxmox: 30 upgraded + 2 new (pve-manager 9.2.32, qemu 11.1.3-3, pve-firewall 6.0.8, PBS 4.2.14,
+  pve-notify-worker, kernel package 7.0.14-30 installed only). Still pinned 6.8.12-43, no restart.
+  `pve-firewall status` "pending changes" is gone after the firewall update.
+- HA: Core 2026.11.2, add-ons OpenCode 3.5.2, Claude Terminal Pro 2.5.7, Cloudflared 7.0.22.
+  Eight Sleep 1.0.25 (HACS) NOT installed: HACS needs the user to open its page and accept a warning.
+- Not rebooted on purpose: desktops (Ubuntu-Anthony, jessy-desktop; no kernel), thermostat-pi
+  (rpi-eeprom bootloader update applies at its next reboot).
+- Gotchas: a hub restart drops pending approvals (re-request); `list_servers` counts Ubuntu Pro
+  ESM offers as security updates (fix in next hub release).
+
 ## Proxmox update 2026-11-15 (no restart needed)
 17 point updates at 08:53-08:54: pve-manager 9.2.26 -> 9.2.27, pve-container, libpve-*, proxmox-firewall
 1.2.4 -> 1.2.5, ifupdown2 pmx14, proxmox-backup-server/client 4.2.11, acme 1.7.3, libcares2 (Debian
