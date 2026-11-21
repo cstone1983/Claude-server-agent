@@ -3,7 +3,26 @@
 **Decision 2026-11-21: use GitHub (Actions + Releases) for now, not a self-hosted Forgejo.** The
 GitHub plan is section A. The self-hosted plan (sections 0-12 below) is kept for later.
 
-## A. GitHub route (current plan, for Monday 2026-11-23; nothing built yet)
+## A. GitHub route (current plan, for Monday 2026-11-23)
+
+**Built 2026-11-21 on branch `setup` of cstone1983/app-builder (not merged, no secrets yet).**
+Changes from the outline below, decided while building:
+- Releases go to **app-builder's own Releases**, not each app repo: titles `<app> <version>`, tags
+  `<app>-v<version>`, asset `<app>-<version>.apk`. Obtainium filters by title regex
+  (`^<app> `) with "Fall back to older releases" ON (without it Obtainium stops at the newest
+  release, which is often another app's; checked in Obtainium's github.dart). So **no
+  RELEASE_TOKEN**: the job's own GITHUB_TOKEN creates the releases, app repos stay untouched, and
+  nothing clashes with the releases voice-keyboard's and HVAC's own CI publish.
+- Unsigned build via a Gradle init script (`ci/unsigned.gradle`: drops every signingConfig, sets
+  versionCode = base + run number, versionName = app's own + `.<run>`); Flutter via
+  `--build-number/--build-name`. The build checks package id + versionCode with aapt2, and
+  self-tests `ci/sign.sh` with a throwaway key.
+- The publish job checks the signer against the env variable `RELEASE_CERT_SHA256` and keeps 10
+  pre-releases per app.
+- App ids: voice-keyboard (base 2000000), sshsync, hvac, nightfall (base 1000).
+- Note: the HVAC app has its own in-app updater pointed at its repo's debug "latest" release;
+  once the tablets move to the shared key that updater should be turned off or repointed (app change).
+- Setup steps for you: app-builder `docs/SETUP.md`.
 
 ### A1. Shape
 - App code stays in its own GitHub repos (voice-keyboard, synced-ssh-client, the HVAC app, more
@@ -57,9 +76,8 @@ GitHub plan is section A. The self-hosted plan (sections 0-12 below) is kept for
 | Where | Secret | What |
 |---|---|---|
 | app-builder, env `release-signing` | `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | the one shared release key |
-| app-builder, env `release-signing` | `RELEASE_TOKEN` | fine-grained PAT: Contents read/write on the app repos only |
 | app-builder (repo secret) | `SOURCE_READ_TOKEN` | only if some app repos are private: Contents read-only |
-| app-builder (repo secret) | `NOTIFY_URL` | optional: the n8n server-notify webhook for Telegram |
+| app-builder, env `release-signing` | `NOTIFY_URL` | optional: the n8n server-notify webhook for Telegram |
 | Obtainium (each phone) | GitHub PAT | read-only, raises GitHub's API limit to 5000/h (unauthenticated is 60/h per home IP) and allows private repos |
 
 Keystore: you generate it on your PC and keep two offline copies; **losing it means no in-place
