@@ -1,0 +1,19 @@
+#!/bin/bash
+# sshsync-backup: consistent online copy of the SSH Sync server database (SQLite WAL), kept 14 days.
+# Runs nightly on Vm-finance at 21:15 (/etc/cron.d/sshsync-backup), before the 21:30 PBS backup,
+# so PBS carries a clean copy too. The database holds ciphertext only. Restore: server/README.md.
+set -euo pipefail
+OUT=/opt/sshsync-backups; KEEP_DAYS=14
+mkdir -p "$OUT"; chmod 700 "$OUT"
+cd /opt/sshsync/server
+docker compose exec -T server python -c "
+import sqlite3
+src = sqlite3.connect('/data/sshsync.db'); dst = sqlite3.connect('/tmp/backup.db')
+src.backup(dst); dst.close(); src.close()"
+f="$OUT/sshsync-$(date +%F).db"
+docker compose cp server:/tmp/backup.db "$f" >/dev/null
+docker compose exec -T server rm -f /tmp/backup.db
+chmod 600 "$f"
+python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); r=c.execute('pragma integrity_check').fetchone()[0]; sys.exit(0 if r=='ok' else 1)" "$f"
+find "$OUT" -name 'sshsync-*.db' -mtime +$KEEP_DAYS -delete
+echo "sshsync backup ok: $f ($(stat -c %s "$f") bytes)"
