@@ -238,6 +238,23 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Note: solar-postgres pg_hba allows scram logins from any address; fine while only n8n's network
   and the relay can reach it.
 
+## SSH Sync server (synced-ssh-client) on Vm-finance (installed 2026-11-21)
+- Repo cstone1983/synced-ssh-client, cloned to /opt/sshsync (commit df8e83d); runs from
+  /opt/sshsync/server with docker compose (container server-server-1, volume server_sshsync-data,
+  DB /data/sshsync.db - ciphertext only). Local settings in server/docker-compose.override.yml
+  (not in the repo): published on 10.10.11.111:8090 + 127.0.0.1:8090, SSHSYNC_TRUSTED_PROXIES
+  10.10.11.102. Upgrade: backup, `git pull`, `docker compose up -d --build` (README).
+- URL for the apps: https://sshsync.lan.stoneyshome.com (Traefik on n8n, lan.yml router/service
+  `sshsync`, wildcard cert; UDM record -> 10.10.11.102). LAN only for now (remote: WireGuard or a
+  public TLS route later; sync-through-jump-host not built in the app yet).
+- Firewall: Proxmox 111.fw allows 8090 only from 10.10.11.102. (ufw on Vm-finance does not apply
+  to Docker-published ports - the Proxmox VM firewall is the gate.)
+- Backup: /usr/local/sbin/sshsync-backup (scripts/sshsync-backup) nightly 21:15 via
+  /etc/cron.d/sshsync-backup -> /opt/sshsync-backups/sshsync-DATE.db (14 days, integrity-checked),
+  log /var/log/sshsync-backup.log; PBS 21:30 picks it up with the VM.
+- Enrollment codes: `cd /opt/sshsync/server && docker compose exec server sshsync enroll-code`
+  (single use, 10 min). Sent to the user via Telegram from Vm-finance, never in chat.
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
