@@ -32,9 +32,8 @@ usage in [README.md](README.md).
      Vm-finance's EXISTING Cloudflare tunnel (e.g. sshsync.stoneyshome.com -> http://localhost:8090);
      then: UDM split-DNS + Traefik router for that name (like voice), trust the tunnel hop in
      SSHSYNC_TRUSTED_PROXIES, test from outside, switch the app to the public address.
-  9. Private app manager (Monday 2026-11-23, reminder scheduled): designed in another chat; the user
-     will link it here and this chat builds the server side. Get the design/repo first, then decide
-     placement (VM, Docker, Traefik name, Cloudflare route, firewall, backups).
+  9. Private app store (Monday 2026-11-23, reminder scheduled): Forgejo + Actions runner + Obtainium.
+     PLAN in docs/app-store-plan.md, waiting for the user's approval - change nothing before that.
 
 ## Earlier state (2026-11-11 night, after the network overhaul) - history
 
