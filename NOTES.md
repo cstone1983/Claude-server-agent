@@ -32,8 +32,10 @@ usage in [README.md](README.md).
      Vm-finance's EXISTING Cloudflare tunnel (e.g. sshsync.stoneyshome.com -> http://localhost:8090);
      then: UDM split-DNS + Traefik router for that name (like voice), trust the tunnel hop in
      SSHSYNC_TRUSTED_PROXIES, test from outside, switch the app to the public address.
-  9. Private app store (Monday 2026-11-23, reminder scheduled): Forgejo + Actions runner + Obtainium.
-     PLAN in docs/app-store-plan.md, waiting for the user's approval - change nothing before that.
+  9. App store with auto-updates (Monday 2026-11-23, reminder scheduled): decided 2026-11-21 to use
+     GitHub Actions + Releases + Obtainium (builder repo app-builder, signing secrets in a protected
+     environment, pre-releases promoted by the user). Plan: docs/app-store-plan.md section A.
+     Self-hosted Forgejo kept there as a later option.
 
 ## Earlier state (2026-11-11 night, after the network overhaul) - history
 

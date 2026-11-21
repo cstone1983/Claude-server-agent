@@ -1,4 +1,104 @@
-# Self-hosted app store with automatic updates - PLAN (not built; awaiting approval)
+# App store with automatic updates - PLAN
+
+**Decision 2026-11-21: use GitHub (Actions + Releases) for now, not a self-hosted Forgejo.** The
+GitHub plan is section A. The self-hosted plan (sections 0-12 below) is kept for later.
+
+## A. GitHub route (current plan, for Monday 2026-11-23; nothing built yet)
+
+### A1. Shape
+- App code stays in its own GitHub repos (voice-keyboard, synced-ssh-client, the HVAC app, more
+  later; any owner, public or private).
+- One new repo **`cstone1983/app-builder`**, holding:
+  - the build/sign workflows;
+  - the app list (app -> repo, subfolder, build type, package id);
+  - the signing secrets in a GitHub **Environment** called `release-signing`.
+- Releases are published to **each app's own repo** (`.../releases`), as **pre-releases**.
+  Obtainium watches those repos with "Include prereleases" OFF.
+- **You promote** a pre-release to a full release on GitHub (web or mobile app), and phones update
+  within ~30 minutes.
+
+### A2. Keeping the keystore away from app code and from Claude
+- **Build and sign are separate.** Job 1 checks out the app and builds an **unsigned** APK, with no
+  secrets available. Job 2 never checks out app code; it runs only `zipalign` and `apksigner` from
+  the builder repo's pinned steps.
+- **The secrets are environment secrets** of `release-signing`, which is restricted to the
+  **protected `main` branch** of app-builder. Branch protection: changes to main need a PR approved
+  by you.
+  - A workflow on any other branch, including one Claude pushes and starts, gets no secrets.
+- **Optional extra gate:** add yourself as a **required reviewer** on the environment, so every
+  signing run waits for your tap in GitHub. Combined with pre-release promotion that's two
+  gates; probably one is enough.
+- **Visibility vs plan:** environment protections on a *private* repo need a paid GitHub plan, but
+  are free on a **public** repo. app-builder can be public: it holds only workflows and the app
+  list, and the secrets stay secret.
+
+### A3. Example workflow outline (`app-builder/.github/workflows/android.yml`, no code yet)
+1. **Trigger:** `workflow_dispatch(app, ref)`. Claude starts it with `gh api` (or a tag push in an
+   app repo sends a `repository_dispatch`).
+2. **Job "build"** (ubuntu-latest, no secrets):
+   - check out `<app repo>@<ref>` (public repos directly; private ones with a read-only
+     fine-grained token);
+   - set up Flutter/JDK at pinned versions, with caching;
+   - set versionCode (only goes up; per-app counter or run number + offset) and versionName;
+   - `flutter build apk --release` producing an unsigned APK, plus tests;
+   - upload it as an artifact.
+3. **Job "sign-and-publish"** (environment `release-signing`):
+   - download the artifact;
+   - decode the keystore to the runner's temp folder;
+   - zipalign, then apksigner sign, then apksigner verify (checking the expected certificate
+     SHA-256);
+   - delete the keystore;
+   - create a **pre-release** `v<version>` in the app repo with the APK + its SHA-256 + the commit
+     list, using a fine-grained token with Contents: write on the app repos only;
+   - send a Telegram message, "<app> <version> pre-release ready - promote".
+
+### A4. Secrets (entered by you in GitHub settings; Claude never handles them)
+
+| Where | Secret | What |
+|---|---|---|
+| app-builder, env `release-signing` | `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | the one shared release key |
+| app-builder, env `release-signing` | `RELEASE_TOKEN` | fine-grained PAT: Contents read/write on the app repos only |
+| app-builder (repo secret) | `SOURCE_READ_TOKEN` | only if some app repos are private: Contents read-only |
+| app-builder (repo secret) | `NOTIFY_URL` | optional: the n8n server-notify webhook for Telegram |
+| Obtainium (each phone) | GitHub PAT | read-only, raises GitHub's API limit to 5000/h (unauthenticated is 60/h per home IP) and allows private repos |
+
+Keystore: you generate it on your PC and keep two offline copies; **losing it means no in-place
+updates ever again.**
+
+### A5. Phones
+- Obtainium: GitHub source, 30-minute background checks (foreground-service mode if the Fold
+  delays them), "Include prereleases" OFF, and the expected certificate hash per app.
+- Silent updates need: Android 12+, Obtainium did the first install, and the app's `targetSdk` is
+  at least the phone's API level minus 3. Or install through Shizuku.
+- **One-time reinstall per app** when it switches to the shared key; local data is lost (export the
+  SSH Sync vault first; re-scan the voice QR).
+
+### A6. Backups and monitoring
+- Nothing on the home servers. GitHub keeps the code and releases; the keystore lives in your
+  offline copies.
+- Failed builds: Actions emails you, plus the optional Telegram step.
+
+### A7. Monday steps
+1. **You:** create the keystore and the fine-grained tokens; create app-builder (or let me create
+   the repo skeleton for you to review via PR).
+2. **Me:** the workflow + app list on a branch; **you** review and merge it to main; **you** add the
+   environment, its branch rule and the secrets.
+3. Check each app's targetSdk, package id and the versionCode already installed; pick offsets.
+4. First build of one app, from a dispatch. Check signature + versionCode, see the pre-release.
+5. **You:** phone setup (Obtainium + reinstall), promote, watch it update silently.
+6. Onboard the remaining apps (one row each). Notes.
+
+### A8. Later
+- **Windows:** Actions has Windows runners, so the same builder can produce the Windows build
+  (Flutter) + Velopack package as assets on the same releases. The app's Velopack GitHub source
+  checks them. A code-signing certificate is a separate choice.
+- **Self-hosting later** (sections below): the builder repo and the app list carry over, and only
+  where releases are published changes.
+
+---
+
+# Earlier option: self-hosted Forgejo (kept for later)
+
 
 Drafted 2026-11-21 for implementation Monday 2026-11-23. Nothing below has been changed yet.
 
