@@ -11,7 +11,8 @@ import sqlite3
 src = sqlite3.connect('/data/sshsync.db'); dst = sqlite3.connect('/tmp/backup.db')
 src.backup(dst); dst.close(); src.close()"
 f="$OUT/sshsync-$(date +%F).db"
-docker compose cp server:/tmp/backup.db "$f" >/dev/null
+# The container is read-only with /tmp on tmpfs, which `docker cp` cannot read: stream it out instead.
+docker compose exec -T server cat /tmp/backup.db > "$f.part" && mv "$f.part" "$f"
 docker compose exec -T server rm -f /tmp/backup.db
 chmod 600 "$f"
 python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); r=c.execute('pragma integrity_check').fetchone()[0]; sys.exit(0 if r=='ok' else 1)" "$f"
