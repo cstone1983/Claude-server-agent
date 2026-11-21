@@ -27,7 +27,11 @@ usage in [README.md](README.md).
   6. Voice tunnel token rotation (pasted in chat), HA Cloudflared add-on unused (remove?),
      Sonoff/Shelly firmware check, 3 climate entities unavailable 48 h+, repo history has family
      names (rewrite or make private).
-  7. `pve-firewall status` shows "pending changes" since 2026-11-14 (traffic fine) - look at it.
+  7. `pve-firewall status` "pending changes": cleared by the 2026-11-20 Proxmox update.
+  8. SSH Sync remote access (user plans Monday 2026-11-23; reminder scheduled): user adds a route on
+     Vm-finance's EXISTING Cloudflare tunnel (e.g. sshsync.stoneyshome.com -> http://localhost:8090);
+     then: UDM split-DNS + Traefik router for that name (like voice), trust the tunnel hop in
+     SSHSYNC_TRUSTED_PROXIES, test from outside, switch the app to the public address.
 
 ## Earlier state (2026-11-11 night, after the network overhaul) - history
 
