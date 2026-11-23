@@ -290,6 +290,20 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Next: blog software + Cloudflare tunnel (token from the user via Telegram/file); the
   blog chat takes over. ISOs on Proxmox now: Ubuntu 26.04.1 and 24.04.5 server (verified).
 
+## App-store VM 115 (built 2026-11-23)
+
+- VM 115 "app-store": Ubuntu 26.04.1 LTS minimal, 8 vCPU host, 16 GB (balloon 0), 200 GB on
+  `VM` pool, thin (refreservation=none), onboot, tags app-store;builder. Servers VLAN 10,
+  10.10.11.115 reserved (MAC bc:24:11:1f:2a:42), DNS app-store.lan.stoneyshome.com.
+  For Android builds (voice-keyboard native code) and the app hosting manager.
+- Hub agent "app-store" (tags app-store,builder), fallback_hub_urls n8n + Vm-finance :7420.
+  Docker 29 + Compose + Buildx (Ubuntu packages); admin in docker group. User `admin`,
+  password locked, SSH key-only (hub key). Nightly PBS backup 21:30.
+- 115.fw: in DROP except SSH from +trusted (Main + VPN) and ping; out open. Tested: SSH
+  from Main OK, other ports closed, SSH from Servers (n8n) blocked.
+- Same autoinstall recipe as the blog VM. Lesson: an agent restart drops running jobs -
+  don't schedule one while a job is about to start.
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
