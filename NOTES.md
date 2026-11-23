@@ -299,7 +299,9 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Hub agent "app-store" (tags app-store,builder), fallback_hub_urls n8n + Vm-finance :7420.
   Docker 29 + Compose + Buildx (Ubuntu packages); admin in docker group. User `admin`,
   password locked, SSH key-only (hub key). Nightly PBS backup 21:30.
-- 115.fw: in DROP except SSH from +trusted (Main + VPN) and ping; out open. Tested: SSH
+- 115.fw: in DROP except SSH + Forgejo web tcp 3000 (added 2026-11-23, backup
+  /root/115.fw.bak-20261123172356) from +trusted (Main + VPN), and ping; out open.
+  Forgejo 17 (rootless) + forgejo-runner run in Docker on 10.10.11.115:3000. Tested: SSH
   from Main OK, other ports closed, SSH from Servers (n8n) blocked.
 - Same autoinstall recipe as the blog VM. Lesson: an agent restart drops running jobs -
   don't schedule one while a job is about to start.
