@@ -276,7 +276,11 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   53,67,123 and 10001 block Blog->Gateway rest (the zone default allowed the router UI).
   mDNS on the network could not be switched off via the API (ignored) - user can turn it
   off in the UI.
-- Proxmox 114.fw: in DROP; out DNS/DHCP/NTP to 10.10.30.1, then drop all private ranges.
+- Proxmox 114.fw: in DROP except SSH from Main 10.10.1.0/24; out DNS/DHCP/NTP to 10.10.30.1, then drop all private ranges.
+- SSH from Main (2026-11-23): UDM rule "Main SSH to Blog" (Internal 10.10.1.0/24 -> 10.10.30.114 tcp 22,
+  allow_respond; IP rules need matching_target_type SPECIFIC) + the 114.fw IN rule. Tested: Main OK, Servers
+  blocked, blog -> Main blocked. Cloudflare tunnel (cloudflared service) running on the VM; its token was pasted
+  in chat 2026-11-23 - refresh it.
 - Isolation test 2026-11-22 from the VM: internet + hub OK; router 10.10.30.1/10.10.1.1
   UI+SSH, n8n, HA, Proxmox UI, Pi-hole, fileserver, desktop, DMZ, Thermostat Pi blocked.
 - Installed unattended: autoinstall seed (CIDATA) + installer kernel via `qm set --args
