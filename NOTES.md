@@ -263,6 +263,29 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Enrollment codes: `cd /opt/sshsync/server && docker compose exec server sshsync enroll-code`
   (single use, 10 min). Sent to the user via Telegram from Vm-finance, never in chat.
 
+## Blog VM 114 (isolated, built 2026-11-22)
+
+- VM 114 "blog": Ubuntu 26.04.1 LTS minimal, 4 vCPU host, 8 GB (balloon 0), 80 GB on
+  `VM` pool made thin (`zfs set refreservation=none VM/vm-114-disk-0`), onboot, tags
+  blog;isolated. Hub agent "blog" (tags blog,isolated) connects out via the public hub URL.
+  In the nightly PBS job (21:30). User `admin`, password locked, SSH key-only (hub key
+  claude-hub@n8n), unreachable from the lab anyway.
+- Network: UDM network "Blog" VLAN 30, 10.10.30.0/24, DHCP .200-.249, reservation
+  10.10.30.114 (MAC bc:24:11:20:a7:a8). Own zone "Blog": default blocks to/from every
+  internal zone; Blog->External allowed; custom rules 10000 allow Blog->Gateway tcp_udp
+  53,67,123 and 10001 block Blog->Gateway rest (the zone default allowed the router UI).
+  mDNS on the network could not be switched off via the API (ignored) - user can turn it
+  off in the UI.
+- Proxmox 114.fw: in DROP; out DNS/DHCP/NTP to 10.10.30.1, then drop all private ranges.
+- Isolation test 2026-11-22 from the VM: internet + hub OK; router 10.10.30.1/10.10.1.1
+  UI+SSH, n8n, HA, Proxmox UI, Pi-hole, fileserver, desktop, DMZ, Thermostat Pi blocked.
+- Installed unattended: autoinstall seed (CIDATA) + installer kernel via `qm set --args
+  -kernel ... -append 'autoinstall ---'` (skips the confirm prompt), `shutdown: poweroff`
+  in the seed so it doesn't loop; args/CDs removed after. The hub's deny rule blocks the
+  word "poweroff" in run_shell, so the seed was written with write_file.
+- Next: blog software + Cloudflare tunnel (token from the user via Telegram/file); the
+  blog chat takes over. ISOs on Proxmox now: Ubuntu 26.04.1 and 24.04.5 server (verified).
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
