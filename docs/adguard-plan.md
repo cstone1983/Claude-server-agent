@@ -72,7 +72,7 @@ decides), on Main it would break fixed IPs.
 | Social media / messaging / games (chosen list) | - | chosen ones blocked or scheduled | more blocked; the rest only in allowed hours | n/a | - |
 | Option: allowlist mode (only approved sites) | - | - | possible if wanted | simple devices | - |
 | Bedtime schedule | - | e.g. 21:30-07:00 | earlier/longer, e.g. 20:30-07:00 | - | - |
-| Query log | 7 days | 30 days | 30 days | 30 days | 1 day |
+| Query log | 90 days for everyone (user decision 2026-11-24) | | | | |
 
 Exact lists and hours per kid are set with the user; the table is the starting point.
 
