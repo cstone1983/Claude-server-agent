@@ -319,7 +319,8 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   `stonec`, password in /root/adguard-admin.txt (root-only, generated on the VM). API used via
   curl -u from that file. Upstreams DoH Quad9 + Cloudflare, fallback router, DNSSEC on,
   optimistic cache, [/lan.stoneyshome.com/localdomain/] -> 10.10.10.1, PTR -> router, query log
-  7 days. Lists: AdGuard DNS filter only (194k rules). Custom rules: Minecraft/Mojang/Realms/
+  7 days, written straight to disk (querylog size_memory: 1, changed by another chat 2026-11-24;
+  data/querylog.json) so nothing is lost on a crash. Lists: AdGuard DNS filter only (194k rules). Custom rules: Minecraft/Mojang/Realms/
   Microsoft + Xbox sign-in always allowed ($important) - user wants Minecraft working.
 - 2026-11-24: every named, online UDM client now has a reservation (10 added at their current
   IPs, incl. the user's Z Fold 7 named Stone-Chris-Z-Fold7); 68 offline named entries have none.
