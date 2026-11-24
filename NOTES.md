@@ -306,6 +306,18 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Same autoinstall recipe as the blog VM. Lesson: an agent restart drops running jobs -
   don't schedule one while a job is about to start.
 
+## AdGuard VM 116 (built 2026-11-24, AdGuard not configured yet)
+
+- VM 116 "adguard": Ubuntu 26.04.1 minimal, 2 vCPU host, 2 GB (balloon 0), 20 GB thin, onboot
+  with startup order=1 (DNS first). Servers VLAN, 10.10.11.116 reserved (MAC bc:24:11:60:f5:bb),
+  DNS adguard.lan.stoneyshome.com. Hub agent "adguard" (tags adguard,dns) + fallback hub URLs.
+  Nightly PBS backup. Plan: docs/adguard-plan.md (two kids' profiles, strict/standard).
+- 116.fw: only SSH from +trusted + ping for now; DNS 53 and the web UI open per network in the
+  rollout.
+- Users: admin (hub key), stonec (user key + password). **User preference: SSH password logins
+  ON** (keys still work); drop-in /etc/ssh/sshd_config.d/01-password-auth.conf, root key-only.
+  stonec got a throwaway password, expired (must change at first login).
+
 ## Secrets and where they live (never in chat or in this repo)
 
 - **Cloudflare API token "lan certificates"** (created 2026-11-11 by the
