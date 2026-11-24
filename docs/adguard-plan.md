@@ -3,7 +3,9 @@
 Goal: one DNS filter for the house with different rules per group of devices:
 - **Parents' own devices:** full access, minimal blocking (ads, trackers, malware only).
 - **Kids' devices:** adult and other sensitive content blocked, safe search forced,
-  chosen apps/services blocked or limited by schedule, bypass routes closed.
+  chosen apps/services blocked or limited by schedule, bypass routes closed. **Two kids'
+  profiles** (2026-11-24): **Kids-strict** and **Kids-standard** - one child needs more locked down
+  than the other.
 - **IoT devices:** block as much as possible while each device keeps working.
 - **Servers:** unchanged (keep using the router's DNS), so backups, updates and the hub never
   depend on the filter.
@@ -44,6 +46,11 @@ address and a group:
   joins it gets the kids' rules automatically, including new ones, and the router firewall can add
   rules for it. Alternative: fixed IPs on Main for each kid device (works, but a new device or a
   MAC-randomising phone silently gets parent rules).
+- **Two kids' profiles on the Kids network:** each kid's devices get a fixed IP there and are
+  tagged with their own profile. **Any unknown device on the Kids Wi-Fi gets Kids-strict** (safe
+  default: a new or borrowed device is locked down until it's assigned). For the fixed IPs to
+  stick, "private/random Wi-Fi address" is turned off for the Kids Wi-Fi on their devices
+  (lockable via Family Link / Screen Time).
 - **Parents:** Main network (10.10.1.0/24) by default, so any unknown device on Main gets the
   light rules.
 - **Guest:** light rules (ads + malware), nothing else.
@@ -53,18 +60,21 @@ decides), on Main it would break fixed IPs.
 
 ## 3. Rules per group
 
-| | Parents | Kids | IoT | Guest |
-|---|---|---|---|---|
-| Ads + trackers | light list (AdGuard DNS filter) | HaGeZi Pro | HaGeZi Pro++ / Ultimate + device-maker telemetry lists | light list |
-| Malware, phishing, scams | yes | yes | yes | yes |
-| Adult content | - | yes (AdGuard parental control + NSFW list) | n/a | - |
-| Gambling, dating, piracy, drugs | - | yes | n/a | - |
-| Safe search (Google, Bing, DuckDuckGo) + YouTube restricted | - | forced | n/a | - |
-| VPNs, proxies, Tor, encrypted-DNS bypass | - | blocked (HaGeZi DoH/VPN/TOR list) | blocked | - |
-| Newly registered domains | - | blocked | blocked | - |
-| Chosen services (e.g. TikTok, Discord, Roblox, Snapchat) | - | blocked or on a schedule | n/a | - |
-| Bedtime schedule | - | games/social off e.g. 21:00-07:00 school nights | - | - |
-| Query log | 7 days | 30 days | 30 days | 1 day |
+| | Parents | Kids-standard | Kids-strict | IoT | Guest |
+|---|---|---|---|---|---|
+| Ads + trackers | light list (AdGuard DNS filter) | HaGeZi Pro | HaGeZi Pro++ | HaGeZi Pro++ / Ultimate + device-maker telemetry lists | light list |
+| Malware, phishing, scams | yes | yes | yes | yes | yes |
+| Adult content | - | yes (parental control + NSFW list) | yes | n/a | - |
+| Gambling, dating, piracy, drugs | - | yes | yes | n/a | - |
+| Safe search + YouTube restricted | - | forced | forced (YouTube strict) | n/a | - |
+| VPNs, proxies, Tor, encrypted-DNS bypass | - | blocked | blocked | blocked | - |
+| Newly registered domains | - | blocked | blocked | blocked | - |
+| Social media / messaging / games (chosen list) | - | chosen ones blocked or scheduled | more blocked; the rest only in allowed hours | n/a | - |
+| Option: allowlist mode (only approved sites) | - | - | possible if wanted | simple devices | - |
+| Bedtime schedule | - | e.g. 21:30-07:00 | earlier/longer, e.g. 20:30-07:00 | - | - |
+| Query log | 7 days | 30 days | 30 days | 30 days | 1 day |
+
+Exact lists and hours per kid are set with the user; the table is the starting point.
 
 - **Kids' requests:** "this site/app doesn't work" -> Claude looks up what was blocked for that
   device and you decide; a one-off allow can be for one device only.
@@ -114,8 +124,10 @@ DNS filtering only works if devices actually use it:
 
 ## 7. Needed from you before building
 
-1. The kids' devices (type + rough age per kid, which sets how strict) - in AdGuard only.
-2. Which services to block outright and which only at bedtime, and the bedtime hours.
+1. Each kid's devices (type) and rough ages - kept in AdGuard only, never in this repo.
+2. Per kid: which services to block outright, which only outside allowed hours, bedtime hours;
+   and for the stricter profile, what else (e.g. all social media, chat in games, image search,
+   or allowlist-only for some categories).
 3. Your own devices (anything on Main that should NOT be treated as a parent device?).
 4. Kids network (VLAN 50 + Wi-Fi): yes or fixed IPs on Main?
 5. Second AdGuard on separate hardware: buy a small Pi, use an existing device, or skip for now?
