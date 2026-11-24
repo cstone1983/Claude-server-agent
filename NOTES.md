@@ -312,8 +312,17 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   with startup order=1 (DNS first). Servers VLAN, 10.10.11.116 reserved (MAC bc:24:11:60:f5:bb),
   DNS adguard.lan.stoneyshome.com. Hub agent "adguard" (tags adguard,dns) + fallback hub URLs.
   Nightly PBS backup. Plan: docs/adguard-plan.md (two kids' profiles, strict/standard).
-- 116.fw: only SSH from +trusted + ping for now; DNS 53 and the web UI open per network in the
-  rollout.
+- 116.fw: SSH, DNS 53 tcp/udp and web 80 from +trusted; web 80 from n8n (Traefik); ping.
+  More networks get DNS during the rollout (backup /root/116.fw.bak-20261124161840).
+- AdGuard Home v1.0.0 installed 2026-11-24 (/opt/AdGuardHome, service AdGuardHome). resolved
+  stub listener off; the VM itself resolves via the router (10.10.10.1). Web UI :80 login
+  `stonec`, password in /root/adguard-admin.txt (root-only, generated on the VM). API used via
+  curl -u from that file. Upstreams DoH Quad9 + Cloudflare, fallback router, DNSSEC on,
+  optimistic cache, [/lan.stoneyshome.com/localdomain/] -> 10.10.10.1, PTR -> router, query log
+  7 days. Lists: AdGuard DNS filter only (194k rules). Custom rules: Minecraft/Mojang/Realms/
+  Microsoft + Xbox sign-in always allowed ($important) - user wants Minecraft working.
+- Tested from Main 2026-11-24: lookups OK, doubleclick blocked, .lan names OK, DNSSEC bad
+  domain SERVFAIL, web UI answers. NO network uses it yet (all hand out the router).
 - Users: admin (hub key), stonec (user key + password). **User preference: SSH password logins
   ON** (keys still work); drop-in /etc/ssh/sshd_config.d/01-password-auth.conf, root key-only.
   stonec got a throwaway password, expired (must change at first login).
