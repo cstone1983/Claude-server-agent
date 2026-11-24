@@ -328,7 +328,16 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   /root/udm-client-names.json (export on n8n, copy on adguard). The gaming laptop client is
   Stone-Anthony-Lenovo-Laptop; its gaming $client rules point at that name.
 - Tested from Main 2026-11-24: lookups OK, doubleclick blocked, .lan names OK, DNSSEC bad
-  domain SERVFAIL, web UI answers. NO network uses it yet (all hand out the router).
+  domain SERVFAIL, web UI answers.
+- **Rollout 2026-11-24:** IoT DHCP DNS = AdGuard 10.10.11.116 + router 10.10.3.1 since 22:02 UTC,
+  all IoT clients LOG-ONLY (filtering off; catch-all client 10.10.3.0/24), router rule "IoT to
+  AdGuard DNS" + 116.fw 53 from 10.10.3.0/24. Main DHCP DNS = AdGuard + router 10.10.1.1 since
+  22:16 UTC with the default minimal rules (AdGuard DNS filter only, no parental/safe search).
+  Other networks unchanged. Undo: set that network's DHCP DNS back to auto in the UDM.
+  Forcing renewals by kicking Wi-Fi clients knocked the Living Room heat pump's Airstage
+  adapter offline (needs a power cycle) - don't kick heat pumps; let leases renew instead.
+- https dashboard: https://dns.lan.stoneyshome.com (Traefik lan.yml router "adguard" -> http://
+  10.10.11.116, UDM record dns.lan -> 10.10.11.102); adguard.lan stays the machine name.
 - Users: admin (hub key), stonec (user key + password). **User preference: SSH password logins
   ON** (keys still work); drop-in /etc/ssh/sshd_config.d/01-password-auth.conf, root key-only.
   stonec got a throwaway password, expired (must change at first login).
