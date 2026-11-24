@@ -321,6 +321,11 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   optimistic cache, [/lan.stoneyshome.com/localdomain/] -> 10.10.10.1, PTR -> router, query log
   7 days. Lists: AdGuard DNS filter only (194k rules). Custom rules: Minecraft/Mojang/Realms/
   Microsoft + Xbox sign-in always allowed ($important) - user wants Minecraft working.
+- 2026-11-24: every named, online UDM client now has a reservation (10 added at their current
+  IPs, incl. the user's Z Fold 7 named Stone-Chris-Z-Fold7); 68 offline named entries have none.
+  AdGuard has 68 persistent clients named exactly like the UDM nicknames (by IP + MAC), from
+  /root/udm-client-names.json (export on n8n, copy on adguard). The gaming laptop client is
+  Stone-Anthony-Lenovo-Laptop; its gaming $client rules point at that name.
 - Tested from Main 2026-11-24: lookups OK, doubleclick blocked, .lan names OK, DNSSEC bad
   domain SERVFAIL, web UI answers. NO network uses it yet (all hand out the router).
 - Users: admin (hub key), stonec (user key + password). **User preference: SSH password logins
