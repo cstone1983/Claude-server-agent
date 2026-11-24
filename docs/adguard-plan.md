@@ -111,6 +111,17 @@ DNS filtering only works if devices actually use it:
 4. **Main (parents)** with router fallback. Guest last.
 5. Second AdGuard + sync (when there's hardware for it).
 
+## 5a. Watch item: the gaming laptop on Main (10.10.1.208)
+
+- Registered in AdGuard as its own client (IP + MAC); the main gaming platforms (Steam, Epic,
+  Battle.net, Riot, EA, Ubisoft, Xbox/Game Pass, NVIDIA) are allowed for it, Minecraft/Xbox
+  sign-in for everyone. Chat apps (Discord etc.) deliberately left to the kids' rules.
+- When Main goes live: check `adguard-client-report 10.10.1.208 24` daily for the first two
+  weeks (blocks grouped by domain, game-looking ones flagged) and allow anything a game needs.
+- Open question from 2026-11-24: the router's "Minecraft" port forward (25565) points at the
+  Ubuntu-Anthony VM, which runs no Minecraft server; the laptop didn't answer on 25565/19132
+  either. Retest while his server runs; likely the forward should point at the laptop.
+
 ## 6. Running it
 
 - Claude manages it through the hub: unblock/block, per-device exceptions, list changes, reports.
