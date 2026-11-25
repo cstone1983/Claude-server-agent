@@ -342,8 +342,10 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   Strict profile (age 10): parental + safebrowsing + safe search, YouTube -> restrict.youtube.com,
   social/chat services + dating/gambling + major US betting sites always blocked; bedtime list
   (YouTube, games, Roblox, Minecraft...) allowed 07:00-20:30 Sun-Thu / 21:30 Fri-Sat. Standard
-  profile: same safety, YouTube moderate, social allowed daytime; bedtime list incl. social/Discord/
-  games allowed until 22:00 / 23:00. Devices: Autumn .41-.43, Anthony .208/.133/.107/.45 (UDM
+  profile (age 14): same safety, YouTube moderate, social media + Discord always blocked (user: YouTube
+  only), messengers allowed; bedtime list (YouTube, games, Roblox) allowed until 22:00 / 23:00.
+  Gotcha: AdGuard ignores a repeated rule pattern, so the script writes each block once with the
+  union of device IPs ($client=a|b|...). Devices: Autumn .41-.43, Anthony .208/.133/.107/.45 (UDM
   reservations). Global Minecraft $important allows exclude the kids' IPs (an allow beats a
   blocked-service bedtime), the laptop's per-client gaming allows were removed for the same reason.
   Weakness: Main hands out the router as 2nd DNS, so a kid device can bypass - Kids VLAN fixes it.
