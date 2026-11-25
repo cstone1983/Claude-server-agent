@@ -306,3 +306,25 @@ fixes if the wait still feels long.
 - POST vk/audio stays capped at 20 MB; a 413 there never removes the dictation (it is stored first).
 - Seen: the learned vocabulary that feeds the prompt contains junk ("EventuallyYbe", "mkes",
   "aGlow") - worth a cleanup/stricter rule later.
+
+## Learning fixes (2026-11-25, from a review of learn.db)
+
+- **Corrections vs rewrites:** an edit only becomes a replacement when before/after are similar
+  (difflib ratio >= 0.6 on letters, or same word count with each word similar; a single spoken word
+  -> symbols like "slash" -> "/" also counts). Rewrites ("Here is" -> "Give me") are stored as
+  corrections (stats) only.
+- **Vocabulary (= Whisper prompt):** a word is added only when its replacement is promoted
+  (count >= 2) or it is name-like: capitalised mid-sentence (judged with the correction's context),
+  or not an everyday dictionary word. Dictionary: /opt/voice/vk-learn/words.txt (Ubuntu wamerican,
+  lowercase entries; mounted as /app/words.txt). Note "aglow" is a dictionary word, so brand names
+  like aGlow need promotion.
+- **cleanup_avoid:** never COMMON words; shown only at count >= 3.
+- **drop_endings** (new in GET profile): a deletion (after = "") of a 1-3 word sentence ending in
+  . ? ! that is followed by a new sentence or nothing, seen 2+ times -> e.g. ["Kama"]; everyday
+  phrases ("Come on.") are never included. The app strips these from transcripts.
+- **Whisper VAD:** models-merge adds vad_filter=true when the request doesn't set it
+  (STT_VAD_DEFAULT, "" = off); response header X-VK-VAD: default-on | as-sent. speaches v0.8.2
+  supports vad_filter on /v1/audio/transcriptions.
+- One-off clean-up: `docker exec voice-learn python /app/learn.py --clean <vocab words...>`
+  (removes COMMON words from avoid, rewrites from replacements, the listed vocabulary words).
+  Run 2026-11-25; DB backup /opt/voice/learn/learn.db.bak-20261125-133651.
