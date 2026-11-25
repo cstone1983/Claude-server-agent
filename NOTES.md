@@ -333,7 +333,12 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
   all IoT clients LOG-ONLY (filtering off; catch-all client 10.10.3.0/24), router rule "IoT to
   AdGuard DNS" + 116.fw 53 from 10.10.3.0/24. Main DHCP DNS = AdGuard + router 10.10.1.1 since
   22:16 UTC with the default minimal rules (AdGuard DNS filter only, no parental/safe search).
-  Other networks unchanged. Undo: set that network's DHCP DNS back to auto in the UDM.
+  2026-11-25 00:55 UTC: Guest (AdGuard + 10.10.2.1; router rule "Guest to AdGuard DNS", 116.fw 53 from
+  10.10.2.0/24, AdGuard client "Guest network") and OpenVPN (AdGuard + 192.168.3.1, client "VPN
+  clients"; new DNS on reconnect) switched, both minimal blocking. Servers/Cameras/DMZ/Blog stay on
+  the router by design. Undo: set that network's DHCP DNS back to auto in the UDM.
+- Main + IoT are already fully open to each other (OBSERVE rules from the overhaul) - firewall
+  round 2 must keep what the Airstage app needs (phone <-> heat pump adapters).
   Forcing renewals by kicking Wi-Fi clients knocked the Living Room heat pump's Airstage
   adapter offline (needs a power cycle) - don't kick heat pumps; let leases renew instead.
 - https dashboard: https://dns.lan.stoneyshome.com (Traefik lan.yml router "adguard" -> http://
