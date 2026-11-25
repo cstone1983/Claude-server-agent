@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Voice Keyboard server announcement (docs/server-pairing.md): the app finds the server on the home Wi-Fi.
+     Installed as /etc/avahi/services/voicekb.service -->
+<service-group>
+  <name>Voice server</name>
+  <service>
+    <type>_voicekb._tcp</type>
+    <port>8080</port>
+    <txt-record>path=/v1/</txt-record>
+    <txt-record>name=Voice server</txt-record>
+  </service>
+</service-group>

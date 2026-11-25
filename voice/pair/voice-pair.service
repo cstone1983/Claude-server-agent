@@ -1,0 +1,14 @@
+[Unit]
+Description=Voice Keyboard Wi-Fi pairing (owner approval in Telegram)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u /opt/voice/pair/voice-pair.py
+Restart=always
+RestartSec=5
+# listens on the Docker bridge (172.18.0.1:8083); wait for it after a reboot
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do ip -4 addr | grep -q "172.18.0.1/" && exit 0; sleep 2; done; exit 1'
+
+[Install]
+WantedBy=multi-user.target
