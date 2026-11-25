@@ -6,6 +6,10 @@
 #                                    or fails to load, the default model is used instead of an error.
 #                                    Only the multipart "model" value is changed; every other byte
 #                                    (audio, prompt, language, ...) is passed through unchanged.
+#                                    vad_filter=true is added when the request does not set it
+#                                    (STT_VAD_DEFAULT, default "true"; "" = off): Whisper then skips
+#                                    silence instead of hallucinating words like "Kama." into it.
+#                                    Response header X-VK-VAD: default-on | as-sent.
 # Nothing here logs request bodies.
 import json, os, re, time, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,6 +40,26 @@ def installed():
 
 MODEL_PART = re.compile(rb'(Content-Disposition:[^\r\n]*name="model"[^\r\n]*\r\n(?:[^\r\n]+\r\n)*\r\n)(.*?)(\r\n--)',
                         re.S | re.I)
+
+
+VAD_DEFAULT = os.environ.get("STT_VAD_DEFAULT", "true").lower()   # "" = leave it to speaches
+VAD_PART = re.compile(rb'Content-Disposition:[^\r\n]*name="vad_filter"', re.I)
+
+
+def add_vad(body, ctype):
+    """Voice activity detection on by default: Whisper then skips silence instead of
+    inventing words in it (the stray "Kama." endings). Added only when the request
+    does not set vad_filter itself."""
+    m = re.search(r'boundary="?([^";]+)"?', ctype or "")
+    if not VAD_DEFAULT or not m or VAD_PART.search(body):
+        return body, False
+    end = b"--" + m.group(1).encode() + b"--"
+    i = body.rfind(end)
+    if i < 0:
+        return body, False
+    part = (b"--" + m.group(1).encode() + b'\r\nContent-Disposition: form-data; name="vad_filter"\r\n\r\n'
+            + VAD_DEFAULT.encode() + b"\r\n")
+    return body[:i] + part + body[i:], True
 
 
 def get_model(body):
@@ -86,6 +110,7 @@ class H(BaseHTTPRequestHandler):
             self.close_connection = True
             return self.send(413, b'{"error":"audio too large"}')
         body = self.rfile.read(n) if n else b""
+        body, vad_added = add_vad(body, self.headers.get("Content-Type", ""))
         asked = get_model(body)
         fell_back = ""
         ids = installed()
@@ -100,7 +125,7 @@ class H(BaseHTTPRequestHandler):
             # e.g. the person's model is listed but cannot be loaded: retry with the default
             body, fell_back = set_model(body, DEFAULT_STT), asked
             code, out, ctype = self.forward(body)
-        extra = {}
+        extra = {"X-VK-VAD": "default-on" if vad_added else "as-sent"}
         if fell_back:
             extra["X-VK-STT-Fallback"] = fell_back
             print(f"transcription: model {fell_back!r} not usable, used {DEFAULT_STT} (status {code})", flush=True)

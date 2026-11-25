@@ -32,7 +32,9 @@ Endpoints (JSON; paths relative to /v1/vk/):
   POST   audio?dictation=<id>   body = the audio (Content-Type audio/wav, audio/ogg, ...)
   GET    profile?app=<pkg>[&category=chat|email|other]
                             -> {"version","vocabulary","replacements","whisper_prompt",
-                                "cleanup_style","cleanup_avoid","style_examples"}
+                                "cleanup_style","cleanup_avoid","style_examples","drop_endings"}
+                            drop_endings: 1-3 word sentences the person deleted 2+ times at the
+                            end of a chunk/dictation (stray Whisper endings, e.g. "Kama") - strip them
   GET    stats              -> {"days":[...], "totals":{...}, "audio":{...}}
   GET    learned            -> {"vocabulary":[...],"replacements":[...],"avoid":[...]}
   DELETE learned/<id>       (id like "v12", "r3" or "a5")
@@ -42,7 +44,7 @@ Endpoints (JSON; paths relative to /v1/vk/):
   DELETE data               -> forget everything for this user (audio included)
   GET    health             (no user needed)
 """
-import difflib, io, json, os, re, shutil, sqlite3, threading, time, urllib.request, wave
+import difflib, io, json, os, re, shutil, sqlite3, sys, threading, time, urllib.request, wave
 from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -57,6 +59,10 @@ STYLE_HOUR_UTC = int(os.environ.get("VK_STYLE_HOUR_UTC", "8"))   # 08:00 UTC = 0
 STT = os.environ.get("VK_STT", "http://speaches:8000")         # Whisper server (for per-person models)
 MAX_PERSONAL = 4 * 1024 * 1024     # vk/personal profile body limit (app doc: "up to about 4 MB")
 PROMOTE_AFTER = 2          # identical correction / removal seen this often -> active
+AVOID_AFTER = 3            # a word cleanup added and the user removed this often -> cleanup_avoid
+SIMILAR = 0.6              # a correction only teaches when before/after are this similar (letters)
+DROP_AFTER = 2             # a 1-3 word sentence deleted this often at a chunk/dictation end -> drop_endings
+DICT_FILE = os.environ.get("VK_DICT", "/app/words.txt")   # English word list (lowercase entries = dictionary words)
 MAX_EDITS, MAX_LEN, MAX_MSG, MAX_AUDIO = 20, 200, 4000, 20 * 1024 * 1024
 VOCAB_CAP, PROMPT_CHARS = 100, 250   # Whisper prompt: the app adds ~180 chars of its own + ~200 of previous text
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9'’.-]*[A-Za-z0-9]|[A-Za-z]")
@@ -182,6 +188,73 @@ def strip_shared_punct(before, after):
     return before.strip(EDGE_PUNCT), after.strip(EDGE_PUNCT)
 
 
+def load_dictionary():
+    """Lowercase entries of an English word list (capitalised entries are names, not
+    'everyday words'). Falls back to COMMON if the list is missing."""
+    try:
+        with open(DICT_FILE, encoding="utf-8", errors="ignore") as f:
+            words = {w.strip() for w in f if w.strip() and w[0].islower()}
+        words = {w.replace("’", "'") for w in words if not w.endswith("'s")}   # skip possessive forms
+        print(f"dictionary: {len(words)} words from {DICT_FILE}", flush=True)
+        return words | COMMON
+    except OSError:
+        print(f"dictionary: {DICT_FILE} missing - only the small COMMON list is used", flush=True)
+        return set(COMMON)
+
+
+DICTIONARY = None
+
+
+def is_dictionary_word(w):
+    global DICTIONARY
+    if DICTIONARY is None:
+        DICTIONARY = load_dictionary()
+    w = w.lower().replace("’", "'")
+    return w in DICTIONARY or (w.endswith("s") and w[:-1] in DICTIONARY)
+
+
+LETTERS = re.compile(r"[^a-z]")
+
+
+def letters(s):
+    return LETTERS.sub("", s.lower())
+
+
+def similar(before, after):
+    """Is this a correction of what was heard (similar letters), not a rewrite?
+    'Clod'->'Claude', 'at Glow, and'->'aGlow' yes; 'Here is'->'Give me', 'dog'->'talk' no.
+    A single spoken word -> symbols/number ('slash'->'/') also counts."""
+    b, a = letters(before), letters(after)
+    if not a:
+        return len(before.split()) == 1 and bool(after.strip())
+    if not b:
+        return False
+    if difflib.SequenceMatcher(None, b, a).ratio() >= SIMILAR:
+        return True
+    bw, aw = before.split(), after.split()
+    return len(bw) == len(aw) and all(
+        letters(x) and letters(y) and difflib.SequenceMatcher(None, letters(x), letters(y)).ratio() >= SIMILAR
+        for x, y in zip(bw, aw))
+
+
+NAME_WORD = re.compile(r"[A-Za-z][A-Za-z'’-]+")
+
+
+def name_like(w, after, context):
+    """Capitalised in the middle of a sentence, or not an everyday dictionary word.
+    Plain words only (no domains like 'mine.lol', no digits)."""
+    if not NAME_WORD.fullmatch(w) or len(w) < 3 or w.lower() in COMMON:
+        return False
+    if not is_dictionary_word(w):
+        return True
+    if not w[0].isupper():
+        return False
+    first = WORD.findall(after)[:1] == [w]
+    left = (context or "").split("___")[0].rstrip()
+    sentence_start = first and (not left or left[-1] in ".!?\n")
+    return not sentence_start
+
+
 def add_vocab(c, user, word, t):
     if len(word) >= 2 and word.lower() not in COMMON:
         c.execute("INSERT INTO vocabulary(user, word, count, last_seen) VALUES(?,?,1,?) "
@@ -191,8 +264,11 @@ def add_vocab(c, user, word, t):
     return False
 
 
-def learn_edit(c, user, before, after):
-    """Turn one correction into learned items. Returns True if anything changed."""
+def learn_edit(c, user, before, after, context=""):
+    """Turn one correction into learned items. Returns True if anything changed.
+    Every correction is stored (stats); only SIMILAR ones (a misheard word, not a
+    rewrite) become replacements, and a word only reaches the vocabulary (= the
+    Whisper prompt) once its replacement is promoted or when it is name-like."""
     before, after = strip_shared_punct(before, after)
     if not before or not after or before == after:
         return False                       # pure insertions/deletions (e.g. removed filler) teach nothing
@@ -202,15 +278,44 @@ def learn_edit(c, user, before, after):
         return False                       # too big to be a single correction
     if all_common(before) and all_common(after):
         return False                       # grammar-style fix of everyday words: needs context, no blind rule
+    if not similar(before, after):
+        return False                       # a rewrite ("Here is" -> "Give me"), not a correction
     t = now()
     c.execute("INSERT INTO replacements(user, src, dst, count, last_seen) VALUES(?,?,?,1,?) "
               "ON CONFLICT(user, src, dst) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
               (user, before, after, t))
+    count = c.execute("SELECT count FROM replacements WHERE user=? AND src=? AND dst=?",
+                      (user, before, after)).fetchone()[0]
     before_words = {w.lower() for w in WORD.findall(before)}
     for w in WORD.findall(after):
-        if w.lower() not in before_words:
+        if w.lower() not in before_words and (count >= PROMOTE_AFTER or name_like(w, after, context)):
             add_vocab(c, user, w, t)
     return True
+
+
+def ending_key(before, context):
+    """If this deletion looks like a stray Whisper ending - a 1-3 word sentence on its
+    own at the end of a chunk/dictation - return it without punctuation, else None."""
+    b = (before or "").strip()
+    if not b or b[-1] not in ".!?" or not (1 <= len(b.split()) <= 3):
+        return None
+    right = (context or "").partition("___")[2].strip()
+    if right and not right[0].isupper():
+        return None                        # the sentence continues after it: a real edit
+    key = b.strip(EDGE_PUNCT)
+    if not key or all_common(key):
+        return None                        # never strip everyday phrases like "Come on."
+    return key
+
+
+def drop_endings(c, user):
+    counts, forms = {}, {}
+    for r in c.execute("SELECT before, context FROM corrections WHERE user=? AND coalesce(after,'')=''", (user,)):
+        k = ending_key(r["before"], r["context"])
+        if k:
+            counts[k.lower()] = counts.get(k.lower(), 0) + 1
+            forms.setdefault(k.lower(), k)
+    return [forms[k] for k, n in sorted(counts.items(), key=lambda x: -x[1]) if n >= DROP_AFTER]
 
 
 def words(text):
@@ -226,7 +331,8 @@ def learn_dictation(c, user, raw, cleaned, final, low_conf):
     if raw and cleaned and final:
         raw_w, final_w = set(words(raw)), set(words(final))
         for w in set(words(cleaned)):
-            if w not in raw_w and w not in final_w and len(w) >= 2:
+            # never everyday words: telling cleanup to avoid "it" or "for" breaks sentences
+            if w not in raw_w and w not in final_w and len(w) >= 2 and w not in COMMON:
                 c.execute("INSERT INTO avoid(user, word, count, last_seen) VALUES(?,?,1,?) "
                           "ON CONFLICT(user, word) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
                           (user, w, t))
@@ -272,7 +378,8 @@ def profile(c, user, app=None, category=None):
         "SELECT src, dst, count FROM replacements WHERE user=? AND count >= ? ORDER BY count DESC",
         (user, PROMOTE_AFTER))]
     avoid = [r["word"] for r in c.execute(
-        "SELECT word FROM avoid WHERE user=? AND count >= ? ORDER BY count DESC LIMIT 30", (user, PROMOTE_AFTER))]
+        "SELECT word FROM avoid WHERE user=? AND count >= ? ORDER BY count DESC LIMIT 30", (user, AVOID_AFTER))
+        if r["word"] not in COMMON]
     prompt = ""
     for w in vocab:                        # Whisper "prompt": known words, kept short
         nxt = (prompt + ", " + w) if prompt else w
@@ -297,7 +404,9 @@ def profile(c, user, app=None, category=None):
             "cleanup_style": safe_style(style["style"]) if style else "",
             # style_examples kept for compatibility but always empty: full example
             # messages in the cleanup prompt got copied into new dictations.
-            "cleanup_avoid": avoid, "category": category or "", "style_examples": []}
+            "cleanup_avoid": avoid, "category": category or "", "style_examples": [],
+            # stray Whisper endings this person keeps deleting (e.g. "Kama"); the app strips them
+            "drop_endings": drop_endings(c, user)}
 
 
 def stats(c, user, days=30):
@@ -645,7 +754,10 @@ class H(BaseHTTPRequestHandler):
                               (user, clean(b.get("device"), 64) or device, clean(b.get("app"), 128),
                                clean(b.get("lang"), 8), clean(b.get("stt_model"), 128), before, after,
                                clean(e.get("context"), MAX_LEN), clean(b.get("ts"), 40), t))
-                    learned += learn_edit(c, user, before, after)
+                    context = clean(e.get("context"), MAX_LEN)
+                    learned += learn_edit(c, user, before, after, context)
+                    if not after.strip() and ending_key(before, context):
+                        learned += 1               # may change drop_endings: bump the profile version
                 if learned:
                     bump(c, user)
             return self.reply(200, {"ok": True, "stored": min(len(edits), MAX_EDITS), "learned": learned})
@@ -803,6 +915,30 @@ def backfill_audio_ms():
     if n:
         print(f"backfilled the length of {n} audio clip(s)", flush=True)
 
+
+def clean_learned(remove_vocab=()):
+    """One-off clean-up after the 2026-11-25 learning fixes: everyday words out of
+    'avoid', rewrites out of 'replacements', the given words out of 'vocabulary'.
+    The raw corrections stay (stats)."""
+    with lock, db() as c:
+        avoid = [r["word"] for r in c.execute("SELECT DISTINCT word FROM avoid") if r["word"] in COMMON]
+        for w in avoid:
+            c.execute("DELETE FROM avoid WHERE word=?", (w,))
+        reps = [r for r in c.execute("SELECT id, src, dst FROM replacements") if not similar(r["src"], r["dst"])]
+        for r in reps:
+            c.execute("DELETE FROM replacements WHERE id=?", (r["id"],))
+        vocab = [w for w in remove_vocab if c.execute("DELETE FROM vocabulary WHERE word=?", (w,)).rowcount]
+        for r in c.execute("SELECT DISTINCT user FROM corrections").fetchall():
+            bump(c, r["user"])
+    print("avoid: removed everyday words", avoid)
+    print("replacements: removed rewrites", [f"{r['src']!r}->{r['dst']!r}" for r in reps])
+    print("vocabulary: removed", vocab)
+
+
+if __name__ == "__main__" and "--clean" in sys.argv:
+    init(); migrate()
+    clean_learned(sys.argv[sys.argv.index("--clean") + 1:])
+    sys.exit(0)
 
 if __name__ == "__main__":
     init()
