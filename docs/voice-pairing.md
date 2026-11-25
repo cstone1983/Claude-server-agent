@@ -23,3 +23,13 @@ Contract: voice-keyboard repo, docs/server-pairing.md (main). Built 2026-11-25.
   /root/.config/voice/pair.conf chat_id=6897458189 (both the chat and the sender must match).
   Without a token, POST /v1/vk/pair answers 503 "approval by the owner is not set up".
 - Logs: journalctl -u voice-pair (no keys, codes or tokens are logged).
+
+## Verified 2026-11-25 (from Ubuntu-Anthony, 10.10.1.185 on Main)
+
+- mDNS query from Main answered via the UDM reflector (10.10.1.1): Voice server, path=/v1/, :8080.
+- info lists the people; POST -> 202 + Telegram alert from @Stoneys_voice_bot (code, device, LAN
+  address, Approve/Deny); approve -> setup with a new 64-char personal key (user_id chris) exactly
+  once, then 404; key k2 shown in `voice-user list` with its device name (revoked after the test);
+  deny (new person) -> "denied", person not added; 6th quick info call -> 429.
+- Refused (403): public URL, Traefik LAN route, LAN with X-Forwarded-For, localhost (tunnel path).
+- Bot token saved through a one-time LAN-only page (never via chat), checked with getMe.
