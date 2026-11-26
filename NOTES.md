@@ -21,8 +21,9 @@ usage in [README.md](README.md).
   2. Phone live check: turn on Wireless debugging, give IP:port (jessy-desktop already paired).
   3. Refresh the csa-hub tunnel token (pasted in chat 2026-11-14); swap /etc/cloudflared/hub.env
      on n8n + Vm-finance.
-  4. SAN: replacement 1 TB drive arrives Tue 2026-11-17 -> pull failed disk 8, insert, clear label,
-     confirm it becomes the spare.
+  4. SAN: DONE 2026-11-25 - disk 8 replaced, new drive is the spare (see "SAN 2026-11-25" below).
+     Open: the new drive has stock Seagate firmware (SN03), the SAN flags it "not supported /
+     unauthorized drive" -> swap for a Dell/EqualLogic one (FX0XN or 47F61, firmware PD0A).
   5. HA firewall: review observe log, then enforce; desktops' firewalls.
   6. Voice tunnel token rotation (pasted in chat), HA Cloudflared add-on unused (remove?),
      Sonoff/Shelly firmware check, 3 climate entities unavailable 48 h+, repo history has family
@@ -602,6 +603,35 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - **BBR** congestion control on the host (`/etc/sysctl.d/90-bbr.conf`,
   `/etc/modules-load.d/bbr.conf`); parallel per-VM uploads raised off-site
   speed from about 10 to about 34 Mbps.
+
+## SAN 2026-11-25 (racking + drive 8 swap)
+- Slot numbering is NOT left-to-right/top-to-bottom: slot 8 is row 2 from the top, far right
+  (the bay with no green light). An earlier overlay photo that assumed row-major order was wrong.
+- During racking (13:43-13:48) disk 8 came out and disks 1 + 9 were knocked loose and re-seated:
+  RAID 6 was down 2 disks (its limit), no lost blocks. Rebuild 13:49 -> done 2026-11-26 03:10
+  (48112 s). PSU "Power Cooling Module 1" had no power after racking; plugged in, both on.
+- New disk 8: ST1000NM0011 with stock firmware SN03 -> spare, but SAN warns "not supported on this
+  array". The original disks run Dell firmware PD0A. Cross-flashing not attempted (risky).
+- Monitoring: `eql-cli "member show eql1"` (Disks/Spares/RaidStatus/RaidPercentage/LostBlocks),
+  `"member select eql1 show disks"`, `"show recentevents"` (long; ~100 s). Do not grep for the word
+  "shutdown" in hub scripts (deny rule).
+- Space: SAN pool 11.34 TB, volume `fileshare` 5 TB thin (~0.5 TB written) -> ~6.3 TB unallocated;
+  the volume can be grown online (SAN volume, iSCSI rescan, pvresize, VM disk, guest fs).
+
+## UniFi: auto-block by device name (2026-11-26)
+- Phones with randomised MACs get a new MAC after each block, so per-MAC blocks don't stick.
+- `/usr/local/sbin/unifi-autoblock` on n8n (repo `scripts/unifi-autoblock` + .service/.timer), run
+  every 30 s by `unifi-autoblock.timer`: blocks any online client whose hostname or alias is listed
+  in `/etc/unifi-autoblock.conf` (names kept on the server only), logs + server-notify.
+- Undo: remove the name / `systemctl disable --now unifi-autoblock.timer`, unblock MACs in UniFi.
+
+## Update round 2026-11-26 (all servers)
+- Packages on all Linux servers except HA (updates itself). Proxmox: 67 + 6 new, pve-manager
+  9.3.1, qemu 11.1.3-4; still running kernel 6.8.12-43 (7.0.14-30 installed) - not rebooted.
+- Rebooted for kernel 7.0.0-44: voice, Ubuntu-Anthony, jessy-desktop (all verified).
+- Fileshare: the ondrej/php PPA relabelled itself "deprecated" -> `apt-get update
+  --allow-releaseinfo-change-label`; plan to move PHP off that PPA.
+- At the end of the Proxmox upgrade several agents dropped from the hub for ~45 s and reconnected.
 
 ## Update round 2026-11-20 (all servers)
 - Packages on all 11 Linux servers (04:46-05:13). Ubuntu still holds back phased systemd/udev updates.

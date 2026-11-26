@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+# Block UniFi clients by device name (hostname or alias), whatever MAC address they use.
+# Phones with "randomised MAC" get a new address each time a block hits them, so a
+# per-MAC block never sticks. Names to block: /etc/unifi-autoblock.conf (one per line,
+# case-insensitive, # comments). Run every 30 s by unifi-autoblock.timer.
+# Undo: remove the name from the conf (or stop the timer) and unblock the MACs in the
+# UniFi app (Client Devices -> blocked), or: unifi POST net:cmd/stamgr '{"cmd":"unblock-sta","mac":"..."}'
+import json, subprocess, sys
+
+CONF = "/etc/unifi-autoblock.conf"
+
+def unifi(*a):
+    r = subprocess.run(["/usr/local/bin/unifi", *a], capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip()[:200])
+    return r.stdout
+
+try:
+    names = {l.split("#")[0].strip().lower() for l in open(CONF)} - {""}
+except FileNotFoundError:
+    names = set()
+if not names:
+    sys.exit(0)
+
+try:
+    online = json.loads(unifi("GET", "net:stat/sta"))["data"]
+except Exception as e:
+    print(f"could not read clients: {e}", flush=True)
+    sys.exit(1)
+
+for c in online:
+    ids = {(c.get("hostname") or "").lower(), (c.get("name") or "").lower()} - {""}
+    hit = ids & names
+    if not hit:
+        continue
+    mac = c["mac"]
+    try:
+        unifi("POST", "net:cmd/stamgr", json.dumps({"cmd": "block-sta", "mac": mac}))
+        msg = f"Auto-blocked {sorted(hit)[0]} (new MAC {mac}, IP {c.get('ip')}, Wi-Fi {c.get('essid')})"
+        print(msg, flush=True)
+        subprocess.run(["/usr/local/bin/server-notify", msg], capture_output=True, timeout=20)
+    except Exception as e:
+        print(f"block of {mac} failed: {e}", flush=True)

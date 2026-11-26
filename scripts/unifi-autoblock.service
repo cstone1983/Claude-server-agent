@@ -1,0 +1,8 @@
+[Unit]
+Description=Block UniFi clients by device name (random-MAC phones)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/unifi-autoblock
+TimeoutStartSec=60
