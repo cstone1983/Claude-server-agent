@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# Private home-lab inventory, rebuilt from the UniFi router (UDM) - nightly via
+# homelab-inventory.timer, or run by hand. Output: /root/homelab-private/devices.md
+# (root-only; NEVER copy it into the public repo). Hand-written notes live next to it
+# in /root/homelab-private/notes.md and are not touched by this script.
+import json, os, subprocess, time
+
+OUT_DIR = "/root/homelab-private"
+OUT = os.path.join(OUT_DIR, "devices.md")
+
+def unifi(path):
+    r = subprocess.run(["/usr/local/bin/unifi", "GET", path], capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        raise SystemExit(f"unifi GET {path} failed: {r.stderr.strip()[:200]}")
+    d = json.loads(r.stdout)
+    return d.get("data", d) if isinstance(d, dict) else d
+
+T = lambda t: time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "-"
+nets = {n["_id"]: n.get("name") for n in unifi("net:rest/networkconf")}
+devs = unifi("net:stat/device")
+devname = {d["mac"]: d.get("name") for d in devs}
+users = unifi("net:rest/user")
+online = {c["mac"]: c for c in unifi("net:stat/sta")}
+blocked = [u for u in users if u.get("blocked")]
+
+L = [f"# Home lab devices (private) - generated {time.strftime('%Y-%m-%d %H:%M')} from the UDM",
+     "", "Root-only. Rebuilt nightly by homelab-inventory on n8n. Do not copy to the public repo.", ""]
+
+L += ["## UniFi gear", "", "| Name | Model | IP | MAC | State |", "|---|---|---|---|---|"]
+for d in sorted(devs, key=lambda d: d.get("name") or ""):
+    L.append(f"| {d.get('name')} | {d.get('model')} | {d.get('ip')} | {d['mac']} | {'online' if d.get('state')==1 else 'OFFLINE'} |")
+
+def row(u):
+    c = online.get(u["mac"])
+    net = nets.get(u.get("network_id")) or (c or {}).get("network") or "-"
+    ip = (c or {}).get("ip") or u.get("last_ip") or "-"
+    fixed = u.get("fixed_ip") if u.get("use_fixedip") else ""
+    if c:
+        where = devname.get(c.get("ap_mac")) or ("wired" if c.get("is_wired") else "-")
+        if c.get("is_wired") and c.get("sw_port"): where = f"wired, {devname.get(c.get('sw_mac'),'switch')} port {c.get('sw_port')}"
+        seen = f"ONLINE via {where}"
+    else:
+        seen = T(u.get("last_seen"))
+    rnd = " (random)" if int(u["mac"].split(":")[0], 16) & 2 else ""
+    return f"| {u.get('name') or '-'} | {u.get('hostname') or '-'} | {ip} | {fixed} | {u['mac']}{rnd} | {net} | {seen} |"
+
+named = [u for u in users if u.get("name") and not u.get("blocked")]
+L += ["", f"## Named devices ({len(named)})", "",
+      "| Name | Hostname | IP | Reserved | MAC | Network | Last seen |", "|---|---|---|---|---|---|---|"]
+for u in sorted(named, key=lambda u: (nets.get(u.get('network_id')) or 'zz', u.get('name').lower())):
+    L.append(row(u))
+
+unnamed_on = [online[m] for m in online if not any(u["mac"] == m and u.get("name") for u in users)]
+L += ["", f"## Online now without a name ({len(unnamed_on)})", "",
+      "| Hostname | IP | MAC | Network | Via |", "|---|---|---|---|---|"]
+for c in sorted(unnamed_on, key=lambda c: c.get("ip") or ""):
+    via = devname.get(c.get("ap_mac")) or ("wired" if c.get("is_wired") else "-")
+    L.append(f"| {c.get('hostname') or '-'} | {c.get('ip')} | {c['mac']} | {c.get('network')} | {via} |")
+
+L += ["", f"## Blocked ({len(blocked)})", "", "| Name / hostname | MAC | Last seen |", "|---|---|---|"]
+for u in sorted(blocked, key=lambda u: -(u.get("last_seen") or 0)):
+    L.append(f"| {u.get('name') or u.get('hostname') or '-'} | {u['mac']} | {T(u.get('last_seen'))} |")
+
+os.makedirs(OUT_DIR, mode=0o700, exist_ok=True)
+os.chmod(OUT_DIR, 0o700)
+tmp = OUT + ".tmp"
+with open(tmp, "w") as f:
+    f.write("\n".join(L) + "\n")
+os.chmod(tmp, 0o600)
+os.replace(tmp, OUT)
+print(f"wrote {OUT}: {len(devs)} UniFi devices, {len(named)} named clients, {len(unnamed_on)} unnamed online, {len(blocked)} blocked")

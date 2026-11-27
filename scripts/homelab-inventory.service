@@ -1,0 +1,8 @@
+[Unit]
+Description=Rebuild the private home-lab device inventory from the UDM
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/homelab-inventory
+TimeoutStartSec=300

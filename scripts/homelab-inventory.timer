@@ -1,0 +1,9 @@
+[Unit]
+Description=Rebuild the private home-lab inventory nightly
+
+[Timer]
+OnCalendar=*-*-* 20:47
+Persistent=true
+
+[Install]
+WantedBy=timers.target

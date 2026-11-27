@@ -618,6 +618,12 @@ is already paired, adb at /usr/bin/adb on jessy-desktop).
 - Space: SAN pool 11.34 TB, volume `fileshare` 5 TB thin (~0.5 TB written) -> ~6.3 TB unallocated;
   the volume can be grown online (SAN volume, iSCSI rescan, pvresize, VM disk, guest fs).
 
+## Private inventory (2026-11-27)
+- Personal details (people, device owners, IPs/MACs, addresses, secret-file locations) live ONLY in
+  the root-only folder `/root/homelab-private/` on n8n, never in this repo:
+  `devices.md` (rebuilt nightly 20:47 from the UDM by `scripts/homelab-inventory`, timer on n8n) and
+  `notes.md` (hand-written; append dated lines). Backed up with the n8n VM (PBS + off-site).
+
 ## UniFi: auto-block by device name (2026-11-26)
 - Phones with randomised MACs get a new MAC after each block, so per-MAC blocks don't stick.
 - `/usr/local/sbin/unifi-autoblock` on n8n (repo `scripts/unifi-autoblock` + .service/.timer), run
